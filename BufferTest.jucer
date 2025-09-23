@@ -8,7 +8,6 @@
       <FILE id="xFmXoI" name="MainComponent.h" compile="0" resource="0" file="Source/MainComponent.h"/>
       <FILE id="cxAeBh" name="MainComponent.cpp" compile="1" resource="0"
             file="Source/MainComponent.cpp"/>
-      <FILE id="embAud" name="EmbeddedAudio.h" compile="0" resource="0" file="Source/EmbeddedAudio.h"/>
       <FILE id="intExa" name="BufferTestIntegration.h" compile="0" resource="0" file="Source/BufferTestIntegration.h"/>
     </GROUP>
   </MAINGROUP>

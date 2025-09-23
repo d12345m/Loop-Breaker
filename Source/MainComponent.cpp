@@ -159,20 +159,6 @@ bool AudioBufferProcessor::loadAudioFile(const juce::File& file, juce::AudioForm
     return true;
 }
 
-bool AudioBufferProcessor::loadAudioBuffer(const juce::AudioBuffer<float>& buffer, double sampleRate)
-{
-    fileSampleRate = sampleRate;
-    fileLengthSamples = buffer.getNumSamples();
-    
-    // Copy the buffer
-    audioFileBuffer.makeCopyOf(buffer);
-    
-    // Reset playback position
-    playheadPosition.store(0.0);
-    
-    return true;
-}
-
 void AudioBufferProcessor::releaseResources()
 {
     audioFileBuffer.setSize(0, 0);
@@ -193,10 +179,6 @@ MainComponent::MainComponent()
     addAndMakeVisible(loadButton);
     loadButton.setButtonText("Load Audio File");
     loadButton.onClick = [this] { loadButtonClicked(); };
-    
-    addAndMakeVisible(loadTestAudioButton);
-    loadTestAudioButton.setButtonText("Load Test Audio");
-    loadTestAudioButton.onClick = [this] { loadTestAudioClicked(); };
     
     addAndMakeVisible(playButton);
     playButton.setButtonText("Play");
@@ -290,17 +272,13 @@ void MainComponent::resized()
 {
     auto area = getLocalBounds().reduced(20);
     
-    // Top section: Load buttons
-    auto loadArea = area.removeFromTop(40);
-    auto buttonWidth = loadArea.getWidth() / 2;
-    loadButton.setBounds(loadArea.removeFromLeft(buttonWidth).reduced(5, 5));
-    loadTestAudioButton.setBounds(loadArea.reduced(5, 5));
-    
+    // Top section: Load button
+    loadButton.setBounds(area.removeFromTop(40).reduced(0, 5));
     area.removeFromTop(10);
     
     // Transport controls
     auto transportArea = area.removeFromTop(40);
-    buttonWidth = transportArea.getWidth() / 2;
+    auto buttonWidth = transportArea.getWidth() / 2;
     playButton.setBounds(transportArea.removeFromLeft(buttonWidth).reduced(5, 5));
     stopButton.setBounds(transportArea.reduced(5, 5));
     
@@ -321,19 +299,6 @@ void MainComponent::resized()
 //==============================================================================
 // Event Handlers
 //==============================================================================
-
-void MainComponent::loadTestAudioClicked()
-{
-    // Generate test audio
-    auto testBuffer = EmbeddedAudio::createRhythmicTestAudio(44100.0, 8.0);
-    
-    if (audioProcessor.loadAudioBuffer(testBuffer, 44100.0))
-    {
-        playButton.setEnabled(true);
-        loadTestAudioButton.setButtonText("Load Test Audio ✓");
-        loadButton.setButtonText("Load Audio File");
-    }
-}
 
 void MainComponent::loadButtonClicked()
 {

@@ -16,7 +16,6 @@
 #pragma once
 
 #include <JuceHeader.h>
-#include "EmbeddedAudio.h"
 
 //==============================================================================
 /**
@@ -34,7 +33,6 @@ public:
     void releaseResources();
     
     bool loadAudioFile (const juce::File& file, juce::AudioFormatManager& formatManager);
-    bool loadAudioBuffer (const juce::AudioBuffer<float>& buffer, double sampleRate);
     
     void setPlaying (bool shouldPlay) { isPlaying.store(shouldPlay); }
     void setSpeed (double newSpeed) { targetSpeed.store(newSpeed); }
@@ -106,7 +104,6 @@ private:
     
     // UI Components
     juce::TextButton loadButton;
-    juce::TextButton loadTestAudioButton;
     juce::TextButton playButton;
     juce::TextButton stopButton;
     juce::Slider speedDial;
@@ -115,7 +112,6 @@ private:
     
     // UI event handlers
     void loadButtonClicked();
-    void loadTestAudioClicked();
     void playButtonClicked();
     void stopButtonClicked();
     void speedDialValueChanged();

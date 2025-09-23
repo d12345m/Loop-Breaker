@@ -15,6 +15,7 @@ This project implements a high-quality, professional audio buffer system using J
 ### Core Components
 
 1. **AudioBufferProcessor** - The main audio processing engine
+
    - Handles all audio buffering and playback logic
    - Thread-safe atomic variables for real-time parameter changes
    - Professional DSP practices with smooth parameter interpolation
@@ -24,10 +25,6 @@ This project implements a high-quality, professional audio buffer system using J
    - Clean separation between UI and audio processing
    - Modern JUCE UI patterns with lambda callbacks
    - Professional visual design with rotary speed control
-
-3. **EmbeddedAudio** - Test audio generation utilities
-   - Creates musical test patterns for development and testing
-   - No external dependencies required for basic functionality
 
 ## Key Features
 
@@ -43,7 +40,6 @@ This project implements a high-quality, professional audio buffer system using J
 
 - **Rotary speed dial** with visual feedback (red=reverse, blue=forward, grey=stopped)
 - **Intuitive controls**: Load → Play → Adjust speed in real-time
-- **Test audio generation** for immediate functionality without external files
 - **Professional visual design** with clear layout and feedback
 
 ### Integration Ready
@@ -73,16 +69,19 @@ The speed dial provides intuitive control:
 ## Technical Details
 
 ### Memory Management
+
 - Audio files are loaded entirely into memory for reliable reverse playback
 - Efficient buffer reuse to minimize allocations
 - RAII patterns for automatic resource cleanup
 
 ### Thread Safety
+
 - All real-time parameters use atomic variables
 - Lock-free audio processing for consistent performance
 - Separate UI and audio threads with proper synchronization
 
 ### Audio Quality
+
 - Linear interpolation for sample-accurate playback
 - Crossfading for seamless loop transitions
 - Smooth parameter changes to prevent clicks and pops
@@ -94,11 +93,11 @@ The speed dial provides intuitive control:
 2. Generate project files for your platform
 3. Build using Xcode (macOS) or Visual Studio (Windows)
 4. Run the application
-5. Either load an audio file or click "Load Test Audio" to begin
+5. Load an audio file to begin testing
 
 ## Usage Instructions
 
-1. **Load Audio**: Click "Load Audio File" to select a file, or "Load Test Audio" for immediate testing
+1. **Load Audio**: Click "Load Audio File" to select an audio file
 2. **Start Playback**: Click "Play" to begin looped playback
 3. **Control Speed**: Use the rotary dial to adjust speed and direction in real-time
 4. **Stop**: Click "Stop" to halt playback

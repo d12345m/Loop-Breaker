@@ -1,0 +1,13 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build and Run BufferTest",
+      "type": "shell",
+      "command": "cd Builds/MacOSX && xcodebuild -project BufferTest.xcodeproj -configuration Debug && open build/Debug/BufferTest.app",
+      "group": "build",
+      "problemMatcher": ["$gcc"],
+      "isBackground": false
+    }
+  ]
+}

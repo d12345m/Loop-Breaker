@@ -212,6 +212,9 @@ MainComponent::MainComponent()
     
     // Initialize audio
     setAudioChannels(0, 2);
+    
+    // Set initial speed to match the dial
+    audioProcessor.setSpeed(1.0);
 }
 
 MainComponent::~MainComponent()
@@ -225,7 +228,7 @@ void MainComponent::createSpeedDial()
     speedDial.setSliderStyle(juce::Slider::Rotary);
     speedDial.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 100, 25);
     speedDial.setRange(-2.0, 2.0, 0.01);
-    speedDial.setValue(0.0); // Start stopped
+    speedDial.setValue(1.0); // Start at normal speed
     speedDial.setTextValueSuffix("x");
     speedDial.setPopupDisplayEnabled(true, true, this);
     speedDial.onValueChange = [this] { speedDialValueChanged(); };

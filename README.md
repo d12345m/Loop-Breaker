@@ -63,7 +63,7 @@ The speed dial provides intuitive control:
 - **Full Left (-2.0)**: Reverse playback at 2x speed
 - **9 o'clock (-1.0)**: Reverse playback at normal speed
 - **12 o'clock (0.0)**: Stopped/paused
-- **3 o'clock (1.0)**: Forward playback at normal speed
+- **3 o'clock (1.0)**: Forward playback at normal speed (default)
 - **Full Right (2.0)**: Forward playback at 2x speed
 
 ## Technical Details

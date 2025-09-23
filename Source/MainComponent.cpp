@@ -9,7 +9,7 @@
 #include "MainComponent.h"
 
 //==============================================================================
-MainComponent::MainComponent() : state (TransportState::Stopped)
+MainComponent::MainComponent() : filePlayPosition(0.0), state (TransportState::Stopped), isLooping(false)
 {
     addAndMakeVisible (&openButton);
     openButton.setButtonText ("Open...");
@@ -39,7 +39,6 @@ MainComponent::MainComponent() : state (TransportState::Stopped)
     setSize (600, 400);
 
     formatManager.registerBasicFormats();
-    transportSource.addChangeListener (this);
 
     setAudioChannels (0, 2);
 }
@@ -59,7 +58,8 @@ void MainComponent::prepareToPlay (int samplesPerBlockExpected, double sampleRat
 
 void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill)
 {
-    if (readerSource.get() == nullptr || fileLengthSamples <= 0)
+    // Only play audio if we're explicitly in Playing state and have valid data
+    if (readerSource.get() == nullptr || fileLengthSamples <= 0 || state != TransportState::Playing)
     {
         bufferToFill.clearActiveBufferRegion();
         return;
@@ -160,20 +160,18 @@ void MainComponent::changeState (TransportState newState)
             case TransportState::Stopped:
                 stopButton.setEnabled (false);
                 playButton.setEnabled (true);
-                transportSource.stop();
                 break;
 
             case TransportState::Starting:
                 playButton.setEnabled (false);
-                transportSource.start();
                 break;
 
             case TransportState::Playing:
                 stopButton.setEnabled (true);
+                playButton.setEnabled (false);
                 break;
 
             case TransportState::Stopping:
-                transportSource.stop();
                 break;
         }
     }
@@ -206,13 +204,9 @@ void MainComponent::openButtonClicked()
                 audioFileBuffer.setSize(numChannels, static_cast<int>(fileLengthSamples));
                 reader->read(&audioFileBuffer, 0, static_cast<int>(fileLengthSamples), 0, true, true);
                 
-                // Set up the traditional audio source as well for forward playback fallback
+                // Keep the reader source for compatibility but don't set it as active source
                 auto newSource = std::make_unique<juce::AudioFormatReaderSource> (reader, true);
-                transportSource.setSource (newSource.get(), 0, nullptr, reader->sampleRate);
                 readerSource.reset (newSource.release());
-                
-                // Ensure transport is stopped after loading
-                transportSource.stop();
                 
                 // Reset playback position and ensure not looping
                 filePlayPosition = 0.0;
@@ -230,18 +224,14 @@ void MainComponent::openButtonClicked()
 void MainComponent::playButtonClicked()
 {
     filePlayPosition = 0.0;
-    transportSource.setPosition(0);
     isLooping = true;
-    changeState (TransportState::Starting);
+    changeState (TransportState::Playing);
 }
 
 void MainComponent::stopButtonClicked()
 {
     isLooping = false;
-    if (state == TransportState::Playing)
-        changeState (TransportState::Stopping);
-    else
-        changeState (TransportState::Stopped);
+    changeState (TransportState::Stopped);
 }
 
 
@@ -256,41 +246,13 @@ void MainComponent::sliderValueChanged (juce::Slider* slider)
 {
     if (slider == &speedSlider)
     {
-        double speed = speedSlider.getValue();
-        
-        // Only affect playback if the user has explicitly started playback
-        // Don't automatically start playback just from moving the slider
-        if (state == TransportState::Playing || state == TransportState::Starting)
-        {
-            if (speed == 0.0)
-            {
-                transportSource.stop();
-            }
-            else
-            {
-                if (!transportSource.isPlaying())
-                    transportSource.start();
-            }
-        }
-        
-        // Note: We handle all speed and direction changes in getNextAudioBlock
-        // No need to manipulate transport source for reverse playback
+        // Speed changes are handled directly in getNextAudioBlock
+        // No need to manipulate any transport sources
     }
 }
 
 void MainComponent::changeListenerCallback (juce::ChangeBroadcaster* source)
 {
-    if (source == &transportSource)
-    {
-        if (transportSource.isPlaying())
-            changeState (TransportState::Playing);
-        else if (isLooping && readerSource != nullptr && (state == TransportState::Playing || state == TransportState::Starting))
-        {
-            // Only auto-loop if we're in a playing state (user explicitly started playback)
-            transportSource.setPosition(0);
-            transportSource.start();
-        }
-        else
-            changeState (TransportState::Stopped);
-    }
+    // No longer needed since we're not using transport source for playback control
+    // All playback is managed through our state system and direct buffer access
 }

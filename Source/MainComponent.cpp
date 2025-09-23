@@ -55,33 +55,86 @@ void MainComponent::prepareToPlay (int samplesPerBlockExpected, double sampleRat
     currentSampleRate = sampleRate;
     transportSource.prepareToPlay (samplesPerBlockExpected, sampleRate);
     resampleSource.prepareToPlay (samplesPerBlockExpected, sampleRate);
+    
+    // Initialize circular buffer for smooth reverse playback
+    circularBuffer.setSize(2, circularBufferSize);
+    circularBuffer.clear();
+    writePosition = 0;
+    readPosition = 0.0;
+    bufferInitialized = false;
 }
 
 void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill)
 {
-    if (readerSource.get() == nullptr)
+    if (readerSource.get() == nullptr || fileLengthSamples <= 0)
     {
         bufferToFill.clearActiveBufferRegion();
         return;
     }
     
-    // This is a workaround for reverse playback
-    if (speedSlider.getValue() < 0)
+    double speed = speedSlider.getValue();
+    
+    if (speed == 0.0)
     {
-        auto* buffer = bufferToFill.buffer;
-        auto numSamples = bufferToFill.numSamples;
-        auto startSample = bufferToFill.startSample;
-        
-        // This is a simplified reverse logic and might not be perfect
-        // For a robust solution, a custom AudioSource would be better
-        auto currentPos = transportSource.getCurrentPosition();
-        auto samplesToMove = numSamples * std::abs(speedSlider.getValue());
-        
-        if (currentSampleRate > 0)
-            transportSource.setPosition(currentPos - samplesToMove / currentSampleRate);
+        bufferToFill.clearActiveBufferRegion();
+        return;
     }
-
-    resampleSource.getNextAudioBlock (bufferToFill);
+    
+    auto numSamples = bufferToFill.numSamples;
+    auto numChannels = bufferToFill.buffer->getNumChannels();
+    
+    bufferToFill.clearActiveBufferRegion();
+    
+    // Industry standard approach: Direct sample-accurate playback from memory buffer
+    for (int sample = 0; sample < numSamples; ++sample)
+    {
+        // Calculate the source sample position (with sub-sample precision)
+        double sourcePos = filePlayPosition;
+        
+        // Handle looping at boundaries
+        if (speed > 0.0) // Forward playback
+        {
+            if (sourcePos >= fileLengthSamples - 1)
+            {
+                if (isLooping)
+                    sourcePos = filePlayPosition = 0.0;
+                else
+                    break;
+            }
+        }
+        else // Reverse playback
+        {
+            if (sourcePos <= 0.0)
+            {
+                if (isLooping)
+                    sourcePos = filePlayPosition = static_cast<double>(fileLengthSamples - 1);
+                else
+                    break;
+            }
+        }
+        
+        // Linear interpolation for high-quality resampling
+        int pos1 = static_cast<int>(sourcePos);
+        int pos2 = pos1 + 1;
+        double fraction = sourcePos - pos1;
+        
+        // Ensure positions are within bounds
+        pos1 = juce::jlimit<int>(0, static_cast<int>(fileLengthSamples - 1), pos1);
+        pos2 = juce::jlimit<int>(0, static_cast<int>(fileLengthSamples - 1), pos2);
+        
+        for (int channel = 0; channel < juce::jmin(numChannels, audioFileBuffer.getNumChannels()); ++channel)
+        {
+            // Linear interpolation between adjacent samples
+            float sample1 = audioFileBuffer.getSample(channel, pos1);
+            float sample2 = audioFileBuffer.getSample(channel, pos2);
+            float interpolatedSample = sample1 + fraction * (sample2 - sample1);
+            
+            bufferToFill.buffer->setSample(channel, bufferToFill.startSample + sample, interpolatedSample);
+        }
+        
+        // Advance playback position
+        filePlayPosition += speed;
+    }
 }
 
 void MainComponent::releaseResources()
@@ -151,10 +204,24 @@ void MainComponent::openButtonClicked()
 
             if (reader != nullptr)
             {
+                // Store file properties
+                fileSampleRate = reader->sampleRate;
+                fileLengthSamples = reader->lengthInSamples;
+                auto numChannels = static_cast<int>(reader->numChannels);
+                
+                // Load entire file into memory for reliable reverse playback
+                audioFileBuffer.setSize(numChannels, static_cast<int>(fileLengthSamples));
+                reader->read(&audioFileBuffer, 0, static_cast<int>(fileLengthSamples), 0, true, true);
+                
+                // Set up the traditional audio source as well for forward playback fallback
                 auto newSource = std::make_unique<juce::AudioFormatReaderSource> (reader, true);
                 transportSource.setSource (newSource.get(), 0, nullptr, reader->sampleRate);
-                playButton.setEnabled (true);
                 readerSource.reset (newSource.release());
+                
+                // Reset playback position
+                filePlayPosition = 0.0;
+                
+                playButton.setEnabled (true);
             }
         }
     });
@@ -162,6 +229,7 @@ void MainComponent::openButtonClicked()
 
 void MainComponent::playButtonClicked()
 {
+    filePlayPosition = 0.0;
     transportSource.setPosition(0);
     isLooping = true;
     changeState (TransportState::Starting);
@@ -189,6 +257,7 @@ void MainComponent::sliderValueChanged (juce::Slider* slider)
     if (slider == &speedSlider)
     {
         double speed = speedSlider.getValue();
+        
         if (speed == 0.0)
         {
             transportSource.stop();
@@ -197,7 +266,9 @@ void MainComponent::sliderValueChanged (juce::Slider* slider)
         {
             if (!transportSource.isPlaying())
                 transportSource.start();
-            resampleSource.setResamplingRatio (std::abs(speed));
+                
+            // Note: We handle all speed and direction changes in getNextAudioBlock
+            // No need to manipulate transport source for reverse playback
         }
     }
 }

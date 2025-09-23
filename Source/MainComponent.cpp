@@ -214,8 +214,9 @@ void MainComponent::openButtonClicked()
                 // Ensure transport is stopped after loading
                 transportSource.stop();
                 
-                // Reset playback position
+                // Reset playback position and ensure not looping
                 filePlayPosition = 0.0;
+                isLooping = false;
                 
                 // Ensure we're in stopped state
                 changeState (TransportState::Stopped);
@@ -283,8 +284,9 @@ void MainComponent::changeListenerCallback (juce::ChangeBroadcaster* source)
     {
         if (transportSource.isPlaying())
             changeState (TransportState::Playing);
-        else if (isLooping && readerSource != nullptr)
+        else if (isLooping && readerSource != nullptr && (state == TransportState::Playing || state == TransportState::Starting))
         {
+            // Only auto-loop if we're in a playing state (user explicitly started playback)
             transportSource.setPosition(0);
             transportSource.start();
         }

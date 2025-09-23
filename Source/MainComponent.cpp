@@ -184,6 +184,7 @@ void AudioBufferProcessor::triggerSlice(int sliceIndex)
     if (sliceIndex >= 0 && sliceIndex < numSlices)
     {
         targetSlice.store(sliceIndex);
+        currentActiveSlice.store(sliceIndex);
         sliceTriggered.store(true);
         isSlicingMode.store(true);
     }
@@ -202,6 +203,7 @@ void AudioBufferProcessor::triggerRandomSlice()
 void AudioBufferProcessor::resetToBeginning()
 {
     playheadPosition.store(0.0);
+    currentActiveSlice.store(0);
     isSlicingMode.store(false);
     sliceTriggered.store(false);
     continuousRandomMode.store(false);
@@ -220,6 +222,13 @@ int AudioBufferProcessor::getCurrentSlice() const
     if (numSlices <= 1 || fileLengthSamples <= 0)
         return 0;
     
+    // If we're in slicing mode, return the active slice rather than calculating from position
+    if (isSlicingMode.load())
+    {
+        return currentActiveSlice.load();
+    }
+    
+    // Otherwise, calculate from playhead position for display purposes
     double currentPos = playheadPosition.load();
     double sliceSize = static_cast<double>(fileLengthSamples) / numSlices;
     return juce::jlimit(0, numSlices - 1, static_cast<int>(currentPos / sliceSize));
@@ -253,6 +262,7 @@ void AudioBufferProcessor::exitSlicingMode()
     isSlicingMode.store(false);
     continuousRandomMode.store(false);
     sliceTriggered.store(false);
+    currentActiveSlice.store(0);
 }
 
 void AudioBufferProcessor::handleSlicePlayback(double& currentPos)
@@ -264,7 +274,19 @@ void AudioBufferProcessor::handleSlicePlayback(double& currentPos)
     if (sliceTriggered.load())
     {
         int slice = targetSlice.load();
-        currentPos = getSliceStartPosition(slice);
+        double speed = targetSpeed.load();
+        
+        // Set position based on playback direction
+        if (speed >= 0.0)
+        {
+            currentPos = getSliceStartPosition(slice);
+        }
+        else
+        {
+            currentPos = getSliceEndPosition(slice) - 1.0;
+        }
+        
+        currentActiveSlice.store(slice);
         playheadPosition.store(currentPos);
         sliceTriggered.store(false);
         return;
@@ -273,9 +295,9 @@ void AudioBufferProcessor::handleSlicePlayback(double& currentPos)
     // Handle continuous random mode
     if (continuousRandomMode.load())
     {
-        int currentSlice = getCurrentSlice();
-        double sliceStart = getSliceStartPosition(currentSlice);
-        double sliceEnd = getSliceEndPosition(currentSlice);
+        int activeSlice = currentActiveSlice.load();
+        double sliceStart = getSliceStartPosition(activeSlice);
+        double sliceEnd = getSliceEndPosition(activeSlice);
         
         // Check if we've reached the end/beginning of the current slice based on playback direction
         bool shouldTriggerNext = false;
@@ -294,6 +316,7 @@ void AudioBufferProcessor::handleSlicePlayback(double& currentPos)
         {
             // Trigger a new random slice
             int nextSlice = random.nextInt(numSlices);
+            currentActiveSlice.store(nextSlice);
             
             // Set position to appropriate end of new slice based on direction
             if (speed > 0.0)
@@ -312,9 +335,9 @@ void AudioBufferProcessor::handleSlicePlayback(double& currentPos)
     else
     {
         // Non-continuous slice mode - check if we've reached the end of the current slice
-        int currentSlice = getCurrentSlice();
-        double sliceStart = getSliceStartPosition(currentSlice);
-        double sliceEnd = getSliceEndPosition(currentSlice);
+        int activeSlice = currentActiveSlice.load();
+        double sliceStart = getSliceStartPosition(activeSlice);
+        double sliceEnd = getSliceEndPosition(activeSlice);
         double speed = targetSpeed.load();
         
         if (speed > 0.0 && currentPos >= sliceEnd - 1.0)

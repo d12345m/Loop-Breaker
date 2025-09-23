@@ -67,6 +67,7 @@ private:
     // Buffer slicing
     int numSlices = 1;
     std::atomic<int> targetSlice { 0 };
+    std::atomic<int> currentActiveSlice { 0 };
     std::atomic<bool> sliceTriggered { false };
     std::atomic<bool> isSlicingMode { false };
     std::atomic<bool> continuousRandomMode { false };

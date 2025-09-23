@@ -59,6 +59,7 @@ bool isInContinuousRandomMode() const;     // Check if in random mode
 ### Thread Safety
 All slice operations are thread-safe using atomic variables:
 - `std::atomic<int> targetSlice`
+- `std::atomic<int> currentActiveSlice`
 - `std::atomic<bool> sliceTriggered`
 - `std::atomic<bool> isSlicingMode`
 - `std::atomic<bool> continuousRandomMode`
@@ -75,6 +76,9 @@ All slice operations are thread-safe using atomic variables:
 4. **Sound Design**: Create evolving textures from static sounds
 
 ## Technical Implementation
+
+### Active Slice Tracking
+The system now maintains a separate `currentActiveSlice` atomic variable that tracks which slice is currently being played, independent of the playhead position. This ensures proper behavior in both forward and reverse playback modes.
 
 ### Slice Calculation
 ```cpp

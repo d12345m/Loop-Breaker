@@ -82,10 +82,6 @@ void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& buffe
     }
 
     resampleSource.getNextAudioBlock (bufferToFill);
-
-    // Loop
-    if (transportSource.hasStreamFinished())
-        transportSource.setPosition (0);
 }
 
 void MainComponent::releaseResources()
@@ -166,11 +162,14 @@ void MainComponent::openButtonClicked()
 
 void MainComponent::playButtonClicked()
 {
+    transportSource.setPosition(0);
+    isLooping = true;
     changeState (TransportState::Starting);
 }
 
 void MainComponent::stopButtonClicked()
 {
+    isLooping = false;
     if (state == TransportState::Playing)
         changeState (TransportState::Stopping);
     else
@@ -192,13 +191,14 @@ void MainComponent::sliderValueChanged (juce::Slider* slider)
         double speed = speedSlider.getValue();
         if (speed == 0.0)
         {
-            changeState(TransportState::Stopped);
+            transportSource.stop();
         }
         else
         {
-            changeState(TransportState::Starting);
+            if (!transportSource.isPlaying())
+                transportSource.start();
+            resampleSource.setResamplingRatio (std::abs(speed));
         }
-        resampleSource.setResamplingRatio (std::abs(speed));
     }
 }
 
@@ -208,6 +208,11 @@ void MainComponent::changeListenerCallback (juce::ChangeBroadcaster* source)
     {
         if (transportSource.isPlaying())
             changeState (TransportState::Playing);
+        else if (isLooping && readerSource != nullptr)
+        {
+            transportSource.setPosition(0);
+            transportSource.start();
+        }
         else
             changeState (TransportState::Stopped);
     }

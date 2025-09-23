@@ -241,7 +241,11 @@ double AudioBufferProcessor::getSliceStartPosition(int sliceIndex) const
         return 0.0;
     
     double sliceSize = static_cast<double>(fileLengthSamples) / numSlices;
-    return sliceIndex * sliceSize;
+    int targetSample = static_cast<int>(sliceIndex * sliceSize);
+    
+    // Find nearest zero crossing for cleaner slice start
+    int optimalStart = findNearestZeroCrossing(targetSample);
+    return static_cast<double>(optimalStart);
 }
 
 double AudioBufferProcessor::getSliceEndPosition(int sliceIndex) const
@@ -250,7 +254,11 @@ double AudioBufferProcessor::getSliceEndPosition(int sliceIndex) const
         return 0.0;
     
     double sliceSize = static_cast<double>(fileLengthSamples) / numSlices;
-    return (sliceIndex + 1) * sliceSize;
+    int targetSample = static_cast<int>((sliceIndex + 1) * sliceSize);
+    
+    // Find nearest zero crossing for cleaner slice end
+    int optimalEnd = findNearestZeroCrossing(targetSample);
+    return static_cast<double>(optimalEnd);
 }
 
 void AudioBufferProcessor::stopRandomSlicing()
@@ -744,5 +752,111 @@ void MainComponent::updateSliceDisplay()
     {
         currentSliceLabel.setText("Current Slice: 0", juce::dontSendNotification);
         currentSliceLabel.setColour(juce::Label::textColourId, juce::Colours::lightblue);
+    }
+}
+
+//==============================================================================
+// Click Removal and Crossfade Methods
+//==============================================================================
+
+int AudioBufferProcessor::findNearestZeroCrossing(int targetSample, int searchRadius) const
+{
+    if (audioFileBuffer.getNumSamples() == 0)
+        return targetSample;
+    
+    // Clamp target to valid range
+    targetSample = juce::jlimit(0, fileLengthSamples - 1, targetSample);
+    
+    // Search for zero crossing in both directions
+    int bestSample = targetSample;
+    float minCrossingValue = std::abs(audioFileBuffer.getSample(0, targetSample));
+    
+    // Search in a radius around the target
+    int searchStart = juce::jmax(0, targetSample - searchRadius);
+    int searchEnd = juce::jmin(fileLengthSamples - 1, targetSample + searchRadius);
+    
+    for (int sample = searchStart; sample < searchEnd - 1; ++sample)
+    {
+        float currentValue = 0.0f;
+        float nextValue = 0.0f;
+        
+        // Check all channels and find the maximum absolute value
+        for (int channel = 0; channel < audioFileBuffer.getNumChannels(); ++channel)
+        {
+            float channelCurrent = audioFileBuffer.getSample(channel, sample);
+            float channelNext = audioFileBuffer.getSample(channel, sample + 1);
+            
+            currentValue = juce::jmax(currentValue, std::abs(channelCurrent));
+            nextValue = juce::jmax(nextValue, std::abs(channelNext));
+        }
+        
+        // Check if this is a zero crossing (signs differ) and closer to zero
+        if ((currentValue * nextValue < 0.0f) || // Sign change (zero crossing)
+            (currentValue < minCrossingValue))   // Or just closer to zero
+        {
+            minCrossingValue = currentValue;
+            bestSample = sample;
+        }
+    }
+    
+    return bestSample;
+}
+
+void AudioBufferProcessor::applyAntiClickFade(juce::AudioBuffer<float>& buffer, int startSample, int length, bool fadeIn)
+{
+    if (length <= 0 || startSample < 0)
+        return;
+    
+    const int numChannels = buffer.getNumChannels();
+    const int numSamples = buffer.getNumSamples();
+    const int endSample = juce::jmin(startSample + length, numSamples);
+    const int actualLength = endSample - startSample;
+    
+    for (int sample = 0; sample < actualLength; ++sample)
+    {
+        // Use a smooth cosine fade curve
+        float progress = static_cast<float>(sample) / actualLength;
+        float fadeGain;
+        
+        if (fadeIn)
+        {
+            // Fade in: 0 -> 1 using raised cosine
+            fadeGain = 0.5f * (1.0f - std::cos(progress * juce::MathConstants<float>::pi));
+        }
+        else
+        {
+            // Fade out: 1 -> 0 using raised cosine
+            fadeGain = 0.5f * (1.0f + std::cos(progress * juce::MathConstants<float>::pi));
+        }
+        
+        for (int channel = 0; channel < numChannels; ++channel)
+        {
+            int sampleIndex = startSample + sample;
+            if (sampleIndex < numSamples)
+            {
+                float currentSample = buffer.getSample(channel, sampleIndex);
+                buffer.setSample(channel, sampleIndex, currentSample * fadeGain);
+            }
+        }
+    }
+}
+
+void AudioBufferProcessor::applySliceTransitionFade(juce::AudioBuffer<float>& buffer, double currentPos, bool isSliceStart)
+{
+    const int currentSample = static_cast<int>(currentPos);
+    const int numSamples = buffer.getNumSamples();
+    
+    if (isSliceStart)
+    {
+        // Apply fade-in at slice start to prevent clicks
+        int fadeLength = juce::jmin(sliceFadeLength, numSamples);
+        applyAntiClickFade(buffer, 0, fadeLength, true);
+    }
+    else
+    {
+        // Apply fade-out at slice end to prevent clicks
+        int fadeStart = juce::jmax(0, numSamples - sliceFadeLength);
+        int fadeLength = numSamples - fadeStart;
+        applyAntiClickFade(buffer, fadeStart, fadeLength, false);
     }
 }

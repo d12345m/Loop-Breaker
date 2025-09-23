@@ -34,6 +34,7 @@ void AudioBufferProcessor::prepareToPlay(double sampleRate, int samplesPerBlockE
     stretchBuffer.setSize(2, samplesPerBlockExpected * 4); // Extra headroom for stretching
     tempProcessingBuffer.setSize(2, samplesPerBlockExpected * 4);
     crossfadeBuffer.setSize(2, crossfadeLength);
+    fadeBuffer.setSize(2, sliceFadeLength);
 }
 
 void AudioBufferProcessor::processBlock(juce::AudioBuffer<float>& buffer)
@@ -374,6 +375,7 @@ void AudioBufferProcessor::releaseResources()
     audioFileBuffer.setSize(0, 0);
     stretchBuffer.setSize(0, 0);
     tempProcessingBuffer.setSize(0, 0);
+    fadeBuffer.setSize(0, 0);
 }
 
 //==============================================================================

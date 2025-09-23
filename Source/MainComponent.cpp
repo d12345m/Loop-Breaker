@@ -60,26 +60,36 @@ void AudioBufferProcessor::processWithTimeStretching(juce::AudioBuffer<float>& o
     outputBuffer.clear();
     bool sliceTransitionDetected = false;
     
+    // Check if we're starting a new slice at the beginning of this buffer
+    static std::atomic<int> lastActiveSlice{-1};
+    static std::atomic<bool> lastSliceTriggered{false};
+    
+    int currentActiveSlice = this->currentActiveSlice.load();
+    bool currentSliceTriggered = sliceTriggered.load();
+    
+    // Detect slice changes for click removal
+    if (isSlicingMode.load() && clickRemovalEnabled.load())
+    {
+        // Check if slice has changed or was just triggered
+        if (currentSliceTriggered || 
+            (currentActiveSlice != lastActiveSlice.load() && currentActiveSlice >= 0))
+        {
+            sliceTransitionDetected = true;
+        }
+    }
+    
+    // Update tracking variables
+    lastActiveSlice.store(currentActiveSlice);
+    lastSliceTriggered.store(currentSliceTriggered);
+    
     for (int sample = 0; sample < numOutputSamples; ++sample)
     {
         const double speed = speedSmoother.getNextValue();
         double currentPos = playheadPosition.load();
-        double positionBeforeSliceHandling = currentPos;
         
         // Handle slice-based playback first
         handleSlicePlayback(currentPos);
         currentPos = playheadPosition.load(); // Get updated position after slice handling
-        
-        // Detect slice transitions for click removal (only once per buffer)
-        if (!sliceTransitionDetected && isSlicingMode.load())
-        {
-            // Check for sudden position jumps indicating slice transitions
-            double positionDelta = std::abs(currentPos - positionBeforeSliceHandling);
-            if (positionDelta > (fileLengthSamples * 0.1)) // Large jump = slice transition
-            {
-                sliceTransitionDetected = true;
-            }
-        }
         
         // Only handle normal boundary conditions if not in slicing mode
         if (!isSlicingMode.load())
@@ -149,11 +159,11 @@ void AudioBufferProcessor::processWithTimeStretching(juce::AudioBuffer<float>& o
         playheadPosition.store(currentPos);
     }
     
-    // Apply click removal ONLY when needed, enabled, and ONLY once per buffer
-    if (sliceTransitionDetected && isSlicingMode.load() && clickRemovalEnabled.load())
+    // Apply click removal at slice transitions
+    if (sliceTransitionDetected)
     {
-        // Apply a very short, gentle fade-in at slice transitions only
-        const int transitionFadeLength = juce::jmin(32, numOutputSamples / 8); // Much shorter fade
+        // Apply a gentle fade-in at slice transitions to eliminate clicks
+        const int transitionFadeLength = juce::jmin(64, numOutputSamples / 4); // Moderate fade length
         applyAntiClickFade(outputBuffer, 0, transitionFadeLength, true);
     }
 }

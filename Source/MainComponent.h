@@ -49,6 +49,7 @@ public:
     bool isInContinuousRandomMode() const { return continuousRandomMode.load(); }
     void stopRandomSlicing();
     void exitSlicingMode();
+    void setClickRemovalEnabled(bool enabled) { clickRemovalEnabled.store(enabled); }
     
     bool hasAudioLoaded() const { return audioFileBuffer.getNumSamples() > 0; }
     bool getIsPlaying() const { return isPlaying.load(); }
@@ -71,6 +72,7 @@ private:
     std::atomic<bool> sliceTriggered { false };
     std::atomic<bool> isSlicingMode { false };
     std::atomic<bool> continuousRandomMode { false };
+    std::atomic<bool> clickRemovalEnabled { true };
     juce::Random random;
     
     // DSP parameters
@@ -154,6 +156,7 @@ private:
     juce::TextButton randomSliceButton;
     juce::TextButton resetButton;
     juce::Label currentSliceLabel;
+    juce::ToggleButton clickRemovalToggle;
     
     // UI event handlers
     void loadButtonClicked();
@@ -163,6 +166,7 @@ private:
     void sliceCountChanged();
     void randomSliceButtonClicked();
     void resetButtonClicked();
+    void clickRemovalToggled();
     
     void updateUI();
     void createSpeedDial();

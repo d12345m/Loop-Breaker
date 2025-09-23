@@ -58,15 +58,28 @@ void AudioBufferProcessor::processWithTimeStretching(juce::AudioBuffer<float>& o
     const int numChannels = juce::jmin(outputBuffer.getNumChannels(), audioFileBuffer.getNumChannels());
     
     outputBuffer.clear();
+    bool sliceTransitionDetected = false;
     
     for (int sample = 0; sample < numOutputSamples; ++sample)
     {
         const double speed = speedSmoother.getNextValue();
         double currentPos = playheadPosition.load();
+        double positionBeforeSliceHandling = currentPos;
         
         // Handle slice-based playback first
         handleSlicePlayback(currentPos);
         currentPos = playheadPosition.load(); // Get updated position after slice handling
+        
+        // Detect slice transitions for click removal (only once per buffer)
+        if (!sliceTransitionDetected && isSlicingMode.load())
+        {
+            // Check for sudden position jumps indicating slice transitions
+            double positionDelta = std::abs(currentPos - positionBeforeSliceHandling);
+            if (positionDelta > (fileLengthSamples * 0.1)) // Large jump = slice transition
+            {
+                sliceTransitionDetected = true;
+            }
+        }
         
         // Only handle normal boundary conditions if not in slicing mode
         if (!isSlicingMode.load())
@@ -134,6 +147,14 @@ void AudioBufferProcessor::processWithTimeStretching(juce::AudioBuffer<float>& o
         // Advance playhead
         currentPos += speed * (fileSampleRate / hostSampleRate);
         playheadPosition.store(currentPos);
+    }
+    
+    // Apply click removal ONLY when needed, enabled, and ONLY once per buffer
+    if (sliceTransitionDetected && isSlicingMode.load() && clickRemovalEnabled.load())
+    {
+        // Apply a very short, gentle fade-in at slice transitions only
+        const int transitionFadeLength = juce::jmin(32, numOutputSamples / 8); // Much shorter fade
+        applyAntiClickFade(outputBuffer, 0, transitionFadeLength, true);
     }
 }
 
@@ -243,9 +264,17 @@ double AudioBufferProcessor::getSliceStartPosition(int sliceIndex) const
     double sliceSize = static_cast<double>(fileLengthSamples) / numSlices;
     int targetSample = static_cast<int>(sliceIndex * sliceSize);
     
-    // Find nearest zero crossing for cleaner slice start
-    int optimalStart = findNearestZeroCrossing(targetSample);
-    return static_cast<double>(optimalStart);
+    // Only use zero-crossing detection for larger slices to avoid over-processing
+    if (sliceSize > zeroCrossingSearchRadius * 4)
+    {
+        int optimalStart = findNearestZeroCrossing(targetSample);
+        return static_cast<double>(optimalStart);
+    }
+    else
+    {
+        // For small slices, use exact positions to avoid artifacts
+        return static_cast<double>(targetSample);
+    }
 }
 
 double AudioBufferProcessor::getSliceEndPosition(int sliceIndex) const
@@ -256,9 +285,17 @@ double AudioBufferProcessor::getSliceEndPosition(int sliceIndex) const
     double sliceSize = static_cast<double>(fileLengthSamples) / numSlices;
     int targetSample = static_cast<int>((sliceIndex + 1) * sliceSize);
     
-    // Find nearest zero crossing for cleaner slice end
-    int optimalEnd = findNearestZeroCrossing(targetSample);
-    return static_cast<double>(optimalEnd);
+    // Only use zero-crossing detection for larger slices to avoid over-processing  
+    if (sliceSize > zeroCrossingSearchRadius * 4)
+    {
+        int optimalEnd = findNearestZeroCrossing(targetSample);
+        return static_cast<double>(optimalEnd);
+    }
+    else
+    {
+        // For small slices, use exact positions to avoid artifacts
+        return static_cast<double>(targetSample);
+    }
 }
 
 void AudioBufferProcessor::stopRandomSlicing()
@@ -458,8 +495,13 @@ MainComponent::MainComponent()
     currentSliceLabel.setJustificationType(juce::Justification::centred);
     currentSliceLabel.setColour(juce::Label::textColourId, juce::Colours::lightblue);
     
+    addAndMakeVisible(clickRemovalToggle);
+    clickRemovalToggle.setButtonText("Click Removal");
+    clickRemovalToggle.setToggleState(true, juce::dontSendNotification);
+    clickRemovalToggle.onClick = [this] { clickRemovalToggled(); };
+    
     // Set component size (larger to accommodate new controls)
-    setSize(600, 650);
+    setSize(600, 680);
     
     // Initialize audio
     setAudioChannels(0, 2);
@@ -579,6 +621,9 @@ void MainComponent::resized()
     
     area.removeFromTop(10);
     currentSliceLabel.setBounds(area.removeFromTop(25));
+    
+    area.removeFromTop(10);
+    clickRemovalToggle.setBounds(area.removeFromTop(30));
 }
 
 //==============================================================================
@@ -755,6 +800,12 @@ void MainComponent::updateSliceDisplay()
     }
 }
 
+void MainComponent::clickRemovalToggled()
+{
+    bool enabled = clickRemovalToggle.getToggleState();
+    audioProcessor.setClickRemovalEnabled(enabled);
+}
+
 //==============================================================================
 // Click Removal and Crossfade Methods
 //==============================================================================
@@ -843,7 +894,6 @@ void AudioBufferProcessor::applyAntiClickFade(juce::AudioBuffer<float>& buffer, 
 
 void AudioBufferProcessor::applySliceTransitionFade(juce::AudioBuffer<float>& buffer, double currentPos, bool isSliceStart)
 {
-    const int currentSample = static_cast<int>(currentPos);
     const int numSamples = buffer.getNumSamples();
     
     if (isSliceStart)

@@ -63,43 +63,58 @@ void AudioBufferProcessor::processWithTimeStretching(juce::AudioBuffer<float>& o
         const double speed = speedSmoother.getNextValue();
         double currentPos = playheadPosition.load();
         
-        // Handle looping and boundaries
-        if (speed > 0.0) // Forward playback
+        // Handle slice-based playback first
+        handleSlicePlayback(currentPos);
+        currentPos = playheadPosition.load(); // Get updated position after slice handling
+        
+        // Only handle normal boundary conditions if not in slicing mode
+        if (!isSlicingMode.load())
         {
-            if (currentPos >= fileLengthSamples - 1)
+            // Handle looping and boundaries for normal playback
+            if (speed > 0.0) // Forward playback
             {
-                if (isLooping.load())
+                if (currentPos >= fileLengthSamples - 1)
                 {
-                    currentPos = 0.0;
-                    applyCrossfade(outputBuffer, sample, numOutputSamples - sample);
-                }
-                else
-                {
-                    isPlaying.store(false);
-                    break;
+                    if (isLooping.load())
+                    {
+                        currentPos = 0.0;
+                        applyCrossfade(outputBuffer, sample, numOutputSamples - sample);
+                    }
+                    else
+                    {
+                        isPlaying.store(false);
+                        break;
+                    }
                 }
             }
-        }
-        else if (speed < 0.0) // Reverse playback
-        {
-            if (currentPos <= 0.0)
+            else if (speed < 0.0) // Reverse playback
             {
-                if (isLooping.load())
+                if (currentPos <= 0.0)
                 {
-                    currentPos = static_cast<double>(fileLengthSamples - 1);
-                    applyCrossfade(outputBuffer, sample, numOutputSamples - sample);
-                }
-                else
-                {
-                    isPlaying.store(false);
-                    break;
+                    if (isLooping.load())
+                    {
+                        currentPos = static_cast<double>(fileLengthSamples - 1);
+                        applyCrossfade(outputBuffer, sample, numOutputSamples - sample);
+                    }
+                    else
+                    {
+                        isPlaying.store(false);
+                        break;
+                    }
                 }
             }
+            else // Speed == 0, paused
+            {
+                break;
+            }
         }
-        else // Speed == 0, paused
+        else if (speed == 0.0) // Paused in slicing mode
         {
             break;
         }
+        
+        // Ensure position is within bounds
+        currentPos = juce::jlimit(0.0, static_cast<double>(fileLengthSamples - 1), currentPos);
         
         // High-quality interpolation
         const int pos1 = static_cast<int>(currentPos);
@@ -159,6 +174,178 @@ bool AudioBufferProcessor::loadAudioFile(const juce::File& file, juce::AudioForm
     return true;
 }
 
+void AudioBufferProcessor::setNumSlices(int numSlices)
+{
+    this->numSlices = juce::jmax(1, numSlices);
+}
+
+void AudioBufferProcessor::triggerSlice(int sliceIndex)
+{
+    if (sliceIndex >= 0 && sliceIndex < numSlices)
+    {
+        targetSlice.store(sliceIndex);
+        sliceTriggered.store(true);
+        isSlicingMode.store(true);
+    }
+}
+
+void AudioBufferProcessor::triggerRandomSlice()
+{
+    if (numSlices > 1)
+    {
+        int randomSlice = random.nextInt(numSlices);
+        triggerSlice(randomSlice);
+        continuousRandomMode.store(true);
+    }
+}
+
+void AudioBufferProcessor::resetToBeginning()
+{
+    playheadPosition.store(0.0);
+    isSlicingMode.store(false);
+    sliceTriggered.store(false);
+    continuousRandomMode.store(false);
+}
+
+void AudioBufferProcessor::resetToDefaults()
+{
+    resetToBeginning();
+    setSpeed(1.0);
+    setLooping(true);
+    setPlaying(false);
+}
+
+int AudioBufferProcessor::getCurrentSlice() const
+{
+    if (numSlices <= 1 || fileLengthSamples <= 0)
+        return 0;
+    
+    double currentPos = playheadPosition.load();
+    double sliceSize = static_cast<double>(fileLengthSamples) / numSlices;
+    return juce::jlimit(0, numSlices - 1, static_cast<int>(currentPos / sliceSize));
+}
+
+double AudioBufferProcessor::getSliceStartPosition(int sliceIndex) const
+{
+    if (sliceIndex < 0 || sliceIndex >= numSlices || fileLengthSamples <= 0)
+        return 0.0;
+    
+    double sliceSize = static_cast<double>(fileLengthSamples) / numSlices;
+    return sliceIndex * sliceSize;
+}
+
+double AudioBufferProcessor::getSliceEndPosition(int sliceIndex) const
+{
+    if (sliceIndex < 0 || sliceIndex >= numSlices || fileLengthSamples <= 0)
+        return 0.0;
+    
+    double sliceSize = static_cast<double>(fileLengthSamples) / numSlices;
+    return (sliceIndex + 1) * sliceSize;
+}
+
+void AudioBufferProcessor::stopRandomSlicing()
+{
+    continuousRandomMode.store(false);
+}
+
+void AudioBufferProcessor::exitSlicingMode()
+{
+    isSlicingMode.store(false);
+    continuousRandomMode.store(false);
+    sliceTriggered.store(false);
+}
+
+void AudioBufferProcessor::handleSlicePlayback(double& currentPos)
+{
+    if (!isSlicingMode.load())
+        return;
+    
+    // Check if we need to jump to a new slice
+    if (sliceTriggered.load())
+    {
+        int slice = targetSlice.load();
+        currentPos = getSliceStartPosition(slice);
+        playheadPosition.store(currentPos);
+        sliceTriggered.store(false);
+        return;
+    }
+    
+    // Handle continuous random mode
+    if (continuousRandomMode.load())
+    {
+        int currentSlice = getCurrentSlice();
+        double sliceStart = getSliceStartPosition(currentSlice);
+        double sliceEnd = getSliceEndPosition(currentSlice);
+        
+        // Check if we've reached the end/beginning of the current slice based on playback direction
+        bool shouldTriggerNext = false;
+        double speed = targetSpeed.load();
+        
+        if (speed > 0.0) // Forward playback
+        {
+            shouldTriggerNext = (currentPos >= sliceEnd - 1.0);
+        }
+        else if (speed < 0.0) // Reverse playback
+        {
+            shouldTriggerNext = (currentPos <= sliceStart);
+        }
+        
+        if (shouldTriggerNext)
+        {
+            // Trigger a new random slice
+            int nextSlice = random.nextInt(numSlices);
+            
+            // Set position to appropriate end of new slice based on direction
+            if (speed > 0.0)
+            {
+                currentPos = getSliceStartPosition(nextSlice);
+            }
+            else
+            {
+                currentPos = getSliceEndPosition(nextSlice) - 1.0;
+            }
+            
+            playheadPosition.store(currentPos);
+            return;
+        }
+    }
+    else
+    {
+        // Non-continuous slice mode - check if we've reached the end of the current slice
+        int currentSlice = getCurrentSlice();
+        double sliceStart = getSliceStartPosition(currentSlice);
+        double sliceEnd = getSliceEndPosition(currentSlice);
+        double speed = targetSpeed.load();
+        
+        if (speed > 0.0 && currentPos >= sliceEnd - 1.0)
+        {
+            if (isLooping.load())
+            {
+                // Loop back to the start of the current slice
+                currentPos = sliceStart;
+                playheadPosition.store(currentPos);
+            }
+            else
+            {
+                isPlaying.store(false);
+            }
+        }
+        else if (speed < 0.0 && currentPos <= sliceStart)
+        {
+            if (isLooping.load())
+            {
+                // Loop back to the end of the current slice
+                currentPos = sliceEnd - 1.0;
+                playheadPosition.store(currentPos);
+            }
+            else
+            {
+                isPlaying.store(false);
+            }
+        }
+    }
+}
+
 void AudioBufferProcessor::releaseResources()
 {
     audioFileBuffer.setSize(0, 0);
@@ -207,18 +394,53 @@ MainComponent::MainComponent()
     instructionLabel.setJustificationType(juce::Justification::centred);
     instructionLabel.setColour(juce::Label::textColourId, juce::Colours::grey);
     
-    // Set component size
-    setSize(600, 500);
+    // Create slicing controls
+    addAndMakeVisible(sliceCountLabel);
+    sliceCountLabel.setText("Buffer Slices", juce::dontSendNotification);
+    sliceCountLabel.setFont(juce::Font(14.0f, juce::Font::bold));
+    sliceCountLabel.setJustificationType(juce::Justification::centred);
+    
+    addAndMakeVisible(sliceCountSlider);
+    sliceCountSlider.setRange(1, 64, 1);
+    sliceCountSlider.setValue(32);
+    sliceCountSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+    sliceCountSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 50, 20);
+    sliceCountSlider.onValueChange = [this] { sliceCountChanged(); };
+    
+    addAndMakeVisible(randomSliceButton);
+    randomSliceButton.setButtonText("Start Random Slicing");
+    randomSliceButton.setColour(juce::TextButton::buttonColourId, juce::Colours::orange);
+    randomSliceButton.onClick = [this] { randomSliceButtonClicked(); };
+    randomSliceButton.setEnabled(false);
+    
+    addAndMakeVisible(resetButton);
+    resetButton.setButtonText("Reset to Defaults");
+    resetButton.setColour(juce::TextButton::buttonColourId, juce::Colours::purple);
+    resetButton.onClick = [this] { resetButtonClicked(); };
+    resetButton.setEnabled(false);
+    
+    addAndMakeVisible(currentSliceLabel);
+    currentSliceLabel.setText("Current Slice: 0", juce::dontSendNotification);
+    currentSliceLabel.setFont(juce::Font(12.0f));
+    currentSliceLabel.setJustificationType(juce::Justification::centred);
+    currentSliceLabel.setColour(juce::Label::textColourId, juce::Colours::lightblue);
+    
+    // Set component size (larger to accommodate new controls)
+    setSize(600, 650);
     
     // Initialize audio
     setAudioChannels(0, 2);
     
     // Set initial speed to match the dial
     audioProcessor.setSpeed(1.0);
+    
+    // Start timer for UI updates
+    startTimer(100); // Update every 100ms
 }
 
 MainComponent::~MainComponent()
 {
+    stopTimer();
     shutdownAudio();
 }
 
@@ -259,6 +481,15 @@ void MainComponent::releaseResources()
 }
 
 //==============================================================================
+// Timer callback
+//==============================================================================
+
+void MainComponent::timerCallback()
+{
+    updateSliceDisplay();
+}
+
+//==============================================================================
 // UI Implementation
 //==============================================================================
 
@@ -292,11 +523,29 @@ void MainComponent::resized()
     area.removeFromTop(10);
     
     // Speed dial - large and centered
-    auto dialArea = area.removeFromTop(200);
-    speedDial.setBounds(dialArea.withSizeKeepingCentre(180, 180));
+    auto dialArea = area.removeFromTop(180);
+    speedDial.setBounds(dialArea.withSizeKeepingCentre(160, 160));
+    
+    area.removeFromTop(10);
+    instructionLabel.setBounds(area.removeFromTop(30));
     
     area.removeFromTop(20);
-    instructionLabel.setBounds(area.removeFromTop(30));
+    
+    // Slicing controls section
+    sliceCountLabel.setBounds(area.removeFromTop(25));
+    area.removeFromTop(5);
+    sliceCountSlider.setBounds(area.removeFromTop(30).reduced(20, 0));
+    
+    area.removeFromTop(15);
+    
+    // Slice control buttons
+    auto sliceButtonArea = area.removeFromTop(40);
+    auto sliceButtonWidth = sliceButtonArea.getWidth() / 2;
+    randomSliceButton.setBounds(sliceButtonArea.removeFromLeft(sliceButtonWidth).reduced(5, 5));
+    resetButton.setBounds(sliceButtonArea.reduced(5, 5));
+    
+    area.removeFromTop(10);
+    currentSliceLabel.setBounds(area.removeFromTop(25));
 }
 
 //==============================================================================
@@ -321,7 +570,12 @@ void MainComponent::loadButtonClicked()
             if (audioProcessor.loadAudioFile(file, formatManager))
             {
                 playButton.setEnabled(true);
+                randomSliceButton.setEnabled(true);
+                resetButton.setEnabled(true);
                 loadButton.setButtonText("Load Audio File (" + file.getFileNameWithoutExtension() + ")");
+                
+                // Initialize slice count
+                sliceCountChanged();
             }
             else
             {
@@ -350,6 +604,14 @@ void MainComponent::stopButtonClicked()
     audioProcessor.setPlaying(false);
     playButton.setEnabled(true);
     stopButton.setEnabled(false);
+    
+    // If we were in random slicing mode, stop it and reset the button
+    if (audioProcessor.isInContinuousRandomMode())
+    {
+        audioProcessor.exitSlicingMode();
+        randomSliceButton.setButtonText("Start Random Slicing");
+        randomSliceButton.setColour(juce::TextButton::buttonColourId, juce::Colours::orange);
+    }
 }
 
 void MainComponent::speedDialValueChanged()
@@ -369,5 +631,93 @@ void MainComponent::speedDialValueChanged()
     else
     {
         speedDial.setColour(juce::Slider::rotarySliderFillColourId, juce::Colours::blue);
+    }
+}
+
+void MainComponent::sliceCountChanged()
+{
+    const int numSlices = static_cast<int>(sliceCountSlider.getValue());
+    audioProcessor.setNumSlices(numSlices);
+    
+    // Update current slice display
+    updateSliceDisplay();
+}
+
+void MainComponent::randomSliceButtonClicked()
+{
+    if (!audioProcessor.hasAudioLoaded())
+        return;
+    
+    // Check if we're currently in continuous random mode
+    bool isCurrentlyInRandomMode = audioProcessor.isInContinuousRandomMode();
+    
+    if (!isCurrentlyInRandomMode)
+    {
+        // Start random slicing
+        audioProcessor.triggerRandomSlice();
+        randomSliceButton.setButtonText("Stop Random Slicing");
+        randomSliceButton.setColour(juce::TextButton::buttonColourId, juce::Colours::red);
+        
+        // Start playing if not already playing
+        if (!audioProcessor.getIsPlaying())
+        {
+            audioProcessor.setPlaying(true);
+            playButton.setEnabled(false);
+            stopButton.setEnabled(true);
+        }
+    }
+    else
+    {
+        // Stop random slicing, return to normal playback
+        audioProcessor.exitSlicingMode();
+        randomSliceButton.setButtonText("Start Random Slicing");
+        randomSliceButton.setColour(juce::TextButton::buttonColourId, juce::Colours::orange);
+    }
+}
+
+void MainComponent::resetButtonClicked()
+{
+    audioProcessor.resetToDefaults();
+    
+    // Update UI to reflect reset state
+    speedDial.setValue(1.0, juce::dontSendNotification);
+    speedDial.setColour(juce::Slider::rotarySliderFillColourId, juce::Colours::blue);
+    
+    playButton.setEnabled(true);
+    stopButton.setEnabled(false);
+    
+    // Reset random slice button
+    randomSliceButton.setButtonText("Start Random Slicing");
+    randomSliceButton.setColour(juce::TextButton::buttonColourId, juce::Colours::orange);
+    
+    updateSliceDisplay();
+}
+
+void MainComponent::updateSliceDisplay()
+{
+    if (audioProcessor.hasAudioLoaded())
+    {
+        int currentSlice = audioProcessor.getCurrentSlice();
+        int totalSlices = audioProcessor.getNumSlices();
+        
+        juce::String sliceText = "Current Slice: " + juce::String(currentSlice + 1) + 
+                                " / " + juce::String(totalSlices);
+        
+        if (audioProcessor.isInContinuousRandomMode())
+        {
+            sliceText += " (Random Mode)";
+            currentSliceLabel.setColour(juce::Label::textColourId, juce::Colours::orange);
+        }
+        else
+        {
+            currentSliceLabel.setColour(juce::Label::textColourId, juce::Colours::lightblue);
+        }
+        
+        currentSliceLabel.setText(sliceText, juce::dontSendNotification);
+    }
+    else
+    {
+        currentSliceLabel.setText("Current Slice: 0", juce::dontSendNotification);
+        currentSliceLabel.setColour(juce::Label::textColourId, juce::Colours::lightblue);
     }
 }

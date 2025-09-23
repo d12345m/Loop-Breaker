@@ -38,6 +38,18 @@ public:
     void setSpeed (double newSpeed) { targetSpeed.store(newSpeed); }
     void setLooping (bool shouldLoop) { isLooping.store(shouldLoop); }
     
+    // Buffer slicing functionality
+    void setNumSlices (int numSlices);
+    void triggerSlice (int sliceIndex);
+    void triggerRandomSlice();
+    void resetToBeginning();
+    void resetToDefaults();
+    int getCurrentSlice() const;
+    int getNumSlices() const { return numSlices; }
+    bool isInContinuousRandomMode() const { return continuousRandomMode.load(); }
+    void stopRandomSlicing();
+    void exitSlicingMode();
+    
     bool hasAudioLoaded() const { return audioFileBuffer.getNumSamples() > 0; }
     bool getIsPlaying() const { return isPlaying.load(); }
     
@@ -51,6 +63,14 @@ private:
     // State management
     std::atomic<bool> isPlaying { false };
     std::atomic<bool> isLooping { true };
+    
+    // Buffer slicing
+    int numSlices = 1;
+    std::atomic<int> targetSlice { 0 };
+    std::atomic<bool> sliceTriggered { false };
+    std::atomic<bool> isSlicingMode { false };
+    std::atomic<bool> continuousRandomMode { false };
+    juce::Random random;
     
     // DSP parameters
     double fileSampleRate = 44100.0;
@@ -70,6 +90,9 @@ private:
     
     void processWithTimeStretching (juce::AudioBuffer<float>& outputBuffer);
     void applyCrossfade (juce::AudioBuffer<float>& buffer, int startSample, int numSamples);
+    void handleSlicePlayback (double& currentPos);
+    double getSliceStartPosition (int sliceIndex) const;
+    double getSliceEndPosition (int sliceIndex) const;
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioBufferProcessor)
 };
@@ -79,7 +102,8 @@ private:
     Main component that provides the user interface for the audio buffer processor.
     Clean separation allows easy integration into larger projects.
 */
-class MainComponent : public juce::AudioAppComponent
+class MainComponent : public juce::AudioAppComponent,
+                      public juce::Timer
 {
 public:
     MainComponent();
@@ -93,6 +117,9 @@ public:
     // Component overrides
     void paint (juce::Graphics& g) override;
     void resized() override;
+    
+    // Timer override
+    void timerCallback() override;
 
 private:
     // Core processor
@@ -110,14 +137,25 @@ private:
     juce::Label speedLabel;
     juce::Label instructionLabel;
     
+    // Slicing UI Components
+    juce::Slider sliceCountSlider;
+    juce::Label sliceCountLabel;
+    juce::TextButton randomSliceButton;
+    juce::TextButton resetButton;
+    juce::Label currentSliceLabel;
+    
     // UI event handlers
     void loadButtonClicked();
     void playButtonClicked();
     void stopButtonClicked();
     void speedDialValueChanged();
+    void sliceCountChanged();
+    void randomSliceButtonClicked();
+    void resetButtonClicked();
     
     void updateUI();
     void createSpeedDial();
+    void updateSliceDisplay();
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

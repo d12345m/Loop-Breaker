@@ -1,9 +1,5 @@
 /*
-  ===================================================================    // Audio file data - loaded entirely into memory for reliable reverse playback
-    juce::AudioBuffer<float> audioFileBuffer;
-    double filePlayPosition = 0.0;
-    double fileSampleRate = 44100.0;
-    std::int64_t fileLengthSamples = 0;======
+  ==============================================================================
 
     This file was auto-generated!
 
@@ -67,13 +63,6 @@ private:
     std::unique_ptr<juce::AudioFormatReaderSource> readerSource;
     juce::AudioTransportSource transportSource;
     juce::ResamplingAudioSource resampleSource { &transportSource, false, 2 };
-    
-    // Circular buffer for reverse playback - industry standard approach
-    juce::AudioBuffer<float> circularBuffer;
-    int circularBufferSize = 65536; // Large circular buffer (power of 2)
-    int writePosition = 0;
-    double readPosition = 0.0;
-    bool bufferInitialized = false;
     
     // Audio file data - loaded entirely into memory for reliable reverse playback
     juce::AudioBuffer<float> audioFileBuffer;

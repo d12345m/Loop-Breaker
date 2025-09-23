@@ -32,7 +32,7 @@ MainComponent::MainComponent() : state (TransportState::Stopped)
     speedSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, true, 100, 20);
     speedSlider.setPopupDisplayEnabled (true, false, this);
     speedSlider.setTextValueSuffix (" x Speed");
-    speedSlider.setValue(0.0);
+    speedSlider.setValue(1.0);
     speedSlider.addListener (this);
 
 
@@ -55,13 +55,6 @@ void MainComponent::prepareToPlay (int samplesPerBlockExpected, double sampleRat
     currentSampleRate = sampleRate;
     transportSource.prepareToPlay (samplesPerBlockExpected, sampleRate);
     resampleSource.prepareToPlay (samplesPerBlockExpected, sampleRate);
-    
-    // Initialize circular buffer for smooth reverse playback
-    circularBuffer.setSize(2, circularBufferSize);
-    circularBuffer.clear();
-    writePosition = 0;
-    readPosition = 0.0;
-    bufferInitialized = false;
 }
 
 void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill)
@@ -218,8 +211,14 @@ void MainComponent::openButtonClicked()
                 transportSource.setSource (newSource.get(), 0, nullptr, reader->sampleRate);
                 readerSource.reset (newSource.release());
                 
+                // Ensure transport is stopped after loading
+                transportSource.stop();
+                
                 // Reset playback position
                 filePlayPosition = 0.0;
+                
+                // Ensure we're in stopped state
+                changeState (TransportState::Stopped);
                 
                 playButton.setEnabled (true);
             }
@@ -258,18 +257,23 @@ void MainComponent::sliderValueChanged (juce::Slider* slider)
     {
         double speed = speedSlider.getValue();
         
-        if (speed == 0.0)
+        // Only affect playback if the user has explicitly started playback
+        // Don't automatically start playback just from moving the slider
+        if (state == TransportState::Playing || state == TransportState::Starting)
         {
-            transportSource.stop();
+            if (speed == 0.0)
+            {
+                transportSource.stop();
+            }
+            else
+            {
+                if (!transportSource.isPlaying())
+                    transportSource.start();
+            }
         }
-        else
-        {
-            if (!transportSource.isPlaying())
-                transportSource.start();
-                
-            // Note: We handle all speed and direction changes in getNextAudioBlock
-            // No need to manipulate transport source for reverse playback
-        }
+        
+        // Note: We handle all speed and direction changes in getNextAudioBlock
+        // No need to manipulate transport source for reverse playback
     }
 }
 

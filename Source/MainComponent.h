@@ -74,6 +74,15 @@ private:
     std::atomic<bool> continuousRandomMode { false };
     juce::Random random;
     
+    // Crossfading for slice transitions
+    static constexpr int crossfadeLengthMs = 10; // 10ms crossfade
+    int crossfadeLengthSamples = 441; // Will be updated in prepareToPlay
+    bool isInCrossfade = false;
+    int crossfadePosition = 0;
+    double previousSlicePlayheadPos = 0.0;
+    int previousSliceIndex = -1;
+    juce::AudioBuffer<float> crossfadeBuffer;
+    
     // DSP parameters
     double fileSampleRate = 44100.0;
     double hostSampleRate = 44100.0;
@@ -88,6 +97,8 @@ private:
     
     void processWithRepitching (juce::AudioBuffer<float>& outputBuffer);
     void handleSlicePlayback (double& currentPos);
+    void applyCrossfadeToSliceTransition (juce::AudioBuffer<float>& outputBuffer, int startSample, int numSamples);
+    void startSliceCrossfade (int newSliceIndex, double newPlayheadPos);
     double getSliceStartPosition (int sliceIndex) const;
     double getSliceEndPosition (int sliceIndex) const;
     

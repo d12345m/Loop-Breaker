@@ -30,9 +30,13 @@ void AudioBufferProcessor::prepareToPlay(double sampleRate, int samplesPerBlockE
     hostSampleRate = sampleRate;
     speedSmoother.reset(sampleRate, 0.05); // 50ms smoothing time
     
+    // Calculate crossfade length in samples
+    crossfadeLengthSamples = static_cast<int>(crossfadeLengthMs * sampleRate / 1000.0);
+    
     // Prepare buffers for processing
     repitchBuffer.setSize(2, samplesPerBlockExpected * 4); // Extra headroom for repitching
     tempProcessingBuffer.setSize(2, samplesPerBlockExpected * 4);
+    crossfadeBuffer.setSize(2, crossfadeLengthSamples * 2); // Buffer for crossfading
 }
 
 void AudioBufferProcessor::processBlock(juce::AudioBuffer<float>& buffer)
@@ -125,6 +129,12 @@ void AudioBufferProcessor::processWithRepitching(juce::AudioBuffer<float>& outpu
             const float interpolatedSample = sample1 + static_cast<float>(fraction) * (sample2 - sample1);
             
             outputBuffer.setSample(channel, sample, interpolatedSample);
+        }
+        
+        // Apply crossfading for slice transitions (if active)
+        if (isInCrossfade)
+        {
+            applyCrossfadeToSliceTransition(outputBuffer, sample, 1);
         }
         
         // Advance playhead
@@ -247,6 +257,82 @@ void AudioBufferProcessor::exitSlicingMode()
     continuousRandomMode.store(false);
     sliceTriggered.store(false);
     currentActiveSlice.store(0);
+    
+    // Reset crossfade state
+    isInCrossfade = false;
+    crossfadePosition = 0;
+    previousSliceIndex = -1;
+}
+
+void AudioBufferProcessor::startSliceCrossfade(int newSliceIndex, double newPlayheadPos)
+{
+    // Store previous slice information for crossfading
+    previousSliceIndex = currentActiveSlice.load();
+    previousSlicePlayheadPos = playheadPosition.load();
+    
+    // Start the crossfade
+    isInCrossfade = true;
+    crossfadePosition = 0;
+    
+    // Update to new slice
+    currentActiveSlice.store(newSliceIndex);
+    playheadPosition.store(newPlayheadPos);
+}
+
+void AudioBufferProcessor::applyCrossfadeToSliceTransition(juce::AudioBuffer<float>& outputBuffer, int startSample, int numSamples)
+{
+    if (!isInCrossfade || previousSliceIndex == -1)
+        return;
+        
+    const int numChannels = juce::jmin(outputBuffer.getNumChannels(), audioFileBuffer.getNumChannels());
+    const int remainingCrossfadeSamples = crossfadeLengthSamples - crossfadePosition;
+    const int samplesToProcess = juce::jmin(numSamples, remainingCrossfadeSamples);
+    
+    if (samplesToProcess <= 0)
+    {
+        isInCrossfade = false;
+        return;
+    }
+    
+    // Process crossfade sample by sample
+    for (int sample = 0; sample < samplesToProcess; ++sample)
+    {
+        const double fadeProgress = static_cast<double>(crossfadePosition + sample) / static_cast<double>(crossfadeLengthSamples);
+        const float fadeOut = static_cast<float>(1.0 - fadeProgress); // Previous slice fades out
+        const float fadeIn = static_cast<float>(fadeProgress); // New slice fades in
+        
+        // Get sample from previous slice position
+        const double prevPos = previousSlicePlayheadPos + sample * targetSpeed.load();
+        const int prevSampleIndex = static_cast<int>(prevPos);
+        const double prevFraction = prevPos - prevSampleIndex;
+        
+        if (prevSampleIndex >= 0 && prevSampleIndex < fileLengthSamples - 1)
+        {
+            for (int channel = 0; channel < numChannels; ++channel)
+            {
+                // Linear interpolation for previous slice
+                const float* readPtr = audioFileBuffer.getReadPointer(channel);
+                const float prevSample1 = readPtr[prevSampleIndex];
+                const float prevSample2 = readPtr[prevSampleIndex + 1];
+                const float prevInterpolatedSample = prevSample1 + static_cast<float>(prevFraction) * (prevSample2 - prevSample1);
+                
+                // Blend previous slice (fading out) with current slice (fading in)
+                float* writePtr = outputBuffer.getWritePointer(channel);
+                const int outputIndex = startSample + sample;
+                writePtr[outputIndex] = writePtr[outputIndex] * fadeIn + prevInterpolatedSample * fadeOut;
+            }
+        }
+    }
+    
+    crossfadePosition += samplesToProcess;
+    
+    // End crossfade if we've processed all samples
+    if (crossfadePosition >= crossfadeLengthSamples)
+    {
+        isInCrossfade = false;
+        crossfadePosition = 0;
+        previousSliceIndex = -1;
+    }
 }
 
 void AudioBufferProcessor::handleSlicePlayback(double& currentPos)
@@ -260,18 +346,20 @@ void AudioBufferProcessor::handleSlicePlayback(double& currentPos)
         int slice = targetSlice.load();
         double speed = targetSpeed.load();
         
-        // Set position based on playback direction
+        // Calculate new position based on playback direction
+        double newPos;
         if (speed >= 0.0)
         {
-            currentPos = getSliceStartPosition(slice);
+            newPos = getSliceStartPosition(slice);
         }
         else
         {
-            currentPos = getSliceEndPosition(slice) - 1.0;
+            newPos = getSliceEndPosition(slice) - 1.0;
         }
         
-        currentActiveSlice.store(slice);
-        playheadPosition.store(currentPos);
+        // Start crossfade transition to new slice
+        startSliceCrossfade(slice, newPos);
+        currentPos = newPos;
         sliceTriggered.store(false);
         return;
     }
@@ -298,21 +386,23 @@ void AudioBufferProcessor::handleSlicePlayback(double& currentPos)
         
         if (shouldTriggerNext)
         {
-            // Trigger a new random slice
+            // Trigger a new random slice with crossfading
             int nextSlice = random.nextInt(numSlices);
-            currentActiveSlice.store(nextSlice);
             
-            // Set position to appropriate end of new slice based on direction
+            // Calculate new position based on playback direction
+            double newPos;
             if (speed > 0.0)
             {
-                currentPos = getSliceStartPosition(nextSlice);
+                newPos = getSliceStartPosition(nextSlice);
             }
             else
             {
-                currentPos = getSliceEndPosition(nextSlice) - 1.0;
+                newPos = getSliceEndPosition(nextSlice) - 1.0;
             }
             
-            playheadPosition.store(currentPos);
+            // Start crossfade transition to new random slice
+            startSliceCrossfade(nextSlice, newPos);
+            currentPos = newPos;
             return;
         }
     }
@@ -358,6 +448,12 @@ void AudioBufferProcessor::releaseResources()
     audioFileBuffer.setSize(0, 0);
     repitchBuffer.setSize(0, 0);
     tempProcessingBuffer.setSize(0, 0);
+    crossfadeBuffer.setSize(0, 0);
+    
+    // Reset crossfade state
+    isInCrossfade = false;
+    crossfadePosition = 0;
+    previousSliceIndex = -1;
 }
 
 //==============================================================================

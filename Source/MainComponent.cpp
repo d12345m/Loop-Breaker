@@ -4,7 +4,7 @@
     Professional Audio Buffer Implementation
     
     This implementation provides:
-    - High-quality time-stretching for speed changes
+    - High-quality repitching for speed changes (speed and pitch change together)
     - Seamless reverse playback
     - Professional DSP practices
     - Thread-safe operation
@@ -31,7 +31,7 @@ void AudioBufferProcessor::prepareToPlay(double sampleRate, int samplesPerBlockE
     speedSmoother.reset(sampleRate, 0.05); // 50ms smoothing time
     
     // Prepare buffers for processing
-    stretchBuffer.setSize(2, samplesPerBlockExpected * 4); // Extra headroom for stretching
+    repitchBuffer.setSize(2, samplesPerBlockExpected * 4); // Extra headroom for repitching
     tempProcessingBuffer.setSize(2, samplesPerBlockExpected * 4);
     crossfadeBuffer.setSize(2, crossfadeLength);
     fadeBuffer.setSize(2, sliceFadeLength);
@@ -48,11 +48,11 @@ void AudioBufferProcessor::processBlock(juce::AudioBuffer<float>& buffer)
     // Smooth speed changes to avoid artifacts
     speedSmoother.setTargetValue(targetSpeed.load());
     
-    // Process with time-stretching
-    processWithTimeStretching(buffer);
+    // Process with repitching (speed and pitch change together)
+    processWithRepitching(buffer);
 }
 
-void AudioBufferProcessor::processWithTimeStretching(juce::AudioBuffer<float>& outputBuffer)
+void AudioBufferProcessor::processWithRepitching(juce::AudioBuffer<float>& outputBuffer)
 {
     const int numOutputSamples = outputBuffer.getNumSamples();
     const int numChannels = juce::jmin(outputBuffer.getNumChannels(), audioFileBuffer.getNumChannels());
@@ -428,7 +428,7 @@ void AudioBufferProcessor::handleSlicePlayback(double& currentPos)
 void AudioBufferProcessor::releaseResources()
 {
     audioFileBuffer.setSize(0, 0);
-    stretchBuffer.setSize(0, 0);
+    repitchBuffer.setSize(0, 0);
     tempProcessingBuffer.setSize(0, 0);
     fadeBuffer.setSize(0, 0);
 }

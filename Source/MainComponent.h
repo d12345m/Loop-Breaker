@@ -1,10 +1,10 @@
 /*
   ==============================================================================
 
-    Professional Audio Buffer Component with Time-Stretching
+    Professional Audio Buffer Component with Repitching
     
     Features:
-    - Variable speed playback (-2x to +2x with time-stretching)
+    - Variable speed playback (-2x to +2x with repitching - speed and pitch change together)
     - Seamless looping with crossfade
     - Reverse playback capability
     - Professional DSP practices
@@ -80,8 +80,8 @@ private:
     double hostSampleRate = 44100.0;
     int fileLengthSamples = 0;
     
-    // Time-stretching buffer and processing
-    juce::AudioBuffer<float> stretchBuffer;
+    // Repitching buffer and processing
+    juce::AudioBuffer<float> repitchBuffer;
     juce::AudioBuffer<float> tempProcessingBuffer;
     
     // Smooth parameter changes
@@ -96,7 +96,7 @@ private:
     static constexpr int zeroCrossingSearchRadius = 64;
     juce::AudioBuffer<float> fadeBuffer;
     
-    void processWithTimeStretching (juce::AudioBuffer<float>& outputBuffer);
+    void processWithRepitching (juce::AudioBuffer<float>& outputBuffer);
     void applyCrossfade (juce::AudioBuffer<float>& buffer, int startSample, int numSamples);
     void handleSlicePlayback (double& currentPos);
     double getSliceStartPosition (int sliceIndex) const;

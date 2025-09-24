@@ -9,6 +9,10 @@
       <FILE id="cxAeBh" name="MainComponent.cpp" compile="1" resource="0"
             file="Source/MainComponent.cpp"/>
       <FILE id="intExa" name="BufferTestIntegration.h" compile="0" resource="0" file="Source/BufferTestIntegration.h"/>
+      <FILE id="audioBuffer1" name="AudioBuffer.h" compile="0" resource="0" file="Source/AudioBuffer.h"/>
+      <FILE id="audioBuffer2" name="AudioBuffer.cpp" compile="1" resource="0" file="Source/AudioBuffer.cpp"/>
+      <FILE id="audioBufferMgr1" name="AudioBufferManager.h" compile="0" resource="0" file="Source/AudioBufferManager.h"/>
+      <FILE id="audioBufferMgr2" name="AudioBufferManager.cpp" compile="1" resource="0" file="Source/AudioBufferManager.cpp"/>
     </GROUP>
   </MAINGROUP>
   <MODULES>

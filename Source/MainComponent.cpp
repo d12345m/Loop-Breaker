@@ -1,14 +1,10 @@
 /*
   ==============================================================================
 
-    Professional Audio Buffer Implementation
+    MainComponent.cpp - Test UI for Refactored Audio Buffer Components
     
-    This implementation provides:
-    - High-quality repitching for speed changes (speed and pitch change together)
-    - Seamless reverse playback
-    - Professional DSP practices
-    - Thread-safe operation
-    - Clean architecture for integration
+    This implementation provides a test interface for the new AudioBuffer
+    and AudioBufferManager classes, maintaining the same UI for verification.
 
   ==============================================================================
 */
@@ -16,449 +12,18 @@
 #include "MainComponent.h"
 
 //==============================================================================
-// AudioBufferProcessor Implementation
-//==============================================================================
-
-AudioBufferProcessor::AudioBufferProcessor()
-{
-    speedSmoother.reset(128); // Smooth parameter changes over ~3ms at 44.1kHz
-    speedSmoother.setCurrentAndTargetValue(1.0);
-}
-
-void AudioBufferProcessor::prepareToPlay(double sampleRate, int samplesPerBlockExpected)
-{
-    hostSampleRate = sampleRate;
-    speedSmoother.reset(sampleRate, 0.05); // 50ms smoothing time
-    
-    // Calculate crossfade length in samples for better click elimination
-    crossfadeLengthSamples = static_cast<int>(crossfadeLengthMs * sampleRate / 1000.0);
-    
-    // Prepare buffers for processing
-    repitchBuffer.setSize(2, samplesPerBlockExpected * 4); // Extra headroom for repitching
-    tempProcessingBuffer.setSize(2, samplesPerBlockExpected * 4);
-    crossfadeBuffer.setSize(2, crossfadeLengthSamples * 2); // Buffer for crossfading
-}
-
-void AudioBufferProcessor::processBlock(juce::AudioBuffer<float>& buffer)
-{
-    if (!hasAudioLoaded() || !isPlaying.load())
-    {
-        buffer.clear();
-        return;
-    }
-    
-    // Smooth speed changes to avoid artifacts
-    speedSmoother.setTargetValue(targetSpeed.load());
-    
-    // Process with repitching (speed and pitch change together)
-    processWithRepitching(buffer);
-}
-
-void AudioBufferProcessor::processWithRepitching(juce::AudioBuffer<float>& outputBuffer)
-{
-    const int numOutputSamples = outputBuffer.getNumSamples();
-    const int numChannels = juce::jmin(outputBuffer.getNumChannels(), audioFileBuffer.getNumChannels());
-    
-    outputBuffer.clear();
-    
-    for (int sample = 0; sample < numOutputSamples; ++sample)
-    {
-        const double speed = speedSmoother.getNextValue();
-        double currentPos = playheadPosition.load();
-        
-        // Handle slice-based playback first
-        handleSlicePlayback(currentPos);
-        currentPos = playheadPosition.load(); // Get updated position after slice handling
-        
-        // Only handle normal boundary conditions if not in slicing mode
-        if (!isSlicingMode.load())
-        {
-            // Handle looping and boundaries for normal playback
-            if (speed > 0.0) // Forward playback
-            {
-                if (currentPos >= fileLengthSamples - 1)
-                {
-                    if (isLooping.load())
-                    {
-                        currentPos = 0.0;
-                    }
-                    else
-                    {
-                        isPlaying.store(false);
-                        break;
-                    }
-                }
-            }
-            else if (speed < 0.0) // Reverse playback
-            {
-                if (currentPos <= 0.0)
-                {
-                    if (isLooping.load())
-                    {
-                        currentPos = static_cast<double>(fileLengthSamples - 1);
-                    }
-                    else
-                    {
-                        isPlaying.store(false);
-                        break;
-                    }
-                }
-            }
-            else // Speed == 0, paused
-            {
-                break;
-            }
-        }
-        else if (speed == 0.0) // Paused in slicing mode
-        {
-            break;
-        }
-        
-        // Ensure position is within bounds
-        currentPos = juce::jlimit(0.0, static_cast<double>(fileLengthSamples - 1), currentPos);
-        
-        // High-quality interpolation
-        const int pos1 = static_cast<int>(currentPos);
-        const int pos2 = juce::jmin(pos1 + 1, fileLengthSamples - 1);
-        const double fraction = currentPos - pos1;
-        
-        for (int channel = 0; channel < numChannels; ++channel)
-        {
-            const float sample1 = audioFileBuffer.getSample(channel, pos1);
-            const float sample2 = audioFileBuffer.getSample(channel, pos2);
-            const float interpolatedSample = sample1 + static_cast<float>(fraction) * (sample2 - sample1);
-            
-            outputBuffer.setSample(channel, sample, interpolatedSample);
-        }
-        
-        // Apply crossfading for slice transitions (if active) to eliminate clicks
-        if (isInCrossfade)
-        {
-            applyCrossfadeToSliceTransition(outputBuffer, sample, 1);
-        }
-        
-        // Advance playhead
-        currentPos += speed * (fileSampleRate / hostSampleRate);
-        playheadPosition.store(currentPos);
-    }
-}
-
-bool AudioBufferProcessor::loadAudioFile(const juce::File& file, juce::AudioFormatManager& formatManager)
-{
-    std::unique_ptr<juce::AudioFormatReader> reader(formatManager.createReaderFor(file));
-    
-    if (reader == nullptr)
-        return false;
-    
-    fileSampleRate = reader->sampleRate;
-    fileLengthSamples = static_cast<int>(reader->lengthInSamples);
-    const int numChannels = static_cast<int>(reader->numChannels);
-    
-    // Load entire file into memory for reliable playback
-    audioFileBuffer.setSize(numChannels, fileLengthSamples);
-    reader->read(&audioFileBuffer, 0, fileLengthSamples, 0, true, true);
-    
-    // Reset playback position
-    playheadPosition.store(0.0);
-    
-    return true;
-}
-
-void AudioBufferProcessor::setNumSlices(int numSlices)
-{
-    this->numSlices = juce::jmax(1, numSlices);
-}
-
-void AudioBufferProcessor::triggerSlice(int sliceIndex)
-{
-    if (sliceIndex >= 0 && sliceIndex < numSlices)
-    {
-        targetSlice.store(sliceIndex);
-        currentActiveSlice.store(sliceIndex);
-        sliceTriggered.store(true);
-        isSlicingMode.store(true);
-    }
-}
-
-void AudioBufferProcessor::triggerRandomSlice()
-{
-    if (numSlices > 1)
-    {
-        int randomSlice = random.nextInt(numSlices);
-        triggerSlice(randomSlice);
-        continuousRandomMode.store(true);
-    }
-}
-
-void AudioBufferProcessor::resetToBeginning()
-{
-    playheadPosition.store(0.0);
-    currentActiveSlice.store(0);
-    isSlicingMode.store(false);
-    sliceTriggered.store(false);
-    continuousRandomMode.store(false);
-}
-
-void AudioBufferProcessor::resetToDefaults()
-{
-    resetToBeginning();
-    setSpeed(1.0);
-    setLooping(true);
-    setPlaying(false);
-}
-
-int AudioBufferProcessor::getCurrentSlice() const
-{
-    if (numSlices <= 1 || fileLengthSamples <= 0)
-        return 0;
-    
-    // If we're in slicing mode, return the active slice rather than calculating from position
-    if (isSlicingMode.load())
-    {
-        return currentActiveSlice.load();
-    }
-    
-    // Otherwise, calculate from playhead position for display purposes
-    double currentPos = playheadPosition.load();
-    double sliceSize = static_cast<double>(fileLengthSamples) / numSlices;
-    return juce::jlimit(0, numSlices - 1, static_cast<int>(currentPos / sliceSize));
-}
-
-double AudioBufferProcessor::getSliceStartPosition(int sliceIndex) const
-{
-    if (sliceIndex < 0 || sliceIndex >= numSlices || fileLengthSamples <= 0)
-        return 0.0;
-    
-    double sliceSize = static_cast<double>(fileLengthSamples) / numSlices;
-    int targetSample = static_cast<int>(sliceIndex * sliceSize);
-    
-    return static_cast<double>(targetSample);
-}
-
-double AudioBufferProcessor::getSliceEndPosition(int sliceIndex) const
-{
-    if (sliceIndex < 0 || sliceIndex >= numSlices || fileLengthSamples <= 0)
-        return 0.0;
-    
-    double sliceSize = static_cast<double>(fileLengthSamples) / numSlices;
-    int targetSample = static_cast<int>((sliceIndex + 1) * sliceSize);
-    
-    return static_cast<double>(targetSample);
-}
-
-void AudioBufferProcessor::stopRandomSlicing()
-{
-    continuousRandomMode.store(false);
-}
-
-void AudioBufferProcessor::exitSlicingMode()
-{
-    isSlicingMode.store(false);
-    continuousRandomMode.store(false);
-    sliceTriggered.store(false);
-    currentActiveSlice.store(0);
-    
-    // Reset crossfade state
-    isInCrossfade = false;
-    crossfadePosition = 0;
-    previousSliceIndex = -1;
-}
-
-void AudioBufferProcessor::startSliceCrossfade(int newSliceIndex, double newPlayheadPos)
-{
-    // Store previous slice information for crossfading
-    previousSliceIndex = currentActiveSlice.load();
-    previousSlicePlayheadPos = playheadPosition.load();
-    
-    // Start the crossfade
-    isInCrossfade = true;
-    crossfadePosition = 0;
-    
-    // Update to new slice
-    currentActiveSlice.store(newSliceIndex);
-    playheadPosition.store(newPlayheadPos);
-}
-
-void AudioBufferProcessor::applyCrossfadeToSliceTransition(juce::AudioBuffer<float>& outputBuffer, int startSample, int numSamples)
-{
-    if (!isInCrossfade || previousSliceIndex == -1)
-        return;
-        
-    const int numChannels = juce::jmin(outputBuffer.getNumChannels(), audioFileBuffer.getNumChannels());
-    const int remainingCrossfadeSamples = crossfadeLengthSamples - crossfadePosition;
-    const int samplesToProcess = juce::jmin(numSamples, remainingCrossfadeSamples);
-    
-    if (samplesToProcess <= 0)
-    {
-        isInCrossfade = false;
-        return;
-    }
-    
-    // Process crossfade sample by sample with improved click elimination
-    for (int sample = 0; sample < samplesToProcess; ++sample)
-    {
-        const double fadeProgress = static_cast<double>(crossfadePosition + sample) / static_cast<double>(crossfadeLengthSamples);
-        
-        // Use equal-power crossfade curve for better click elimination
-        const float fadeOut = static_cast<float>(std::cos(fadeProgress * juce::MathConstants<double>::halfPi)); // Previous slice fades out
-        const float fadeIn = static_cast<float>(std::sin(fadeProgress * juce::MathConstants<double>::halfPi)); // New slice fades in
-        
-        // Get sample from previous slice position with proper speed compensation
-        const double prevPos = previousSlicePlayheadPos + sample * targetSpeed.load() * (fileSampleRate / hostSampleRate);
-        const int prevSampleIndex = static_cast<int>(prevPos);
-        const double prevFraction = prevPos - prevSampleIndex;
-        
-        if (prevSampleIndex >= 0 && prevSampleIndex < fileLengthSamples - 1)
-        {
-            for (int channel = 0; channel < numChannels; ++channel)
-            {
-                // Linear interpolation for previous slice
-                const float* readPtr = audioFileBuffer.getReadPointer(channel);
-                const float prevSample1 = readPtr[prevSampleIndex];
-                const float prevSample2 = readPtr[prevSampleIndex + 1];
-                const float prevInterpolatedSample = prevSample1 + static_cast<float>(prevFraction) * (prevSample2 - prevSample1);
-                
-                // Apply equal-power crossfade for smooth transition and better click elimination
-                float* writePtr = outputBuffer.getWritePointer(channel);
-                const int outputIndex = startSample + sample;
-                writePtr[outputIndex] = writePtr[outputIndex] * fadeIn + prevInterpolatedSample * fadeOut;
-            }
-        }
-    }
-    
-    crossfadePosition += samplesToProcess;
-    
-    // End crossfade if we've processed all samples
-    if (crossfadePosition >= crossfadeLengthSamples)
-    {
-        isInCrossfade = false;
-        crossfadePosition = 0;
-        previousSliceIndex = -1;
-    }
-}
-
-void AudioBufferProcessor::handleSlicePlayback(double& currentPos)
-{
-    if (!isSlicingMode.load())
-        return;
-    
-    // Check if we need to jump to a new slice
-    if (sliceTriggered.load())
-    {
-        int slice = targetSlice.load();
-        double speed = targetSpeed.load();
-        
-        // Calculate new position based on playback direction
-        double newPos;
-        if (speed >= 0.0)
-        {
-            newPos = getSliceStartPosition(slice);
-        }
-        else
-        {
-            newPos = getSliceEndPosition(slice) - 1.0;
-        }
-        
-        // Start crossfade transition to new slice
-        startSliceCrossfade(slice, newPos);
-        currentPos = newPos;
-        sliceTriggered.store(false);
-        return;
-    }
-    
-    // Handle continuous random mode
-    if (continuousRandomMode.load())
-    {
-        int activeSlice = currentActiveSlice.load();
-        double sliceStart = getSliceStartPosition(activeSlice);
-        double sliceEnd = getSliceEndPosition(activeSlice);
-        
-        // Check if we've reached the end/beginning of the current slice based on playback direction
-        bool shouldTriggerNext = false;
-        double speed = targetSpeed.load();
-        
-        if (speed > 0.0) // Forward playback
-        {
-            shouldTriggerNext = (currentPos >= sliceEnd - 1.0);
-        }
-        else if (speed < 0.0) // Reverse playback
-        {
-            shouldTriggerNext = (currentPos <= sliceStart);
-        }
-        
-        if (shouldTriggerNext)
-        {
-            // Trigger a new random slice with crossfading
-            int nextSlice = random.nextInt(numSlices);
-            
-            // Calculate new position based on playback direction
-            double newPos;
-            if (speed > 0.0)
-            {
-                newPos = getSliceStartPosition(nextSlice);
-            }
-            else
-            {
-                newPos = getSliceEndPosition(nextSlice) - 1.0;
-            }
-            
-            // Start crossfade transition to new random slice
-            startSliceCrossfade(nextSlice, newPos);
-            currentPos = newPos;
-            return;
-        }
-    }
-    else
-    {
-        // Non-continuous slice mode - check if we've reached the end of the current slice
-        int activeSlice = currentActiveSlice.load();
-        double sliceStart = getSliceStartPosition(activeSlice);
-        double sliceEnd = getSliceEndPosition(activeSlice);
-        double speed = targetSpeed.load();
-        
-        if (speed > 0.0 && currentPos >= sliceEnd - 1.0)
-        {
-            if (isLooping.load())
-            {
-                // Loop back to the start of the current slice
-                currentPos = sliceStart;
-                playheadPosition.store(currentPos);
-            }
-            else
-            {
-                isPlaying.store(false);
-            }
-        }
-        else if (speed < 0.0 && currentPos <= sliceStart)
-        {
-            if (isLooping.load())
-            {
-                // Loop back to the end of the current slice
-                currentPos = sliceEnd - 1.0;
-                playheadPosition.store(currentPos);
-            }
-            else
-            {
-                isPlaying.store(false);
-            }
-        }
-    }
-}
-
-void AudioBufferProcessor::releaseResources()
-{
-    audioFileBuffer.setSize(0, 0);
-    repitchBuffer.setSize(0, 0);
-    tempProcessingBuffer.setSize(0, 0);
-    crossfadeBuffer.setSize(0, 0);
-}
-
-//==============================================================================
 // MainComponent Implementation
 //==============================================================================
 
 MainComponent::MainComponent()
+    : testBuffer(nullptr)
 {
+    // Get reference to the first buffer for testing
+    testBuffer = bufferManager.getBuffer(0);
+    
+    // Add ourselves as a listener to receive notifications
+    bufferManager.addListener(this);
+    
     // Configure format manager
     formatManager.registerBasicFormats();
     
@@ -532,7 +97,8 @@ MainComponent::MainComponent()
     setAudioChannels(0, 2);
     
     // Set initial speed to match the dial
-    audioProcessor.setSpeed(1.0);
+    if (testBuffer)
+        testBuffer->setSpeed(1.0);
     
     // Start timer for UI updates
     startTimer(100); // Update every 100ms
@@ -541,6 +107,7 @@ MainComponent::MainComponent()
 MainComponent::~MainComponent()
 {
     stopTimer();
+    bufferManager.removeListener(this);
     shutdownAudio();
 }
 
@@ -567,17 +134,54 @@ void MainComponent::createSpeedDial()
 
 void MainComponent::prepareToPlay(int samplesPerBlockExpected, double sampleRate)
 {
-    audioProcessor.prepareToPlay(sampleRate, samplesPerBlockExpected);
+    bufferManager.prepare(sampleRate, samplesPerBlockExpected);
 }
 
 void MainComponent::getNextAudioBlock(const juce::AudioSourceChannelInfo& bufferToFill)
 {
-    audioProcessor.processBlock(*bufferToFill.buffer);
+    bufferManager.processBlock(*bufferToFill.buffer);
 }
 
 void MainComponent::releaseResources()
 {
-    audioProcessor.releaseResources();
+    bufferManager.releaseResources();
+}
+
+//==============================================================================
+// AudioBufferListener Implementation
+//==============================================================================
+
+void MainComponent::audioBufferPlaybackStarted(int bufferIndex)
+{
+    if (bufferIndex == 0) // Only respond to our test buffer
+    {
+        playButton.setEnabled(false);
+        stopButton.setEnabled(true);
+    }
+}
+
+void MainComponent::audioBufferPlaybackStopped(int bufferIndex)
+{
+    if (bufferIndex == 0) // Only respond to our test buffer
+    {
+        playButton.setEnabled(true);
+        stopButton.setEnabled(false);
+        
+        // If we were in random slicing mode, reset the button
+        if (testBuffer && testBuffer->isInContinuousRandomMode())
+        {
+            testBuffer->exitSlicingMode();
+            randomSliceButton.setButtonText("Start Random Slicing");
+            randomSliceButton.setColour(juce::TextButton::buttonColourId, juce::Colours::orange);
+        }
+    }
+}
+
+void MainComponent::audioBufferSliceChanged(int bufferIndex, int newSliceIndex)
+{
+    // Update slice display when slice changes
+    if (bufferIndex == 0)
+        updateSliceDisplay();
 }
 
 //==============================================================================
@@ -667,7 +271,7 @@ void MainComponent::loadButtonClicked()
         auto file = fc.getResult();
         if (file != juce::File{})
         {
-            if (audioProcessor.loadAudioFile(file, formatManager))
+            if (bufferManager.loadAudioFile(0, file, formatManager))
             {
                 playButton.setEnabled(true);
                 randomSliceButton.setEnabled(true);
@@ -690,25 +294,28 @@ void MainComponent::loadButtonClicked()
 
 void MainComponent::playButtonClicked()
 {
-    if (!audioProcessor.hasAudioLoaded())
+    if (!testBuffer || !testBuffer->hasAudioLoaded())
         return;
     
-    audioProcessor.setPlaying(true);
-    audioProcessor.setLooping(true);
+    testBuffer->setPlaying(true);
+    testBuffer->setLooping(true);
     playButton.setEnabled(false);
     stopButton.setEnabled(true);
 }
 
 void MainComponent::stopButtonClicked()
 {
-    audioProcessor.setPlaying(false);
+    if (!testBuffer)
+        return;
+        
+    testBuffer->setPlaying(false);
     playButton.setEnabled(true);
     stopButton.setEnabled(false);
     
     // If we were in random slicing mode, stop it and reset the button
-    if (audioProcessor.isInContinuousRandomMode())
+    if (testBuffer->isInContinuousRandomMode())
     {
-        audioProcessor.exitSlicingMode();
+        testBuffer->exitSlicingMode();
         randomSliceButton.setButtonText("Start Random Slicing");
         randomSliceButton.setColour(juce::TextButton::buttonColourId, juce::Colours::orange);
     }
@@ -716,8 +323,11 @@ void MainComponent::stopButtonClicked()
 
 void MainComponent::speedDialValueChanged()
 {
+    if (!testBuffer)
+        return;
+        
     const double speed = speedDial.getValue();
-    audioProcessor.setSpeed(speed);
+    testBuffer->setSpeed(speed);
     
     // Update UI feedback
     if (std::abs(speed) < 0.01)
@@ -736,8 +346,11 @@ void MainComponent::speedDialValueChanged()
 
 void MainComponent::sliceCountChanged()
 {
+    if (!testBuffer)
+        return;
+        
     const int numSlices = static_cast<int>(sliceCountSlider.getValue());
-    audioProcessor.setNumSlices(numSlices);
+    testBuffer->setNumSlices(numSlices);
     
     // Update current slice display
     updateSliceDisplay();
@@ -745,23 +358,23 @@ void MainComponent::sliceCountChanged()
 
 void MainComponent::randomSliceButtonClicked()
 {
-    if (!audioProcessor.hasAudioLoaded())
+    if (!testBuffer || !testBuffer->hasAudioLoaded())
         return;
     
     // Check if we're currently in continuous random mode
-    bool isCurrentlyInRandomMode = audioProcessor.isInContinuousRandomMode();
+    bool isCurrentlyInRandomMode = testBuffer->isInContinuousRandomMode();
     
     if (!isCurrentlyInRandomMode)
     {
         // Start random slicing
-        audioProcessor.triggerRandomSlice();
+        testBuffer->startContinuousRandomSlicing();
         randomSliceButton.setButtonText("Stop Random Slicing");
         randomSliceButton.setColour(juce::TextButton::buttonColourId, juce::Colours::red);
         
         // Start playing if not already playing
-        if (!audioProcessor.getIsPlaying())
+        if (!testBuffer->isPlaying())
         {
-            audioProcessor.setPlaying(true);
+            testBuffer->setPlaying(true);
             playButton.setEnabled(false);
             stopButton.setEnabled(true);
         }
@@ -769,7 +382,7 @@ void MainComponent::randomSliceButtonClicked()
     else
     {
         // Stop random slicing, return to normal playback
-        audioProcessor.exitSlicingMode();
+        testBuffer->exitSlicingMode();
         randomSliceButton.setButtonText("Start Random Slicing");
         randomSliceButton.setColour(juce::TextButton::buttonColourId, juce::Colours::orange);
     }
@@ -777,7 +390,10 @@ void MainComponent::randomSliceButtonClicked()
 
 void MainComponent::resetButtonClicked()
 {
-    audioProcessor.resetToDefaults();
+    if (!testBuffer)
+        return;
+        
+    testBuffer->resetToDefaults();
     
     // Update UI to reflect reset state
     speedDial.setValue(1.0, juce::dontSendNotification);
@@ -795,15 +411,22 @@ void MainComponent::resetButtonClicked()
 
 void MainComponent::updateSliceDisplay()
 {
-    if (audioProcessor.hasAudioLoaded())
+    if (!testBuffer)
     {
-        int currentSlice = audioProcessor.getCurrentSlice();
-        int totalSlices = audioProcessor.getNumSlices();
+        currentSliceLabel.setText("Current Slice: 0", juce::dontSendNotification);
+        currentSliceLabel.setColour(juce::Label::textColourId, juce::Colours::lightblue);
+        return;
+    }
+    
+    if (testBuffer->hasAudioLoaded())
+    {
+        int currentSlice = testBuffer->getCurrentSlice();
+        int totalSlices = testBuffer->getNumSlices();
         
         juce::String sliceText = "Current Slice: " + juce::String(currentSlice + 1) + 
                                 " / " + juce::String(totalSlices);
         
-        if (audioProcessor.isInContinuousRandomMode())
+        if (testBuffer->isInContinuousRandomMode())
         {
             sliceText += " (Random Mode)";
             currentSliceLabel.setColour(juce::Label::textColourId, juce::Colours::orange);

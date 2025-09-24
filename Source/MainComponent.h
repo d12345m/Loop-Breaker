@@ -1,14 +1,11 @@
 /*
   ==============================================================================
 
-    Professional Audio Buffer Component with Repitching
+    MainComponent.h - Test UI for AudioBuffer Component
     
-    Features:
-    - Variable speed playback (-2x to +2x with repitching - speed and pitch change together)
-    - Seamless looping with crossfade
-    - Reverse playback capability
-    - Professional DSP practices
-    - Ready for integration into larger projects
+    This component provides a test interface for the refactored AudioBuffer
+    and AudioBufferManager classes. It maintains the same UI as before to
+    verify that the refactored buffer code still works correctly.
 
   ==============================================================================
 */
@@ -16,102 +13,16 @@
 #pragma once
 
 #include <JuceHeader.h>
-
+#include "AudioBuffer.h"
+#include "AudioBufferManager.h"
 //==============================================================================
 /**
-    A professional audio buffer processor that handles variable speed playback
-    with proper time-stretching, reverse playback, and seamless looping.
-*/
-class AudioBufferProcessor
-{
-public:
-    AudioBufferProcessor();
-    ~AudioBufferProcessor() = default;
-    
-    void prepareToPlay (double sampleRate, int samplesPerBlockExpected);
-    void processBlock (juce::AudioBuffer<float>& buffer);
-    void releaseResources();
-    
-    bool loadAudioFile (const juce::File& file, juce::AudioFormatManager& formatManager);
-    
-    void setPlaying (bool shouldPlay) { isPlaying.store(shouldPlay); }
-    void setSpeed (double newSpeed) { targetSpeed.store(newSpeed); }
-    void setLooping (bool shouldLoop) { isLooping.store(shouldLoop); }
-    
-    // Buffer slicing functionality
-    void setNumSlices (int numSlices);
-    void triggerSlice (int sliceIndex);
-    void triggerRandomSlice();
-    void resetToBeginning();
-    void resetToDefaults();
-    int getCurrentSlice() const;
-    int getNumSlices() const { return numSlices; }
-    bool isInContinuousRandomMode() const { return continuousRandomMode.load(); }
-    void stopRandomSlicing();
-    void exitSlicingMode();
-
-    
-    bool hasAudioLoaded() const { return audioFileBuffer.getNumSamples() > 0; }
-    bool getIsPlaying() const { return isPlaying.load(); }
-    
-private:
-    // Core audio data
-    juce::AudioBuffer<float> audioFileBuffer;
-    std::atomic<double> playheadPosition { 0.0 };
-    std::atomic<double> currentSpeed { 1.0 };
-    std::atomic<double> targetSpeed { 1.0 };
-    
-    // State management
-    std::atomic<bool> isPlaying { false };
-    std::atomic<bool> isLooping { true };
-    
-    // Buffer slicing
-    int numSlices = 1;
-    std::atomic<int> targetSlice { 0 };
-    std::atomic<int> currentActiveSlice { 0 };
-    std::atomic<bool> sliceTriggered { false };
-    std::atomic<bool> isSlicingMode { false };
-    std::atomic<bool> continuousRandomMode { false };
-    juce::Random random;
-    
-    // Crossfading for slice transitions to eliminate clicks
-    static constexpr int crossfadeLengthMs = 20; // 20ms crossfade for better click elimination
-    int crossfadeLengthSamples = 882; // Will be updated in prepareToPlay
-    bool isInCrossfade = false;
-    int crossfadePosition = 0;
-    double previousSlicePlayheadPos = 0.0;
-    int previousSliceIndex = -1;
-    juce::AudioBuffer<float> crossfadeBuffer;
-    
-    // DSP parameters
-    double fileSampleRate = 44100.0;
-    double hostSampleRate = 44100.0;
-    int fileLengthSamples = 0;
-    
-    // Repitching buffer and processing
-    juce::AudioBuffer<float> repitchBuffer;
-    juce::AudioBuffer<float> tempProcessingBuffer;
-    
-    // Smooth parameter changes
-    juce::SmoothedValue<double> speedSmoother;
-    
-    void processWithRepitching (juce::AudioBuffer<float>& outputBuffer);
-    void handleSlicePlayback (double& currentPos);
-    void applyCrossfadeToSliceTransition (juce::AudioBuffer<float>& outputBuffer, int startSample, int numSamples);
-    void startSliceCrossfade (int newSliceIndex, double newPlayheadPos);
-    double getSliceStartPosition (int sliceIndex) const;
-    double getSliceEndPosition (int sliceIndex) const;
-    
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioBufferProcessor)
-};
-
-//==============================================================================
-/**
-    Main component that provides the user interface for the audio buffer processor.
-    Clean separation allows easy integration into larger projects.
+    Test UI component for the refactored AudioBuffer classes.
+    Maintains the same interface as before to verify functionality.
 */
 class MainComponent : public juce::AudioAppComponent,
-                      public juce::Timer
+                      public juce::Timer,
+                      public AudioBufferListener
 {
 public:
     MainComponent();
@@ -128,10 +39,16 @@ public:
     
     // Timer override
     void timerCallback() override;
+    
+    // AudioBufferListener overrides
+    void audioBufferPlaybackStarted(int bufferIndex) override;
+    void audioBufferPlaybackStopped(int bufferIndex) override;
+    void audioBufferSliceChanged(int bufferIndex, int newSliceIndex) override;
 
 private:
-    // Core processor
-    AudioBufferProcessor audioProcessor;
+    // Core components - using the new refactored classes
+    AudioBufferManager bufferManager;
+    AudioBuffer* testBuffer; // Pointer to buffer 0 for testing
     
     // Audio format management
     juce::AudioFormatManager formatManager;

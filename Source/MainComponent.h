@@ -49,7 +49,7 @@ public:
     bool isInContinuousRandomMode() const { return continuousRandomMode.load(); }
     void stopRandomSlicing();
     void exitSlicingMode();
-    void setClickRemovalEnabled(bool enabled) { clickRemovalEnabled.store(enabled); }
+
     
     bool hasAudioLoaded() const { return audioFileBuffer.getNumSamples() > 0; }
     bool getIsPlaying() const { return isPlaying.load(); }
@@ -72,7 +72,6 @@ private:
     std::atomic<bool> sliceTriggered { false };
     std::atomic<bool> isSlicingMode { false };
     std::atomic<bool> continuousRandomMode { false };
-    std::atomic<bool> clickRemovalEnabled { true };
     juce::Random random;
     
     // DSP parameters
@@ -87,25 +86,10 @@ private:
     // Smooth parameter changes
     juce::SmoothedValue<double> speedSmoother;
     
-    // Crossfade for seamless looping
-    static constexpr int crossfadeLength = 1024;
-    juce::AudioBuffer<float> crossfadeBuffer;
-    
-    // Click removal parameters
-    static constexpr int sliceFadeLength = 128; // ~3ms at 44.1kHz
-    static constexpr int zeroCrossingSearchRadius = 64;
-    juce::AudioBuffer<float> fadeBuffer;
-    
     void processWithRepitching (juce::AudioBuffer<float>& outputBuffer);
-    void applyCrossfade (juce::AudioBuffer<float>& buffer, int startSample, int numSamples);
     void handleSlicePlayback (double& currentPos);
     double getSliceStartPosition (int sliceIndex) const;
     double getSliceEndPosition (int sliceIndex) const;
-    
-    // Click removal and crossfade methods
-    void applySliceTransitionFade (juce::AudioBuffer<float>& buffer, double currentPos, bool isSliceStart);
-    int findNearestZeroCrossing (int targetSample, int searchRadius = 64) const;
-    void applyAntiClickFade (juce::AudioBuffer<float>& buffer, int startSample, int length, bool fadeIn);
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioBufferProcessor)
 };
@@ -156,7 +140,6 @@ private:
     juce::TextButton randomSliceButton;
     juce::TextButton resetButton;
     juce::Label currentSliceLabel;
-    juce::ToggleButton clickRemovalToggle;
     
     // UI event handlers
     void loadButtonClicked();
@@ -166,7 +149,6 @@ private:
     void sliceCountChanged();
     void randomSliceButtonClicked();
     void resetButtonClicked();
-    void clickRemovalToggled();
     
     void updateUI();
     void createSpeedDial();

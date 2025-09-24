@@ -33,8 +33,6 @@ void AudioBufferProcessor::prepareToPlay(double sampleRate, int samplesPerBlockE
     // Prepare buffers for processing
     repitchBuffer.setSize(2, samplesPerBlockExpected * 4); // Extra headroom for repitching
     tempProcessingBuffer.setSize(2, samplesPerBlockExpected * 4);
-    crossfadeBuffer.setSize(2, crossfadeLength);
-    fadeBuffer.setSize(2, sliceFadeLength);
 }
 
 void AudioBufferProcessor::processBlock(juce::AudioBuffer<float>& buffer)
@@ -58,29 +56,6 @@ void AudioBufferProcessor::processWithRepitching(juce::AudioBuffer<float>& outpu
     const int numChannels = juce::jmin(outputBuffer.getNumChannels(), audioFileBuffer.getNumChannels());
     
     outputBuffer.clear();
-    bool sliceTransitionDetected = false;
-    
-    // Check if we're starting a new slice at the beginning of this buffer
-    static std::atomic<int> lastActiveSlice{-1};
-    static std::atomic<bool> lastSliceTriggered{false};
-    
-    int currentActiveSlice = this->currentActiveSlice.load();
-    bool currentSliceTriggered = sliceTriggered.load();
-    
-    // Detect slice changes for click removal
-    if (isSlicingMode.load() && clickRemovalEnabled.load())
-    {
-        // Check if slice has changed or was just triggered
-        if (currentSliceTriggered || 
-            (currentActiveSlice != lastActiveSlice.load() && currentActiveSlice >= 0))
-        {
-            sliceTransitionDetected = true;
-        }
-    }
-    
-    // Update tracking variables
-    lastActiveSlice.store(currentActiveSlice);
-    lastSliceTriggered.store(currentSliceTriggered);
     
     for (int sample = 0; sample < numOutputSamples; ++sample)
     {
@@ -102,7 +77,6 @@ void AudioBufferProcessor::processWithRepitching(juce::AudioBuffer<float>& outpu
                     if (isLooping.load())
                     {
                         currentPos = 0.0;
-                        applyCrossfade(outputBuffer, sample, numOutputSamples - sample);
                     }
                     else
                     {
@@ -118,7 +92,6 @@ void AudioBufferProcessor::processWithRepitching(juce::AudioBuffer<float>& outpu
                     if (isLooping.load())
                     {
                         currentPos = static_cast<double>(fileLengthSamples - 1);
-                        applyCrossfade(outputBuffer, sample, numOutputSamples - sample);
                     }
                     else
                     {
@@ -157,31 +130,6 @@ void AudioBufferProcessor::processWithRepitching(juce::AudioBuffer<float>& outpu
         // Advance playhead
         currentPos += speed * (fileSampleRate / hostSampleRate);
         playheadPosition.store(currentPos);
-    }
-    
-    // Apply click removal at slice transitions
-    if (sliceTransitionDetected)
-    {
-        // Apply a gentle fade-in at slice transitions to eliminate clicks
-        const int transitionFadeLength = juce::jmin(64, numOutputSamples / 4); // Moderate fade length
-        applyAntiClickFade(outputBuffer, 0, transitionFadeLength, true);
-    }
-}
-
-void AudioBufferProcessor::applyCrossfade(juce::AudioBuffer<float>& buffer, int startSample, int numSamples)
-{
-    // Simple crossfade to prevent clicks at loop points
-    const int fadeLength = juce::jmin(crossfadeLength, numSamples);
-    
-    for (int sample = 0; sample < fadeLength; ++sample)
-    {
-        const float fadeGain = static_cast<float>(sample) / fadeLength;
-        
-        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
-        {
-            const float currentSample = buffer.getSample(channel, startSample + sample);
-            buffer.setSample(channel, startSample + sample, currentSample * fadeGain);
-        }
     }
 }
 
@@ -274,17 +222,7 @@ double AudioBufferProcessor::getSliceStartPosition(int sliceIndex) const
     double sliceSize = static_cast<double>(fileLengthSamples) / numSlices;
     int targetSample = static_cast<int>(sliceIndex * sliceSize);
     
-    // Only use zero-crossing detection for larger slices to avoid over-processing
-    if (sliceSize > zeroCrossingSearchRadius * 4)
-    {
-        int optimalStart = findNearestZeroCrossing(targetSample);
-        return static_cast<double>(optimalStart);
-    }
-    else
-    {
-        // For small slices, use exact positions to avoid artifacts
-        return static_cast<double>(targetSample);
-    }
+    return static_cast<double>(targetSample);
 }
 
 double AudioBufferProcessor::getSliceEndPosition(int sliceIndex) const
@@ -295,17 +233,7 @@ double AudioBufferProcessor::getSliceEndPosition(int sliceIndex) const
     double sliceSize = static_cast<double>(fileLengthSamples) / numSlices;
     int targetSample = static_cast<int>((sliceIndex + 1) * sliceSize);
     
-    // Only use zero-crossing detection for larger slices to avoid over-processing  
-    if (sliceSize > zeroCrossingSearchRadius * 4)
-    {
-        int optimalEnd = findNearestZeroCrossing(targetSample);
-        return static_cast<double>(optimalEnd);
-    }
-    else
-    {
-        // For small slices, use exact positions to avoid artifacts
-        return static_cast<double>(targetSample);
-    }
+    return static_cast<double>(targetSample);
 }
 
 void AudioBufferProcessor::stopRandomSlicing()
@@ -430,7 +358,6 @@ void AudioBufferProcessor::releaseResources()
     audioFileBuffer.setSize(0, 0);
     repitchBuffer.setSize(0, 0);
     tempProcessingBuffer.setSize(0, 0);
-    fadeBuffer.setSize(0, 0);
 }
 
 //==============================================================================
@@ -505,13 +432,8 @@ MainComponent::MainComponent()
     currentSliceLabel.setJustificationType(juce::Justification::centred);
     currentSliceLabel.setColour(juce::Label::textColourId, juce::Colours::lightblue);
     
-    addAndMakeVisible(clickRemovalToggle);
-    clickRemovalToggle.setButtonText("Click Removal");
-    clickRemovalToggle.setToggleState(true, juce::dontSendNotification);
-    clickRemovalToggle.onClick = [this] { clickRemovalToggled(); };
-    
     // Set component size (larger to accommodate new controls)
-    setSize(600, 680);
+    setSize(600, 650);
     
     // Initialize audio
     setAudioChannels(0, 2);
@@ -631,9 +553,6 @@ void MainComponent::resized()
     
     area.removeFromTop(10);
     currentSliceLabel.setBounds(area.removeFromTop(25));
-    
-    area.removeFromTop(10);
-    clickRemovalToggle.setBounds(area.removeFromTop(30));
 }
 
 //==============================================================================
@@ -810,113 +729,6 @@ void MainComponent::updateSliceDisplay()
     }
 }
 
-void MainComponent::clickRemovalToggled()
-{
-    bool enabled = clickRemovalToggle.getToggleState();
-    audioProcessor.setClickRemovalEnabled(enabled);
-}
 
-//==============================================================================
-// Click Removal and Crossfade Methods
-//==============================================================================
 
-int AudioBufferProcessor::findNearestZeroCrossing(int targetSample, int searchRadius) const
-{
-    if (audioFileBuffer.getNumSamples() == 0)
-        return targetSample;
-    
-    // Clamp target to valid range
-    targetSample = juce::jlimit(0, fileLengthSamples - 1, targetSample);
-    
-    // Search for zero crossing in both directions
-    int bestSample = targetSample;
-    float minCrossingValue = std::abs(audioFileBuffer.getSample(0, targetSample));
-    
-    // Search in a radius around the target
-    int searchStart = juce::jmax(0, targetSample - searchRadius);
-    int searchEnd = juce::jmin(fileLengthSamples - 1, targetSample + searchRadius);
-    
-    for (int sample = searchStart; sample < searchEnd - 1; ++sample)
-    {
-        float currentValue = 0.0f;
-        float nextValue = 0.0f;
-        
-        // Check all channels and find the maximum absolute value
-        for (int channel = 0; channel < audioFileBuffer.getNumChannels(); ++channel)
-        {
-            float channelCurrent = audioFileBuffer.getSample(channel, sample);
-            float channelNext = audioFileBuffer.getSample(channel, sample + 1);
-            
-            currentValue = juce::jmax(currentValue, std::abs(channelCurrent));
-            nextValue = juce::jmax(nextValue, std::abs(channelNext));
-        }
-        
-        // Check if this is a zero crossing (signs differ) and closer to zero
-        if ((currentValue * nextValue < 0.0f) || // Sign change (zero crossing)
-            (currentValue < minCrossingValue))   // Or just closer to zero
-        {
-            minCrossingValue = currentValue;
-            bestSample = sample;
-        }
-    }
-    
-    return bestSample;
-}
 
-void AudioBufferProcessor::applyAntiClickFade(juce::AudioBuffer<float>& buffer, int startSample, int length, bool fadeIn)
-{
-    if (length <= 0 || startSample < 0)
-        return;
-    
-    const int numChannels = buffer.getNumChannels();
-    const int numSamples = buffer.getNumSamples();
-    const int endSample = juce::jmin(startSample + length, numSamples);
-    const int actualLength = endSample - startSample;
-    
-    for (int sample = 0; sample < actualLength; ++sample)
-    {
-        // Use a smooth cosine fade curve
-        float progress = static_cast<float>(sample) / actualLength;
-        float fadeGain;
-        
-        if (fadeIn)
-        {
-            // Fade in: 0 -> 1 using raised cosine
-            fadeGain = 0.5f * (1.0f - std::cos(progress * juce::MathConstants<float>::pi));
-        }
-        else
-        {
-            // Fade out: 1 -> 0 using raised cosine
-            fadeGain = 0.5f * (1.0f + std::cos(progress * juce::MathConstants<float>::pi));
-        }
-        
-        for (int channel = 0; channel < numChannels; ++channel)
-        {
-            int sampleIndex = startSample + sample;
-            if (sampleIndex < numSamples)
-            {
-                float currentSample = buffer.getSample(channel, sampleIndex);
-                buffer.setSample(channel, sampleIndex, currentSample * fadeGain);
-            }
-        }
-    }
-}
-
-void AudioBufferProcessor::applySliceTransitionFade(juce::AudioBuffer<float>& buffer, double currentPos, bool isSliceStart)
-{
-    const int numSamples = buffer.getNumSamples();
-    
-    if (isSliceStart)
-    {
-        // Apply fade-in at slice start to prevent clicks
-        int fadeLength = juce::jmin(sliceFadeLength, numSamples);
-        applyAntiClickFade(buffer, 0, fadeLength, true);
-    }
-    else
-    {
-        // Apply fade-out at slice end to prevent clicks
-        int fadeStart = juce::jmax(0, numSamples - sliceFadeLength);
-        int fadeLength = numSamples - fadeStart;
-        applyAntiClickFade(buffer, fadeStart, fadeLength, false);
-    }
-}

@@ -30,7 +30,7 @@ void AudioBufferProcessor::prepareToPlay(double sampleRate, int samplesPerBlockE
     hostSampleRate = sampleRate;
     speedSmoother.reset(sampleRate, 0.05); // 50ms smoothing time
     
-    // Calculate crossfade length in samples
+    // Calculate crossfade length in samples for better click elimination
     crossfadeLengthSamples = static_cast<int>(crossfadeLengthMs * sampleRate / 1000.0);
     
     // Prepare buffers for processing
@@ -131,7 +131,7 @@ void AudioBufferProcessor::processWithRepitching(juce::AudioBuffer<float>& outpu
             outputBuffer.setSample(channel, sample, interpolatedSample);
         }
         
-        // Apply crossfading for slice transitions (if active)
+        // Apply crossfading for slice transitions (if active) to eliminate clicks
         if (isInCrossfade)
         {
             applyCrossfadeToSliceTransition(outputBuffer, sample, 1);
@@ -294,15 +294,17 @@ void AudioBufferProcessor::applyCrossfadeToSliceTransition(juce::AudioBuffer<flo
         return;
     }
     
-    // Process crossfade sample by sample
+    // Process crossfade sample by sample with improved click elimination
     for (int sample = 0; sample < samplesToProcess; ++sample)
     {
         const double fadeProgress = static_cast<double>(crossfadePosition + sample) / static_cast<double>(crossfadeLengthSamples);
-        const float fadeOut = static_cast<float>(1.0 - fadeProgress); // Previous slice fades out
-        const float fadeIn = static_cast<float>(fadeProgress); // New slice fades in
         
-        // Get sample from previous slice position
-        const double prevPos = previousSlicePlayheadPos + sample * targetSpeed.load();
+        // Use equal-power crossfade curve for better click elimination
+        const float fadeOut = static_cast<float>(std::cos(fadeProgress * juce::MathConstants<double>::halfPi)); // Previous slice fades out
+        const float fadeIn = static_cast<float>(std::sin(fadeProgress * juce::MathConstants<double>::halfPi)); // New slice fades in
+        
+        // Get sample from previous slice position with proper speed compensation
+        const double prevPos = previousSlicePlayheadPos + sample * targetSpeed.load() * (fileSampleRate / hostSampleRate);
         const int prevSampleIndex = static_cast<int>(prevPos);
         const double prevFraction = prevPos - prevSampleIndex;
         
@@ -316,7 +318,7 @@ void AudioBufferProcessor::applyCrossfadeToSliceTransition(juce::AudioBuffer<flo
                 const float prevSample2 = readPtr[prevSampleIndex + 1];
                 const float prevInterpolatedSample = prevSample1 + static_cast<float>(prevFraction) * (prevSample2 - prevSample1);
                 
-                // Blend previous slice (fading out) with current slice (fading in)
+                // Apply equal-power crossfade for smooth transition and better click elimination
                 float* writePtr = outputBuffer.getWritePointer(channel);
                 const int outputIndex = startSample + sample;
                 writePtr[outputIndex] = writePtr[outputIndex] * fadeIn + prevInterpolatedSample * fadeOut;
@@ -449,11 +451,6 @@ void AudioBufferProcessor::releaseResources()
     repitchBuffer.setSize(0, 0);
     tempProcessingBuffer.setSize(0, 0);
     crossfadeBuffer.setSize(0, 0);
-    
-    // Reset crossfade state
-    isInCrossfade = false;
-    crossfadePosition = 0;
-    previousSliceIndex = -1;
 }
 
 //==============================================================================

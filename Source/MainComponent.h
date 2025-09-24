@@ -74,9 +74,9 @@ private:
     std::atomic<bool> continuousRandomMode { false };
     juce::Random random;
     
-    // Crossfading for slice transitions
-    static constexpr int crossfadeLengthMs = 10; // 10ms crossfade
-    int crossfadeLengthSamples = 441; // Will be updated in prepareToPlay
+    // Crossfading for slice transitions to eliminate clicks
+    static constexpr int crossfadeLengthMs = 20; // 20ms crossfade for better click elimination
+    int crossfadeLengthSamples = 882; // Will be updated in prepareToPlay
     bool isInCrossfade = false;
     int crossfadePosition = 0;
     double previousSlicePlayheadPos = 0.0;

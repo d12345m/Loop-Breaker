@@ -24,12 +24,17 @@ bool ProjectManager::loadProject(const juce::File& file)
     if (parsed.isVoid() || !parsed.isObject()) return false;
     auto* obj = parsed.getDynamicObject();
     if (!obj) return false;
-    settings.projectName = obj->getProperty("name", settings.projectName).toString();
-    settings.projectId = obj->getProperty("id", settings.projectId).toString();
-    settings.bpm = (double)obj->getProperty("bpm", settings.bpm);
-    settings.timeSigNumerator = (int)obj->getProperty("tsNum", settings.timeSigNumerator);
-    settings.timeSigDenominator = (int)obj->getProperty("tsDen", settings.timeSigDenominator);
-    settings.barsBetweenModifiers = (int)obj->getProperty("barsBetweenModifiers", settings.barsBetweenModifiers);
+    auto getOr = [obj](const juce::Identifier& id, const juce::var& fallback) -> juce::var
+    {
+        return obj->hasProperty(id) ? obj->getProperty(id) : fallback;
+    };
+
+    settings.projectName         = getOr("name", settings.projectName).toString();
+    settings.projectId           = getOr("id", settings.projectId).toString();
+    settings.bpm                 = (double)getOr("bpm", settings.bpm);
+    settings.timeSigNumerator    = (int)getOr("tsNum", settings.timeSigNumerator);
+    settings.timeSigDenominator  = (int)getOr("tsDen", settings.timeSigDenominator);
+    settings.barsBetweenModifiers= (int)getOr("barsBetweenModifiers", settings.barsBetweenModifiers);
     return true;
 }
 
@@ -49,7 +54,7 @@ bool ProjectManager::saveProject(const juce::File& directory, bool overwrite) co
     obj->setProperty("tsDen", settings.timeSigDenominator);
     obj->setProperty("barsBetweenModifiers", settings.barsBetweenModifiers);
 
-    juce::String json = juce::JSON::toString(juce::var(obj), true);
+    juce::String json = juce::JSON::toString(juce::var(obj.get()), true);
     return file.replaceWithText(json);
 }
 

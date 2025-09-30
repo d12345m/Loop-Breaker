@@ -149,6 +149,7 @@ void MainAppComponent::timerCallback()
         modifierDisplay.setCountdown(app.scheduler.getSecondsUntilNextTrigger(),
                                      app.scheduler.getBarsUntilNextTrigger(),
                                      app.scheduler.getProgressToNextTrigger());
+        modifierDisplay.setSuppressed(app.scheduler.isSuppressed());
     }
 }
 
@@ -238,11 +239,19 @@ void MainAppComponent::updatePlaybackModifierLink()
 
     if (linkEnabled)
     {
+        // Enable modifiers: ensure scheduler active & unsuppressed following playback
         if (anyPlaying && !app.scheduler.isRunning())
             app.scheduler.start();
-        else if (!anyPlaying && app.scheduler.isRunning())
-            app.scheduler.stop();
+        // If nothing playing we can leave scheduler running (so progress/predictive cycle persists) or optionally pause.
+        // Here we choose to keep it running for continuity, but suppression already false so upcoming rotates.
+        app.scheduler.setSuppressed(false);
     }
-    // If link disabled: user can leave scheduler running independently. We do not force start/stop.
+    else
+    {
+        // Disable modifiers: keep scheduler running for visual cycle but suppress actual triggers
+        if (anyPlaying && !app.scheduler.isRunning())
+            app.scheduler.start(); // ensure we still have timeline advancing
+        app.scheduler.setSuppressed(true);
+    }
     refreshStatus();
 }

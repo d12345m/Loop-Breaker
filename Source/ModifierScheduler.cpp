@@ -95,16 +95,19 @@ void ModifierScheduler::triggerIfDue()
     if (!running || !upcoming.has_value()) return;
     static constexpr double eps = 1e-6;
     if (accumulatedSecondsTotal + eps < nextTriggerAbsoluteSeconds) return;
-
-    // Trigger current upcoming
-    auto descriptor = upcoming.value();
-    auto targets = selectTargetBuffers(descriptor);
-    for (auto* l : listeners) l->modifierTriggered(descriptor, targets);
-
-    // Prepare next window
-    lastTriggerAbsoluteSeconds = accumulatedSecondsTotal;
-    scheduleNextTrigger();
-    selectNextModifier();
+    {
+        // capture upcoming before mutation
+        auto descriptor = upcoming.value();
+        if (!suppressed.load())
+        {
+            auto targets = selectTargetBuffers(descriptor);
+            for (auto* l : listeners) l->modifierTriggered(descriptor, targets);
+        }
+        // Even if suppressed, we still advance scheduling windows & pick next upcoming
+        lastTriggerAbsoluteSeconds = accumulatedSecondsTotal;
+        scheduleNextTrigger();
+        selectNextModifier();
+    }
 }
 
 void ModifierScheduler::broadcastUpcoming()

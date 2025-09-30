@@ -69,6 +69,11 @@ public:
     bool isQuantizationEnabled() const { return quantizationEnabled.load(); }
     int  getQuantizationSubdivision() const { return subdivisionsPerBar.load(); }
 
+    // Suppression: when true, timing windows continue to advance and upcoming selection rotates,
+    // but modifierTriggered callbacks are not emitted. Used to keep visual progress without affecting audio.
+    void setSuppressed(bool shouldSuppress) { suppressed.store(shouldSuppress); }
+    bool isSuppressed() const { return suppressed.load(); }
+
     // Limit random selection to implemented modifiers only (Reverse, Speed, ResetAll for now)
     void setRestrictToImplemented(bool enabled) { restrictToImplemented.store(enabled); }
     bool isRestrictToImplemented() const { return restrictToImplemented.load(); }
@@ -93,6 +98,7 @@ private:
     std::atomic<int>  subdivisionsPerBar { 1 }; // 1 = whole bar
 
     std::atomic<bool> restrictToImplemented { true }; // default: only schedule implemented modifiers
+    std::atomic<bool> suppressed { false }; // skip firing while keeping progress
 
     void scheduleNextTrigger();
     void triggerIfDue();

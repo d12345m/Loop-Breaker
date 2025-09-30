@@ -33,7 +33,7 @@ Legend:
 - [x] Wire pad selections to scheduler (`setUserSelectedBuffers`) via direct pad selection callbacks (replaced polling)
 - [x] Visual feedback (pad flash overlay) when modifier triggers (basic)
 - [ ] Expanded visual feedback / log area for modifier history
-- [ ] Per‑pad playing-state indicator (highlight/outline while buffer active)
+- [x] Per‑pad playing-state indicator (highlight/outline while buffer active)
 - [ ] Replace old `MainComponent` once parity achieved
 
 ### Nice to Have (Defer until basics work)
@@ -249,3 +249,4 @@ Add clarifications inline as decisions are made.
 
 - 2025-09-30: Initial architecture skeleton & checklist created.
 - 2025-09-30: Added per-pad filename labels, direct selection callbacks, pad flash animation; updated checklist statuses.
+- 2025-09-30: Implemented per-pad playing-state indicator (green outline updated via timer), unified UI refinement.

@@ -116,6 +116,7 @@ void MainAppComponent::modifierTriggered(const ModifierDescriptor& desc, const j
 void MainAppComponent::timerCallback()
 {
     refreshStatus();
+    padGrid.setPlayingStates(app.bufferManager.getPlayingBufferIndices());
 }
 
 void MainAppComponent::playAllClicked()

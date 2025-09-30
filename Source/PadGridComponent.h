@@ -97,6 +97,7 @@ private:
     juce::OwnedArray<juce::Label> padFileLabels;
     juce::StringArray padFileNames { "", "", "", "", "", "", "", "" };
     std::array<int, numPads> flashCounters { {0,0,0,0,0,0,0,0} };
+    std::array<bool, numPads> playingStates { {false,false,false,false,false,false,false,false} };
 
 public:
     // Callback for external listeners when any pad selection toggles.
@@ -120,6 +121,21 @@ public:
         repaint();
     }
 
+    // Update which pads are currently playing; expects indices from engine each refresh.
+    void setPlayingStates(const juce::Array<int>& playingIndices)
+    {
+        std::array<bool, numPads> newStates { {false,false,false,false,false,false,false,false} };
+        for (auto idx : playingIndices)
+            if (juce::isPositiveAndBelow(idx, numPads))
+                newStates[(size_t)idx] = true;
+
+        if (newStates != playingStates)
+        {
+            playingStates = newStates;
+            repaint();
+        }
+    }
+
 private:
     static constexpr int flashDurationTicks = 10; // ~333ms at 30Hz
 
@@ -141,6 +157,20 @@ private:
 
     void paintOverChildren(juce::Graphics& g) override
     {
+        // Draw playing state (green outline) then flash (yellow fill) so flash is prominent.
+        for (int i = 0; i < numPads; ++i)
+        {
+            if (auto* btn = padButtons[i])
+            {
+                auto r = btn->getBounds().toFloat().expanded(2.f);
+                if (playingStates[(size_t)i])
+                {
+                    g.setColour(juce::Colours::lime.withAlpha(0.9f));
+                    g.drawRoundedRectangle(r, 6.f, 2.2f);
+                }
+            }
+        }
+
         g.setColour(juce::Colours::yellow.withAlpha(0.35f));
         for (int i = 0; i < numPads; ++i)
         {

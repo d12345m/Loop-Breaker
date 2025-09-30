@@ -61,7 +61,7 @@ Legend:
 - [ ] Support changing BPM at runtime (scheduler recalculates remaining time proportionally)
 - [ ] Support changing barsBetweenModifiers mid-cycle (policy: adjust next trigger using remaining proportion)
 - [ ] Quantized trigger option (align to nearest beat/subdivision even if window elapsed mid-beat)
-- [ ] Drift resilience: use absolute nextTriggerTime (monotonic) instead of resetting window accumulator
+- [x] Drift resilience: use absolute nextTriggerTime (monotonic) instead of resetting window accumulator
 - [ ] UI: optional countdown display (progress bar or beat pulses)
 
 ---

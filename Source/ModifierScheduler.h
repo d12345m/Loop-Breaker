@@ -47,7 +47,7 @@ public:
     // Exposed timeline metrics (valid while running)
     double getAccumulatedSecondsInBar() const { return fmod(accumulatedSecondsTotal, settings.getSecondsPerBar()); }
     double getAccumulatedBars() const { return accumulatedSecondsTotal / settings.getSecondsPerBar(); }
-    double getSecondsUntilNextTrigger() const { return juce::jmax(0.0, nextTriggerAtSeconds - accumulatedSecondsSinceLastTrigger); }
+    double getSecondsUntilNextTrigger() const { return juce::jmax(0.0, nextTriggerAbsoluteSeconds - accumulatedSecondsTotal); }
     double getBarsUntilNextTrigger() const { return getSecondsUntilNextTrigger() / settings.getSecondsPerBar(); }
 
     // Provide externally selected buffer indices (user pad selections)
@@ -56,15 +56,14 @@ public:
 private:
     const SessionSettings& settings; // reference to live settings
     bool running = false;
-    double accumulatedSecondsSinceLastTrigger = 0.0; // window accumulator
-    double accumulatedSecondsTotal = 0.0;             // continuous timeline
-    double nextTriggerAtSeconds = 0.0;
+    double accumulatedSecondsTotal = 0.0;             // continuous timeline in seconds
+    double nextTriggerAbsoluteSeconds = 0.0;           // absolute time of next trigger
 
     juce::OwnedArray<IModifier> prototypeCache; // list of available types
     std::optional<ModifierDescriptor> upcoming;
     juce::Array<int> userSelectedBuffers;
 
-    void scheduleTimeTargets();
+    void scheduleNextTrigger();
     void triggerIfDue();
     void broadcastUpcoming();
     ModifierDescriptor pickRandomDescriptor() const;

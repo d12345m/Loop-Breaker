@@ -25,9 +25,8 @@ void ModifierScheduler::start()
     if (running)
         return;
     running = true;
-    accumulatedSecondsSinceLastTrigger = 0.0;
     accumulatedSecondsTotal = 0.0;
-    scheduleTimeTargets();
+    scheduleNextTrigger();
     selectNextModifier();
 }
 
@@ -47,7 +46,6 @@ void ModifierScheduler::selectNextModifier()
 void ModifierScheduler::updateTime(double secondsElapsed)
 {
     if (!running) return;
-    accumulatedSecondsSinceLastTrigger += secondsElapsed;
     accumulatedSecondsTotal += secondsElapsed;
     triggerIfDue();
 }
@@ -59,15 +57,17 @@ void ModifierScheduler::setUserSelectedBuffers(const juce::Array<int>& indices)
 
 // (timer removed – driven exclusively by audio callback time now)
 
-void ModifierScheduler::scheduleTimeTargets()
+void ModifierScheduler::scheduleNextTrigger()
 {
-    nextTriggerAtSeconds = settings.getSecondsBetweenModifiers();
+    // Set next trigger absolute time from now using current settings
+    nextTriggerAbsoluteSeconds = accumulatedSecondsTotal + settings.getSecondsBetweenModifiers();
 }
 
 void ModifierScheduler::triggerIfDue()
 {
     if (!running || !upcoming.has_value()) return;
-    if (accumulatedSecondsSinceLastTrigger < nextTriggerAtSeconds) return;
+    static constexpr double eps = 1e-6;
+    if (accumulatedSecondsTotal + eps < nextTriggerAbsoluteSeconds) return;
 
     // Trigger current upcoming
     auto descriptor = upcoming.value();
@@ -75,8 +75,7 @@ void ModifierScheduler::triggerIfDue()
     for (auto* l : listeners) l->modifierTriggered(descriptor, targets);
 
     // Prepare next window
-    accumulatedSecondsSinceLastTrigger = 0.0;
-    scheduleTimeTargets();
+    scheduleNextTrigger();
     selectNextModifier();
 }
 

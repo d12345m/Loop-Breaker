@@ -13,6 +13,17 @@
       <FILE id="audioBuffer2" name="AudioBuffer.cpp" compile="1" resource="0" file="Source/AudioBuffer.cpp"/>
       <FILE id="audioBufferMgr1" name="AudioBufferManager.h" compile="0" resource="0" file="Source/AudioBufferManager.h"/>
       <FILE id="audioBufferMgr2" name="AudioBufferManager.cpp" compile="1" resource="0" file="Source/AudioBufferManager.cpp"/>
+      <FILE id="sessionSettingsH" name="SessionSettings.h" compile="0" resource="0" file="Source/SessionSettings.h"/>
+      <FILE id="modifierH" name="Modifier.h" compile="0" resource="0" file="Source/Modifier.h"/>
+      <FILE id="modifierCpp" name="Modifier.cpp" compile="1" resource="0" file="Source/Modifier.cpp"/>
+      <FILE id="modifierSchedulerH" name="ModifierScheduler.h" compile="0" resource="0" file="Source/ModifierScheduler.h"/>
+      <FILE id="modifierSchedulerCpp" name="ModifierScheduler.cpp" compile="1" resource="0" file="Source/ModifierScheduler.cpp"/>
+      <FILE id="projectManagerH" name="ProjectManager.h" compile="0" resource="0" file="Source/ProjectManager.h"/>
+      <FILE id="projectManagerCpp" name="ProjectManager.cpp" compile="1" resource="0" file="Source/ProjectManager.cpp"/>
+      <FILE id="channelStripH" name="ChannelStrip.h" compile="0" resource="0" file="Source/ChannelStrip.h"/>
+      <FILE id="appStateH" name="AppState.h" compile="0" resource="0" file="Source/AppState.h"/>
+      <FILE id="padGridH" name="PadGridComponent.h" compile="0" resource="0" file="Source/PadGridComponent.h"/>
+      <FILE id="upcomingModDispH" name="UpcomingModifierDisplay.h" compile="0" resource="0" file="Source/UpcomingModifierDisplay.h"/>
     </GROUP>
   </MAINGROUP>
   <MODULES>

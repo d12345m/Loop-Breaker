@@ -27,7 +27,7 @@ public:
 
             auto* label = padFileLabels.add(new juce::Label());
             label->setJustificationType(juce::Justification::centred);
-            label->setFont(juce::Font(12.0f));
+            label->setFont(juce::Font(juce::FontOptions().withHeight(12.0f)));
             label->setInterceptsMouseClicks(false, false);
             label->setColour(juce::Label::textColourId, juce::Colours::lightgrey);
             addAndMakeVisible(label);

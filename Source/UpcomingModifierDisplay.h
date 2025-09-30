@@ -33,9 +33,13 @@ public:
     {
         g.fillAll(juce::Colours::black.withAlpha(0.2f));
         g.setColour(juce::Colours::white);
-        g.setFont(juce::Font(18.0f, juce::Font::bold));
+        {
+            auto f = juce::Font(juce::FontOptions().withHeight(18.0f));
+            f.setBold(true);
+            g.setFont(f);
+        }
         g.drawText("Next: " + upcomingName, getLocalBounds().removeFromTop(getHeight()/2), juce::Justification::centredLeft);
-        g.setFont(juce::Font(12.0f));
+    g.setFont(juce::Font(juce::FontOptions().withHeight(12.0f)));
         g.setColour(juce::Colours::lightgrey);
         g.drawText(upcomingDescription, getLocalBounds().removeFromTop(getHeight()), juce::Justification::centredLeft);
     }

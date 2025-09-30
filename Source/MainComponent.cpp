@@ -50,19 +50,27 @@ MainComponent::MainComponent()
     // Create labels
     addAndMakeVisible(speedLabel);
     speedLabel.setText("Speed & Direction", juce::dontSendNotification);
-    speedLabel.setFont(juce::Font(16.0f, juce::Font::bold));
+    {
+        auto f = juce::Font(juce::FontOptions().withHeight(16.0f));
+        f.setBold(true);
+        speedLabel.setFont(f);
+    }
     speedLabel.setJustificationType(juce::Justification::centred);
     
     addAndMakeVisible(instructionLabel);
     instructionLabel.setText("Left: Reverse 2x | Center: Stop | Right: Forward 2x", juce::dontSendNotification);
-    instructionLabel.setFont(juce::Font(12.0f));
+    instructionLabel.setFont(juce::Font(juce::FontOptions().withHeight(12.0f)));
     instructionLabel.setJustificationType(juce::Justification::centred);
     instructionLabel.setColour(juce::Label::textColourId, juce::Colours::grey);
     
     // Create slicing controls
     addAndMakeVisible(sliceCountLabel);
     sliceCountLabel.setText("Buffer Slices", juce::dontSendNotification);
-    sliceCountLabel.setFont(juce::Font(14.0f, juce::Font::bold));
+    {
+        auto f = juce::Font(juce::FontOptions().withHeight(14.0f));
+        f.setBold(true);
+        sliceCountLabel.setFont(f);
+    }
     sliceCountLabel.setJustificationType(juce::Justification::centred);
     
     addAndMakeVisible(sliceCountSlider);
@@ -86,7 +94,7 @@ MainComponent::MainComponent()
     
     addAndMakeVisible(currentSliceLabel);
     currentSliceLabel.setText("Current Slice: 0", juce::dontSendNotification);
-    currentSliceLabel.setFont(juce::Font(12.0f));
+    currentSliceLabel.setFont(juce::Font(juce::FontOptions().withHeight(12.0f)));
     currentSliceLabel.setJustificationType(juce::Justification::centred);
     currentSliceLabel.setColour(juce::Label::textColourId, juce::Colours::lightblue);
     

@@ -32,7 +32,7 @@ Legend:
 - [x] Modal / panel for loading audio into each pad (desktop implementation via FileChooser; iOS adaptation pending)
 - [x] Wire pad selections to scheduler (`setUserSelectedBuffers`) via direct pad selection callbacks (replaced polling)
 - [x] Visual feedback (pad flash overlay) when modifier triggers (basic)
-- [ ] Expanded visual feedback / log area for modifier history
+- [x] Expanded visual feedback / log area for modifier history (basic panel w/ last 100 events)
 - [x] Per‑pad playing-state indicator (highlight/outline while buffer active)
 - [x] Replace old `MainComponent` (now gated & excluded by default build)
 

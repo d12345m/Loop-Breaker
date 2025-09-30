@@ -15,6 +15,7 @@ MainAppComponent::MainAppComponent()
 
     addAndMakeVisible(modifierDisplay);
     addAndMakeVisible(padGrid);
+    addAndMakeVisible(modifierHistory);
 
     addAndMakeVisible(playAllButton); playAllButton.onClick = [this]{ playAllClicked(); };
     addAndMakeVisible(stopAllButton); stopAllButton.onClick = [this]{ stopAllClicked(); };
@@ -94,7 +95,10 @@ void MainAppComponent::resized()
     statusLabel.setBounds(controlBar.reduced(2));
 
     area.removeFromTop(10);
-    padGrid.setBounds(area.removeFromTop(300));
+    auto gridHeight = 300;
+    padGrid.setBounds(area.removeFromTop(gridHeight));
+    area.removeFromTop(6);
+    modifierHistory.setBounds(area);
 }
 
 void MainAppComponent::upcomingModifierChanged(const ModifierDescriptor& desc)
@@ -111,6 +115,7 @@ void MainAppComponent::modifierTriggered(const ModifierDescriptor& desc, const j
     }
     statusLabel.setText("Triggered: " + desc.shortName + " -> " + targetStr, juce::dontSendNotification);
     padGrid.flashPads(targets);
+    modifierHistory.addEntry(desc, targets);
 }
 
 void MainAppComponent::timerCallback()

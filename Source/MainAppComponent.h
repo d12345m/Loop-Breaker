@@ -14,6 +14,7 @@
 #include "AppState.h"
 #include "PadGridComponent.h"
 #include "UpcomingModifierDisplay.h"
+#include "ModifierHistoryPanel.h"
 
 class MainAppComponent : public juce::AudioAppComponent,
                          public ModifierSchedulerListener,
@@ -41,6 +42,7 @@ private:
 
     // UI components
     UpcomingModifierDisplay modifierDisplay;
+  ModifierHistoryPanel modifierHistory;
     PadGridComponent padGrid;
     juce::TextButton playAllButton { "Play All" };
     juce::TextButton stopAllButton { "Stop All" };

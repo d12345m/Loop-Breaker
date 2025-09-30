@@ -25,17 +25,16 @@ void ModifierScheduler::start()
     if (running)
         return;
     running = true;
-    accumulatedSeconds = 0.0;
+    accumulatedSecondsSinceLastTrigger = 0.0;
+    accumulatedSecondsTotal = 0.0;
     scheduleTimeTargets();
     selectNextModifier();
-    startTimerHz(10); // 100ms cadence for now
 }
 
 void ModifierScheduler::stop()
 {
     if (!running) return;
     running = false;
-    stopTimer();
     upcoming.reset();
 }
 
@@ -48,7 +47,8 @@ void ModifierScheduler::selectNextModifier()
 void ModifierScheduler::updateTime(double secondsElapsed)
 {
     if (!running) return;
-    accumulatedSeconds += secondsElapsed;
+    accumulatedSecondsSinceLastTrigger += secondsElapsed;
+    accumulatedSecondsTotal += secondsElapsed;
     triggerIfDue();
 }
 
@@ -57,11 +57,7 @@ void ModifierScheduler::setUserSelectedBuffers(const juce::Array<int>& indices)
     userSelectedBuffers = indices;
 }
 
-void ModifierScheduler::timerCallback()
-{
-    // For now just poll trigger condition on timer as a backup (in case updateTime not wired)
-    triggerIfDue();
-}
+// (timer removed – driven exclusively by audio callback time now)
 
 void ModifierScheduler::scheduleTimeTargets()
 {
@@ -71,7 +67,7 @@ void ModifierScheduler::scheduleTimeTargets()
 void ModifierScheduler::triggerIfDue()
 {
     if (!running || !upcoming.has_value()) return;
-    if (accumulatedSeconds < nextTriggerAtSeconds) return;
+    if (accumulatedSecondsSinceLastTrigger < nextTriggerAtSeconds) return;
 
     // Trigger current upcoming
     auto descriptor = upcoming.value();
@@ -79,7 +75,7 @@ void ModifierScheduler::triggerIfDue()
     for (auto* l : listeners) l->modifierTriggered(descriptor, targets);
 
     // Prepare next window
-    accumulatedSeconds = 0.0;
+    accumulatedSecondsSinceLastTrigger = 0.0;
     scheduleTimeTargets();
     selectNextModifier();
 }

@@ -21,11 +21,11 @@ public:
     virtual void modifierTriggered(const ModifierDescriptor& /*desc*/, const juce::Array<int>& /*targets*/) {}
 };
 
-class ModifierScheduler : private juce::Timer
+class ModifierScheduler
 {
 public:
     explicit ModifierScheduler(const SessionSettings& settingsRef);
-    ~ModifierScheduler() override;
+    ~ModifierScheduler();
 
     void start();
     void stop();
@@ -41,8 +41,14 @@ public:
     void addListener(ModifierSchedulerListener* l) { listeners.addIfNotAlreadyThere(l); }
     void removeListener(ModifierSchedulerListener* l) { listeners.removeFirstMatchingValue(l); }
 
-    // Called externally each audio block (future) to accumulate musical time.
+    // Called externally each audio block with elapsed seconds (sample accurate source)
     void updateTime(double secondsElapsed);
+
+    // Exposed timeline metrics (valid while running)
+    double getAccumulatedSecondsInBar() const { return fmod(accumulatedSecondsTotal, settings.getSecondsPerBar()); }
+    double getAccumulatedBars() const { return accumulatedSecondsTotal / settings.getSecondsPerBar(); }
+    double getSecondsUntilNextTrigger() const { return juce::jmax(0.0, nextTriggerAtSeconds - accumulatedSecondsSinceLastTrigger); }
+    double getBarsUntilNextTrigger() const { return getSecondsUntilNextTrigger() / settings.getSecondsPerBar(); }
 
     // Provide externally selected buffer indices (user pad selections)
     void setUserSelectedBuffers(const juce::Array<int>& indices);
@@ -50,14 +56,14 @@ public:
 private:
     const SessionSettings& settings; // reference to live settings
     bool running = false;
-    double accumulatedSeconds = 0.0;
+    double accumulatedSecondsSinceLastTrigger = 0.0; // window accumulator
+    double accumulatedSecondsTotal = 0.0;             // continuous timeline
     double nextTriggerAtSeconds = 0.0;
 
     juce::OwnedArray<IModifier> prototypeCache; // list of available types
     std::optional<ModifierDescriptor> upcoming;
     juce::Array<int> userSelectedBuffers;
 
-    void timerCallback() override; // low-frequency UI / scheduling tick
     void scheduleTimeTargets();
     void triggerIfDue();
     void broadcastUpcoming();

@@ -179,7 +179,10 @@ void MainAppComponent::refreshStatus()
     // Could display playing buffer count
     int playing = app.bufferManager.getPlayingBufferIndices().size();
     if (!app.scheduler.isRunning()) return; // Preserve explicit status messages when scheduler stopped
-    statusLabel.setText("Scheduler Running | Playing Buffers: " + juce::String(playing), juce::dontSendNotification);
+    double secUntil = app.scheduler.getSecondsUntilNextTrigger();
+    double barsUntil = app.scheduler.getBarsUntilNextTrigger();
+    juce::String eta = juce::String(secUntil, 1) + "s / " + juce::String(barsUntil, 2) + " bars";
+    statusLabel.setText("Scheduler Running | Next in " + eta + " | Playing: " + juce::String(playing), juce::dontSendNotification);
 }
 
 void MainAppComponent::attachPadCallbacks()

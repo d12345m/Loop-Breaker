@@ -110,10 +110,14 @@ void MainAppComponent::resized()
     // Right side region for BPM & toggle & status
     auto rightRegion = controlBar;
     // Place BPM slider at the rightmost ~220px
-    auto bpmWidth = 200;
+    // Reserve extra width for BPM slider plus its left-attached label to prevent overlap
+    auto bpmWidth = 270; // slider width portion (label will sit just to the left inside this block)
     auto bpmArea = rightRegion.removeFromRight(bpmWidth);
     bpmSlider.setBounds(bpmArea.reduced(2));
-    implementedOnlyToggle.setBounds(rightRegion.removeFromRight(140).reduced(2));
+
+    // Add a small horizontal gap before the toggle to visually separate
+    rightRegion.removeFromRight(36);
+    implementedOnlyToggle.setBounds(rightRegion.removeFromRight(150).reduced(2));
     statusLabel.setBounds(rightRegion.reduced(2));
 
     area.removeFromTop(10);

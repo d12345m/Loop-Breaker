@@ -46,8 +46,7 @@ private:
     PadGridComponent padGrid;
     juce::TextButton playAllButton { "Play All" };
     juce::TextButton stopAllButton { "Stop All" };
-    juce::TextButton startSchedulerButton { "Start Modifiers" };
-    juce::TextButton stopSchedulerButton { "Stop Modifiers" };
+  juce::ToggleButton modifiersToggle { "Modifiers" }; // Links playback to scheduler when ON
     juce::TextButton loadFileButton { "Load File To Pad..." };
     juce::ComboBox padSelectForLoad;
     juce::Label statusLabel { {}, "Status: Idle" };
@@ -66,13 +65,13 @@ private:
     // UI handlers
     void playAllClicked();
     void stopAllClicked();
-    void startSchedulerClicked();
-    void stopSchedulerClicked();
+  void modifiersToggleChanged();
     void loadFileClicked();
     void updatePadSelectionTargets();
     void refreshStatus();
   void implementedOnlyToggled();
   void bpmChanged();
+  void updatePlaybackModifierLink();
 
     void attachPadCallbacks();
 

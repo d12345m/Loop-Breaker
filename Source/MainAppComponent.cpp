@@ -19,8 +19,9 @@ MainAppComponent::MainAppComponent()
 
     addAndMakeVisible(playAllButton); playAllButton.onClick = [this]{ playAllClicked(); };
     addAndMakeVisible(stopAllButton); stopAllButton.onClick = [this]{ stopAllClicked(); };
-    addAndMakeVisible(startSchedulerButton); startSchedulerButton.onClick = [this]{ startSchedulerClicked(); };
-    addAndMakeVisible(stopSchedulerButton); stopSchedulerButton.onClick = [this]{ stopSchedulerClicked(); };
+        addAndMakeVisible(modifiersToggle);
+        modifiersToggle.setToggleState(true, juce::dontSendNotification);
+        modifiersToggle.onClick = [this]{ modifiersToggleChanged(); };
     addAndMakeVisible(loadFileButton); loadFileButton.onClick = [this]{ loadFileClicked(); };
 
     addAndMakeVisible(padSelectForLoad);
@@ -103,8 +104,7 @@ void MainAppComponent::resized()
     auto controlBar = topBar;
     playAllButton.setBounds(controlBar.removeFromLeft(90).reduced(2));
     stopAllButton.setBounds(controlBar.removeFromLeft(90).reduced(2));
-    startSchedulerButton.setBounds(controlBar.removeFromLeft(130).reduced(2));
-    stopSchedulerButton.setBounds(controlBar.removeFromLeft(130).reduced(2));
+        modifiersToggle.setBounds(controlBar.removeFromLeft(120).reduced(2));
     padSelectForLoad.setBounds(controlBar.removeFromLeft(110).reduced(2));
     loadFileButton.setBounds(controlBar.removeFromLeft(150).reduced(2));
     // Right side region for BPM & toggle & status
@@ -155,25 +155,18 @@ void MainAppComponent::timerCallback()
 void MainAppComponent::playAllClicked()
 {
     app.bufferManager.playAll();
-    refreshStatus();
+    updatePlaybackModifierLink();
 }
 
 void MainAppComponent::stopAllClicked()
 {
     app.bufferManager.stopAll();
-    refreshStatus();
+    updatePlaybackModifierLink();
 }
 
-void MainAppComponent::startSchedulerClicked()
+void MainAppComponent::modifiersToggleChanged()
 {
-    app.scheduler.start();
-    statusLabel.setText("Scheduler Running", juce::dontSendNotification);
-}
-
-void MainAppComponent::stopSchedulerClicked()
-{
-    app.scheduler.stop();
-    statusLabel.setText("Scheduler Stopped", juce::dontSendNotification);
+    updatePlaybackModifierLink();
 }
 
 void MainAppComponent::loadFileClicked()
@@ -206,11 +199,18 @@ void MainAppComponent::refreshStatus()
 {
     // Could display playing buffer count
     int playing = app.bufferManager.getPlayingBufferIndices().size();
-    if (!app.scheduler.isRunning()) return; // Preserve explicit status messages when scheduler stopped
-    double secUntil = app.scheduler.getSecondsUntilNextTrigger();
-    double barsUntil = app.scheduler.getBarsUntilNextTrigger();
-    juce::String eta = juce::String(secUntil, 1) + "s / " + juce::String(barsUntil, 2) + " bars";
-    statusLabel.setText("Scheduler Running | Next in " + eta + " | Playing: " + juce::String(playing) + " | BPM " + juce::String(app.settings.bpm, 0), juce::dontSendNotification);
+    juce::String base = "Playing: " + juce::String(playing) + " | BPM " + juce::String(app.settings.bpm, 0);
+    if (app.scheduler.isRunning())
+    {
+        double secUntil = app.scheduler.getSecondsUntilNextTrigger();
+        double barsUntil = app.scheduler.getBarsUntilNextTrigger();
+        juce::String eta = juce::String(secUntil, 1) + "s / " + juce::String(barsUntil, 2) + " bars";
+        statusLabel.setText("Modifiers ON | Next in " + eta + " | " + base, juce::dontSendNotification);
+    }
+    else
+    {
+        statusLabel.setText("Modifiers OFF | " + base, juce::dontSendNotification);
+    }
 }
 
 void MainAppComponent::attachPadCallbacks()
@@ -228,5 +228,21 @@ void MainAppComponent::bpmChanged()
 {
     double newBpm = bpmSlider.getValue();
     app.settings.bpm = newBpm; // Direct mutation; scheduler will pick up new bar length for future scheduling
+    refreshStatus();
+}
+
+void MainAppComponent::updatePlaybackModifierLink()
+{
+    bool anyPlaying = app.bufferManager.getPlayingBufferIndices().size() > 0;
+    bool linkEnabled = modifiersToggle.getToggleState();
+
+    if (linkEnabled)
+    {
+        if (anyPlaying && !app.scheduler.isRunning())
+            app.scheduler.start();
+        else if (!anyPlaying && app.scheduler.isRunning())
+            app.scheduler.stop();
+    }
+    // If link disabled: user can leave scheduler running independently. We do not force start/stop.
     refreshStatus();
 }

@@ -89,8 +89,8 @@ ModifierDescriptor ModifierScheduler::pickRandomDescriptor() const
 {
     if (prototypeCache.isEmpty())
         return {};
-    juce::Random r;
-    int index = r.nextInt(prototypeCache.size());
+    const juce::SpinLock::ScopedLockType lock(rngLock);
+    int index = rng.nextInt(prototypeCache.size());
     return prototypeCache[index]->getDescriptor();
 }
 
@@ -104,11 +104,17 @@ juce::Array<int> ModifierScheduler::selectTargetBuffers(const ModifierDescriptor
     if (!userSelectedBuffers.isEmpty())
         return userSelectedBuffers;
 
-    juce::Random r;
-    int count = r.nextInt({1, 4}); // 1..4
+    const juce::SpinLock::ScopedLockType lock(rngLock);
+    int count = rng.nextInt({1, 4}); // 1..4
     std::set<int> unique;
     while ((int)unique.size() < count)
-        unique.insert(r.nextInt({0, 7}));
+        unique.insert(rng.nextInt({0, 7}));
     for (int v : unique) targets.add(v);
     return targets;
+}
+
+void ModifierScheduler::setRandomSeed(int64_t seed)
+{
+    const juce::SpinLock::ScopedLockType lock(rngLock);
+    rng.setSeed(static_cast<int64_t>(seed));
 }

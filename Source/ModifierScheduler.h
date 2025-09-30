@@ -53,6 +53,9 @@ public:
     // Provide externally selected buffer indices (user pad selections)
     void setUserSelectedBuffers(const juce::Array<int>& indices);
 
+    // Deterministic randomness (optional). Call before start() for reproducible sequences.
+    void setRandomSeed(int64_t seed);
+
 private:
     const SessionSettings& settings; // reference to live settings
     bool running = false;
@@ -62,6 +65,10 @@ private:
     juce::OwnedArray<IModifier> prototypeCache; // list of available types
     std::optional<ModifierDescriptor> upcoming;
     juce::Array<int> userSelectedBuffers;
+
+    // RNG state (shared by descriptor + target selection) for deterministic runs/tests
+    mutable juce::Random rng; // mutable to allow use in const selection helpers
+    mutable juce::SpinLock rngLock; // protect rng when accessed from different threads
 
     void scheduleNextTrigger();
     void triggerIfDue();

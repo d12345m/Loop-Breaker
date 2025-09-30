@@ -68,12 +68,12 @@ Legend:
 
 ## 3. Modifier System (Phase 1: Non‑Audio Logic)
 
-- [ ] Implement concrete classes for: Reverse, Speed, ResetAll (logic only; uses existing buffer controls)
-- [ ] Apply logic to targeted buffers when modifier triggers
-- [ ] Confirm multiple simultaneous buffer targets handled safely
-- [ ] Logging hook: record triggered modifier type + targets
-- [ ] Basic random speed selection (.25, .5, 1, 2) with inclusive list
-- [ ] Ensure ResetAll restores: speed=1, direction forward, slices exited, effects off (future‑proof)
+- [-] Implement concrete classes for: Reverse, Speed, ResetAll (logic scaffolds added; SimpleModifierBase used)
+- [-] Apply logic to targeted buffers when modifier triggers (Reverse/Speed/ResetAll active)
+- [ ] Confirm multiple simultaneous buffer targets handled safely (needs concurrency review)
+- [ ] Logging hook: record triggered modifier type + targets (history panel currently logs descriptor only)
+- [x] Basic random speed selection (.25, .5, 1, 2) with inclusive list
+- [ ] Ensure ResetAll restores: speed=1, direction forward, slices exited, effects off (future‑proof; currently just defaults)
 - [ ] Provide dry run mode (no side effects) for preview (optional)
 
 ---

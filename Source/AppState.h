@@ -46,7 +46,60 @@ struct AppState : public ModifierSchedulerListener
 
     void modifierTriggered(const ModifierDescriptor& desc, const juce::Array<int>& targets) override
     {
-        juce::ignoreUnused(desc, targets);
-        // Future: enqueue actual modifier processing / apply to FX or buffers
+        // Apply immediate, stateless modifier effects to targeted buffers.
+        switch (desc.type)
+        {
+            case ModifierType::Reverse:
+            {
+                auto applyReverse = [&](AudioBuffer* b)
+                {
+                    if (!b) return;
+                    double current = b->getSpeed();
+                    if (current == 0.0) current = 1.0; // avoid zero speed flip
+                    b->setSpeed(-current); // flipping sign reverses playback direction
+                };
+                if (targets.isEmpty())
+                {
+                    // If no explicit targets, treat as global buffer transform: apply to all loaded
+                    auto loaded = bufferManager.getLoadedBufferIndices();
+                    for (int idx : loaded) applyReverse(bufferManager.getBuffer(idx));
+                }
+                else
+                {
+                    for (int idx : targets) applyReverse(bufferManager.getBuffer(idx));
+                }
+                break;
+            }
+            case ModifierType::Speed:
+            {
+                // Choose a random discrete speed per trigger (shared for all targets) for musical cohesion
+                static const double speeds[] { 0.25, 0.5, 1.0, 2.0 };
+                juce::Random r;
+                double newSpeed = speeds[r.nextInt((int)std::size(speeds))];
+                auto applySpeed = [&](AudioBuffer* b)
+                {
+                    if (!b) return;
+                    double sign = b->getSpeed() < 0.0 ? -1.0 : 1.0; // preserve direction
+                    b->setSpeed(sign * newSpeed);
+                };
+                if (targets.isEmpty())
+                {
+                    auto loaded = bufferManager.getLoadedBufferIndices();
+                    for (int idx : loaded) applySpeed(bufferManager.getBuffer(idx));
+                }
+                else
+                {
+                    for (int idx : targets) applySpeed(bufferManager.getBuffer(idx));
+                }
+                break;
+            }
+            case ModifierType::ResetAll:
+            {
+                bufferManager.resetAllBuffers();
+                break;
+            }
+            default:
+                break; // Other types not yet implemented
+        }
     }
 };

@@ -116,9 +116,23 @@ ModifierDescriptor ModifierScheduler::pickRandomDescriptor() const
 {
     if (prototypeCache.isEmpty())
         return {};
+    juce::Array<int> candidateIndices;
+    if (restrictToImplemented.load())
+    {
+        for (int i = 0; i < prototypeCache.size(); ++i)
+        {
+            auto t = prototypeCache[i]->getDescriptor().type;
+            if (t == ModifierType::Reverse || t == ModifierType::Speed || t == ModifierType::ResetAll)
+                candidateIndices.add(i);
+        }
+    }
+    if (candidateIndices.isEmpty())
+    {
+        for (int i = 0; i < prototypeCache.size(); ++i) candidateIndices.add(i);
+    }
     const juce::SpinLock::ScopedLockType lock(rngLock);
-    int index = rng.nextInt(prototypeCache.size());
-    return prototypeCache[index]->getDescriptor();
+    int choice = rng.nextInt(candidateIndices.size());
+    return prototypeCache[candidateIndices[choice]]->getDescriptor();
 }
 
 juce::Array<int> ModifierScheduler::selectTargetBuffers(const ModifierDescriptor& desc) const

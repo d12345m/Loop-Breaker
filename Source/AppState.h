@@ -95,7 +95,21 @@ struct AppState : public ModifierSchedulerListener
             }
             case ModifierType::ResetAll:
             {
-                bufferManager.resetAllBuffers();
+                // Preserve which buffers were playing; reset params & restart if they had audio loaded.
+                auto playing = bufferManager.getPlayingBufferIndices();
+                auto loaded = bufferManager.getLoadedBufferIndices();
+                for (int idx : loaded)
+                {
+                    if (auto* b = bufferManager.getBuffer(idx))
+                    {
+                        bool wasPlaying = playing.contains(idx);
+                        // Reset core params but keep loop + speed default (forward, 1.0)
+                        b->resetToDefaults();
+                        b->resetToBeginning();
+                        if (wasPlaying)
+                            b->play();
+                    }
+                }
                 break;
             }
             default:

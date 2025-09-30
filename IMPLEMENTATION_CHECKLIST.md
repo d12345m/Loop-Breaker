@@ -73,8 +73,9 @@ Legend:
 - [ ] Confirm multiple simultaneous buffer targets handled safely (needs concurrency review)
 - [ ] Logging hook: record triggered modifier type + targets (history panel currently logs descriptor only)
 - [x] Basic random speed selection (.25, .5, 1, 2) with inclusive list
-- [ ] Ensure ResetAll restores: speed=1, direction forward, slices exited, effects off (future‑proof; currently just defaults)
+- [-] Ensure ResetAll restores: speed=1, direction forward, slices exited, effects off (current: resets & restarts previously playing)
 - [ ] Provide dry run mode (no side effects) for preview (optional)
+- [x] Scheduler option: restrict random selection to implemented modifiers
 
 ---
 

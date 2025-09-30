@@ -64,6 +64,10 @@ public:
     bool isQuantizationEnabled() const { return quantizationEnabled.load(); }
     int  getQuantizationSubdivision() const { return subdivisionsPerBar.load(); }
 
+    // Limit random selection to implemented modifiers only (Reverse, Speed, ResetAll for now)
+    void setRestrictToImplemented(bool enabled) { restrictToImplemented.store(enabled); }
+    bool isRestrictToImplemented() const { return restrictToImplemented.load(); }
+
 private:
     const SessionSettings& settings; // reference to live settings
     bool running = false;
@@ -81,6 +85,8 @@ private:
     // Quantization parameters (atomic for safe UI thread mutation)
     std::atomic<bool> quantizationEnabled { false };
     std::atomic<int>  subdivisionsPerBar { 1 }; // 1 = whole bar
+
+    std::atomic<bool> restrictToImplemented { true }; // default: only schedule implemented modifiers
 
     void scheduleNextTrigger();
     void triggerIfDue();

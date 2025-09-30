@@ -18,7 +18,7 @@ Legend:
 - [x] Basic desktop test UI (`MainComponent`) for single buffer
 - [x] Architecture skeleton: modifiers, scheduler, project manager, session settings
 - [x] Pad grid & upcoming modifier display components (not yet integrated into runtime UI)
-- [ ] Unified main app UI using new architecture
+- [-] Unified main app UI using new architecture (new `MainAppComponent` active; legacy still present)
 
 ---
 
@@ -28,10 +28,12 @@ Legend:
 - [-] Integrate `AppState` inside new component (single ownership) (basic integration done; more exposure of settings forthcoming)
 - [x] Display: Pad grid (8 pads) + upcoming modifier display (top banner)
 - [x] Add basic transport controls (Play All / Stop All)
-- [-] Add per‑pad loaded file indicator (currently only status label shows last loaded; per-pad display pending)
+- [x] Add per‑pad loaded file indicator (filename label beneath each pad)
 - [x] Modal / panel for loading audio into each pad (desktop implementation via FileChooser; iOS adaptation pending)
-- [-] Wire pad selections to scheduler (`setUserSelectedBuffers`) (implemented via timer polling; direct callbacks & visual state improvements pending)
-- [-] Visual feedback when modifier triggers (status text only; pad flash/log area pending)
+- [x] Wire pad selections to scheduler (`setUserSelectedBuffers`) via direct pad selection callbacks (replaced polling)
+- [x] Visual feedback (pad flash overlay) when modifier triggers (basic)
+- [ ] Expanded visual feedback / log area for modifier history
+- [ ] Per‑pad playing-state indicator (highlight/outline while buffer active)
 - [ ] Replace old `MainComponent` once parity achieved
 
 ### Nice to Have (Defer until basics work)
@@ -246,3 +248,4 @@ Add clarifications inline as decisions are made.
 ## Progress Log (append entries)
 
 - 2025-09-30: Initial architecture skeleton & checklist created.
+- 2025-09-30: Added per-pad filename labels, direct selection callbacks, pad flash animation; updated checklist statuses.

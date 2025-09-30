@@ -38,7 +38,7 @@ MainAppComponent::MainAppComponent()
     setAudioChannels(0, 2);
     setSize(920, 600);
 
-    startTimerHz(10); // 100ms UI refresh / fallback time feed
+    startTimerHz(10); // 100ms UI refresh (status only now; selection via callbacks)
 }
 
 MainAppComponent::~MainAppComponent()
@@ -110,11 +110,11 @@ void MainAppComponent::modifierTriggered(const ModifierDescriptor& desc, const j
         for (int i = 0; i < targets.size(); ++i) targetStr << (i?",":"") << (targets[i]+1);
     }
     statusLabel.setText("Triggered: " + desc.shortName + " -> " + targetStr, juce::dontSendNotification);
+    padGrid.flashPads(targets);
 }
 
 void MainAppComponent::timerCallback()
 {
-    updatePadSelectionTargets();
     refreshStatus();
 }
 
@@ -155,6 +155,7 @@ void MainAppComponent::loadFileClicked()
         if (app.bufferManager.loadAudioFile(padIndex, f, formatManager))
         {
             statusLabel.setText("Loaded to Pad " + juce::String(padIndex+1) + ": " + f.getFileName(), juce::dontSendNotification);
+            padGrid.setPadFileName(padIndex, f.getFileNameWithoutExtension());
         } else {
             juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Load Failed", "Could not load file.");
         }
@@ -177,5 +178,5 @@ void MainAppComponent::refreshStatus()
 
 void MainAppComponent::attachPadCallbacks()
 {
-    // Currently polling via timer; optional direct callback wiring for future optimization.
+    padGrid.setSelectionChangedCallback([this]{ updatePadSelectionTargets(); });
 }

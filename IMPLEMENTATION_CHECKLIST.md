@@ -24,14 +24,14 @@ Legend:
 
 ## 1. UI Architecture Migration
 
-- [ ] Create `MainAppComponent` to replace `MainComponent` gradually
-- [ ] Integrate `AppState` inside new component (single ownership)
-- [ ] Display: Pad grid (8 pads) + upcoming modifier display (top banner)
-- [ ] Add basic transport controls (Play All / Stop All)
-- [ ] Add per‑pad loaded file indicator (filename or empty state)
-- [ ] Modal / panel for loading audio into each pad (desktop + iOS adapt later)
-- [ ] Wire pad selections to scheduler (`setUserSelectedBuffers`)
-- [ ] Visual feedback when modifier triggers (flash pads / text log area)
+- [x] Create `MainAppComponent` to replace `MainComponent` gradually
+- [-] Integrate `AppState` inside new component (single ownership) (basic integration done; more exposure of settings forthcoming)
+- [x] Display: Pad grid (8 pads) + upcoming modifier display (top banner)
+- [x] Add basic transport controls (Play All / Stop All)
+- [-] Add per‑pad loaded file indicator (currently only status label shows last loaded; per-pad display pending)
+- [x] Modal / panel for loading audio into each pad (desktop implementation via FileChooser; iOS adaptation pending)
+- [-] Wire pad selections to scheduler (`setUserSelectedBuffers`) (implemented via timer polling; direct callbacks & visual state improvements pending)
+- [-] Visual feedback when modifier triggers (status text only; pad flash/log area pending)
 - [ ] Replace old `MainComponent` once parity achieved
 
 ### Nice to Have (Defer until basics work)

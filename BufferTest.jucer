@@ -24,6 +24,8 @@
       <FILE id="appStateH" name="AppState.h" compile="0" resource="0" file="Source/AppState.h"/>
       <FILE id="padGridH" name="PadGridComponent.h" compile="0" resource="0" file="Source/PadGridComponent.h"/>
       <FILE id="upcomingModDispH" name="UpcomingModifierDisplay.h" compile="0" resource="0" file="Source/UpcomingModifierDisplay.h"/>
+      <FILE id="mainAppCompH" name="MainAppComponent.h" compile="0" resource="0" file="Source/MainAppComponent.h"/>
+      <FILE id="mainAppCompCpp" name="MainAppComponent.cpp" compile="1" resource="0" file="Source/MainAppComponent.cpp"/>
     </GROUP>
   </MAINGROUP>
   <MODULES>

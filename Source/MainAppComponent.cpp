@@ -31,6 +31,21 @@ MainAppComponent::MainAppComponent()
     addAndMakeVisible(statusLabel);
     statusLabel.setJustificationType(juce::Justification::centredLeft);
 
+    // Implemented-only toggle (default on)
+    implementedOnlyToggle.setToggleState(true, juce::dontSendNotification);
+    implementedOnlyToggle.onClick = [this]{ implementedOnlyToggled(); };
+    addAndMakeVisible(implementedOnlyToggle);
+
+    // BPM slider
+    bpmSlider.setRange(40.0, 240.0, 1.0);
+    bpmSlider.setValue(app.settings.bpm, juce::dontSendNotification);
+    bpmSlider.onValueChange = [this]{ bpmChanged(); };
+    bpmSlider.setSliderStyle(juce::Slider::LinearBar);
+    bpmSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 60, 20);
+    addAndMakeVisible(bpmSlider);
+    bpmLabel.attachToComponent(&bpmSlider, true);
+    addAndMakeVisible(bpmLabel);
+
     attachPadCallbacks();
 
     // Listen for scheduler callbacks
@@ -92,7 +107,14 @@ void MainAppComponent::resized()
     stopSchedulerButton.setBounds(controlBar.removeFromLeft(130).reduced(2));
     padSelectForLoad.setBounds(controlBar.removeFromLeft(110).reduced(2));
     loadFileButton.setBounds(controlBar.removeFromLeft(150).reduced(2));
-    statusLabel.setBounds(controlBar.reduced(2));
+    // Right side region for BPM & toggle & status
+    auto rightRegion = controlBar;
+    // Place BPM slider at the rightmost ~220px
+    auto bpmWidth = 200;
+    auto bpmArea = rightRegion.removeFromRight(bpmWidth);
+    bpmSlider.setBounds(bpmArea.reduced(2));
+    implementedOnlyToggle.setBounds(rightRegion.removeFromRight(140).reduced(2));
+    statusLabel.setBounds(rightRegion.reduced(2));
 
     area.removeFromTop(10);
     auto gridHeight = 300;
@@ -182,10 +204,23 @@ void MainAppComponent::refreshStatus()
     double secUntil = app.scheduler.getSecondsUntilNextTrigger();
     double barsUntil = app.scheduler.getBarsUntilNextTrigger();
     juce::String eta = juce::String(secUntil, 1) + "s / " + juce::String(barsUntil, 2) + " bars";
-    statusLabel.setText("Scheduler Running | Next in " + eta + " | Playing: " + juce::String(playing), juce::dontSendNotification);
+    statusLabel.setText("Scheduler Running | Next in " + eta + " | Playing: " + juce::String(playing) + " | BPM " + juce::String(app.settings.bpm, 0), juce::dontSendNotification);
 }
 
 void MainAppComponent::attachPadCallbacks()
 {
     padGrid.setSelectionChangedCallback([this]{ updatePadSelectionTargets(); });
+}
+
+void MainAppComponent::implementedOnlyToggled()
+{
+    bool enabled = implementedOnlyToggle.getToggleState();
+    app.scheduler.setRestrictToImplemented(enabled);
+}
+
+void MainAppComponent::bpmChanged()
+{
+    double newBpm = bpmSlider.getValue();
+    app.settings.bpm = newBpm; // Direct mutation; scheduler will pick up new bar length for future scheduling
+    refreshStatus();
 }

@@ -51,6 +51,9 @@ private:
     juce::TextButton loadFileButton { "Load File To Pad..." };
     juce::ComboBox padSelectForLoad;
     juce::Label statusLabel { {}, "Status: Idle" };
+  juce::ToggleButton implementedOnlyToggle { "Implemented Only" };
+  juce::Slider bpmSlider; // horizontal BPM control
+  juce::Label bpmLabel { {}, "BPM" };
 
     juce::AudioFormatManager formatManager;
     std::unique_ptr<juce::FileChooser> fileChooser;
@@ -68,6 +71,8 @@ private:
     void loadFileClicked();
     void updatePadSelectionTargets();
     void refreshStatus();
+  void implementedOnlyToggled();
+  void bpmChanged();
 
     void attachPadCallbacks();
 

@@ -60,7 +60,7 @@ Legend:
 - [ ] Unit test: Trigger exactly every N bars (tolerance < 1 audio block)
 - [ ] Support changing BPM at runtime (scheduler recalculates remaining time proportionally)
 - [ ] Support changing barsBetweenModifiers mid-cycle (policy: adjust next trigger using remaining proportion)
-- [ ] Quantized trigger option (align to nearest beat/subdivision even if window elapsed mid-beat)
+- [-] Quantized trigger option (core scheduling logic implemented; UI toggle & testing pending)
 - [x] Drift resilience: use absolute nextTriggerTime (monotonic) instead of resetting window accumulator
 - [ ] UI: optional countdown display (progress bar or beat pulses)
 

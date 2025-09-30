@@ -59,8 +59,35 @@ void ModifierScheduler::setUserSelectedBuffers(const juce::Array<int>& indices)
 
 void ModifierScheduler::scheduleNextTrigger()
 {
-    // Set next trigger absolute time from now using current settings
-    nextTriggerAbsoluteSeconds = accumulatedSecondsTotal + settings.getSecondsBetweenModifiers();
+    // Base unquantized target (absolute seconds)
+    double base = accumulatedSecondsTotal + settings.getSecondsBetweenModifiers();
+
+    if (quantizationEnabled.load())
+    {
+        const int subDiv = juce::jmax(1, subdivisionsPerBar.load());
+        const double secondsPerBar = settings.getSecondsPerBar();
+        const double secondsPerSubdivision = secondsPerBar / static_cast<double>(subDiv);
+
+        // Compute how many subdivisions have elapsed at 'base' time
+        double barsAtBase = base / secondsPerBar; // continuous
+        double subDivsAtBase = barsAtBase * subDiv;
+        // Snap forward to the NEXT integer subdivision boundary (ceiling) to avoid retrograde timing
+        double snappedSubDivIndex = std::ceil(subDivsAtBase - 1e-9); // small bias prevents floating errors near integer
+        double snappedBars = snappedSubDivIndex / subDiv;
+        double snappedTime = snappedBars * secondsPerBar;
+        // Safety: ensure snapped time is never earlier than a tiny horizon ahead of 'now'
+        const double minLead = 1e-5; // ~10 microseconds; effectively immediate next subdivision
+        if (snappedTime < accumulatedSecondsTotal + minLead)
+        {
+            // Advance one more subdivision if we somehow snapped to (or before) current time
+            snappedTime += secondsPerSubdivision;
+        }
+        nextTriggerAbsoluteSeconds = snappedTime;
+    }
+    else
+    {
+        nextTriggerAbsoluteSeconds = base;
+    }
 }
 
 void ModifierScheduler::triggerIfDue()
@@ -117,4 +144,15 @@ void ModifierScheduler::setRandomSeed(int64_t seed)
 {
     const juce::SpinLock::ScopedLockType lock(rngLock);
     rng.setSeed(static_cast<int64_t>(seed));
+}
+
+void ModifierScheduler::setQuantizationEnabled(bool enabled)
+{
+    quantizationEnabled.store(enabled);
+}
+
+void ModifierScheduler::setQuantizationSubdivision(int value)
+{
+    if (value < 1) value = 1;
+    subdivisionsPerBar.store(value);
 }

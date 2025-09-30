@@ -36,6 +36,15 @@ Legend:
 - [x] Per‑pad playing-state indicator (highlight/outline while buffer active)
 - [x] Replace old `MainComponent` (now gated & excluded by default build)
 
+#### Modifier History Panel Enhancements (incremental)
+
+- [ ] Clear button to manually purge history
+- [ ] Filter modes: All / Buffer-targeted only / Global-only
+- [ ] Display running count of total events (bounded by max entries)
+- [ ] Colour-code entries per modifier type (with legend)
+- [ ] Configurable max entries (auto-trim setting in SessionSettings)
+- [ ] (Persistence) integrate with existing project save once core persistence extended (see Section 8)
+
 ### Nice to Have (Defer until basics work)
 
 - [ ] Animated pad press feedback

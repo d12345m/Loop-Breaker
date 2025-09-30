@@ -18,7 +18,7 @@ Legend:
 - [x] Basic desktop test UI (`MainComponent`) for single buffer
 - [x] Architecture skeleton: modifiers, scheduler, project manager, session settings
 - [x] Pad grid & upcoming modifier display components (not yet integrated into runtime UI)
-- [-] Unified main app UI using new architecture (new `MainAppComponent` active; legacy still present)
+- [x] Unified main app UI using new architecture (legacy component gated off by macro)
 
 ---
 
@@ -34,7 +34,7 @@ Legend:
 - [x] Visual feedback (pad flash overlay) when modifier triggers (basic)
 - [ ] Expanded visual feedback / log area for modifier history
 - [x] Per‑pad playing-state indicator (highlight/outline while buffer active)
-- [ ] Replace old `MainComponent` once parity achieved
+- [x] Replace old `MainComponent` (now gated & excluded by default build)
 
 ### Nice to Have (Defer until basics work)
 

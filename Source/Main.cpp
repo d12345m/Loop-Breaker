@@ -7,14 +7,15 @@
 */
 
 #include <JuceHeader.h>
-#include "MainComponent.h"          // Legacy test UI
+#define LEGACY_MAIN_COMPONENT 0
+#if LEGACY_MAIN_COMPONENT
+ #include "MainComponent.h"          // Legacy test UI (gated)
+#endif
 #include "MainAppComponent.h"        // New evolving application UI
 
 // Toggle to switch between legacy test UI and new app UI.
 // Set to 1 to use new MainAppComponent, 0 to revert quickly if needed.
-#ifndef USE_NEW_MAIN_APP
-#define USE_NEW_MAIN_APP 1 // Temporarily off until Xcode project regenerated to include MainAppComponent.cpp
-#endif
+// New app UI is now the default; legacy component can be re-enabled by setting LEGACY_MAIN_COMPONENT to 1 above.
 
 //==============================================================================
 class BufferTestApplication  : public juce::JUCEApplication
@@ -72,10 +73,10 @@ public:
                               DocumentWindow::allButtons)
         {
             setUsingNativeTitleBar (true);
-           #if USE_NEW_MAIN_APP
-            setContentOwned (new MainAppComponent(), true);
-           #else
+           #if LEGACY_MAIN_COMPONENT
             setContentOwned (new MainComponent(), true);
+           #else
+            setContentOwned (new MainAppComponent(), true);
            #endif
 
            #if JUCE_IOS || JUCE_ANDROID

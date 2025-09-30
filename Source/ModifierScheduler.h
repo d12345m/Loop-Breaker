@@ -49,6 +49,11 @@ public:
     double getAccumulatedBars() const { return accumulatedSecondsTotal / settings.getSecondsPerBar(); }
     double getSecondsUntilNextTrigger() const { return juce::jmax(0.0, nextTriggerAbsoluteSeconds - accumulatedSecondsTotal); }
     double getBarsUntilNextTrigger() const { return getSecondsUntilNextTrigger() / settings.getSecondsPerBar(); }
+    double getProgressToNextTrigger() const {
+        double totalWindow = nextTriggerAbsoluteSeconds - lastTriggerAbsoluteSeconds;
+        if (totalWindow <= 0.0) return 0.0;
+        return juce::jlimit(0.0, 1.0, (accumulatedSecondsTotal - lastTriggerAbsoluteSeconds) / totalWindow);
+    }
 
     // Provide externally selected buffer indices (user pad selections)
     void setUserSelectedBuffers(const juce::Array<int>& indices);
@@ -73,6 +78,7 @@ private:
     bool running = false;
     double accumulatedSecondsTotal = 0.0;             // continuous timeline in seconds
     double nextTriggerAbsoluteSeconds = 0.0;           // absolute time of next trigger
+    double lastTriggerAbsoluteSeconds = 0.0;            // absolute time of previous trigger (or start)
 
     juce::OwnedArray<IModifier> prototypeCache; // list of available types
     std::optional<ModifierDescriptor> upcoming;

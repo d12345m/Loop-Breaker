@@ -144,6 +144,12 @@ void MainAppComponent::timerCallback()
 {
     refreshStatus();
     padGrid.setPlayingStates(app.bufferManager.getPlayingBufferIndices());
+    if (app.scheduler.isRunning())
+    {
+        modifierDisplay.setCountdown(app.scheduler.getSecondsUntilNextTrigger(),
+                                     app.scheduler.getBarsUntilNextTrigger(),
+                                     app.scheduler.getProgressToNextTrigger());
+    }
 }
 
 void MainAppComponent::playAllClicked()

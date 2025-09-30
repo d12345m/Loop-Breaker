@@ -102,6 +102,7 @@ void ModifierScheduler::triggerIfDue()
     for (auto* l : listeners) l->modifierTriggered(descriptor, targets);
 
     // Prepare next window
+    lastTriggerAbsoluteSeconds = accumulatedSecondsTotal;
     scheduleNextTrigger();
     selectNextModifier();
 }

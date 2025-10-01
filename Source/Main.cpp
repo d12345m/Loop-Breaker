@@ -7,6 +7,10 @@
 */
 
 #include <JuceHeader.h>
+// Fallback: ensure unit tests compiled in Debug even if project file not yet regenerated with defines
+#if !defined(JUCE_UNIT_TESTS) && (defined(JUCE_DEBUG) || defined(DEBUG))
+ #define JUCE_UNIT_TESTS 1
+#endif
 #define LEGACY_MAIN_COMPONENT 0
 #if LEGACY_MAIN_COMPONENT
  #include "MainComponent.h"          // Legacy test UI (gated)
@@ -31,8 +35,34 @@ public:
     //==============================================================================
     void initialise (const juce::String& commandLine) override
     {
-        // This method is where you should put your application's initialisation code..
-
+                // If launched with a test flag, run unit tests and exit (desktop only)
+#if ! (JUCE_IOS || JUCE_ANDROID)
+                if (commandLine.contains("--run-tests"))
+                {
+                    #if JUCE_UNIT_TESTS
+                        juce::Logger::writeToLog("Running JUCE unit tests...");
+                        struct CountingRunner : juce::UnitTestRunner {
+                            int failures = 0;
+                            void logMessage (const juce::String& m) override {
+                                juce::UnitTestRunner::logMessage(m);
+                                if (m.containsIgnoreCase("FAILED")) ++failures;
+                            }
+                        } runner;
+                        runner.setAssertOnFailure(false);
+                        runner.runAllTests();
+                        if (runner.failures > 0) {
+                            juce::Logger::writeToLog(juce::String(runner.failures) + " test failure line(s) detected.");
+                            std::exit(1);
+                        } else {
+                            juce::Logger::writeToLog("All tests passed.");
+                            std::exit(0);
+                        }
+                    #else
+                        juce::Logger::writeToLog("--run-tests specified but JUCE_UNIT_TESTS not enabled in this build.");
+                        std::exit(2);
+                    #endif
+                }
+#endif // desktop only test harness
         mainWindow.reset (new MainWindow (getApplicationName()));
     }
 

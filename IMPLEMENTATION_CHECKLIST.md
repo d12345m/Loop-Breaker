@@ -25,7 +25,7 @@ Legend:
 ## 1. UI Architecture Migration
 
 - [x] Create `MainAppComponent` to replace `MainComponent` gradually
-- [-] Integrate `AppState` inside new component (single ownership) (basic integration done; more exposure of settings forthcoming)
+- [x] Integrate `AppState` inside new component (single ownership) (core settings + listeners wired; further settings UI exposure still pending)
 - [x] Display: Pad grid (8 pads) + upcoming modifier display (top banner)
 - [x] Add basic transport controls (Play All / Stop All)
 - [x] Add per‑pad loaded file indicator (filename label beneath each pad)
@@ -60,20 +60,21 @@ Legend:
 - [ ] Unit test: Trigger exactly every N bars (tolerance < 1 audio block)
 - [ ] Support changing BPM at runtime (scheduler recalculates remaining time proportionally)
 - [ ] Support changing barsBetweenModifiers mid-cycle (policy: adjust next trigger using remaining proportion)
-- [-] Quantized trigger option (core scheduling logic implemented; UI toggle & testing pending)
+- [-] Quantized trigger option (core scheduling logic + progress API implemented; UI selector & full test coverage pending)
 - [x] Drift resilience: use absolute nextTriggerTime (monotonic) instead of resetting window accumulator
-- [ ] UI: optional countdown display (progress bar or beat pulses)
+- [x] UI: countdown / progress display (UpcomingModifierDisplay progress bar)
+- [x] Suppression mode: maintain visual progress while preventing modifier firing when modifiers toggle off
 
 ---
 
 ## 3. Modifier System (Phase 1: Non‑Audio Logic)
 
-- [-] Implement concrete classes for: Reverse, Speed, ResetAll (logic scaffolds added; SimpleModifierBase used)
-- [-] Apply logic to targeted buffers when modifier triggers (Reverse/Speed/ResetAll active)
+- [x] Implement concrete classes for: Reverse, Speed, ResetAll
+- [x] Apply logic to targeted buffers when modifier triggers (Reverse/Speed/ResetAll active)
 - [ ] Confirm multiple simultaneous buffer targets handled safely (needs concurrency review)
 - [ ] Logging hook: record triggered modifier type + targets (history panel currently logs descriptor only)
 - [x] Basic random speed selection (.25, .5, 1, 2) with inclusive list
-- [-] Ensure ResetAll restores: speed=1, direction forward, slices exited, effects off (current: resets & restarts previously playing)
+- [x] Ensure ResetAll semantics: preserve currently playing buffers (speed->1, direction forward, slices exited) while keeping playback running
 - [ ] Provide dry run mode (no side effects) for preview (optional)
 - [x] Scheduler option: restrict random selection to implemented modifiers
 
@@ -245,6 +246,30 @@ Legend:
 5. Introduce first unit tests (scheduler + reset)
 6. Replace legacy `MainComponent`
 
+Status: Items 1–4,6 completed; Item 5 pending.
+
+---
+
+## 21. Audio Artifact Mitigation (Experimental / Deferred)
+
+These items were prototyped to address clicks on rapid speed changes & reversals. Decision: defer and potentially roll back code to simplify baseline until broader DSP roadmap (Sections 5 & 6) advances.
+
+- [x] Reverse direction transition crossfade (equal-power) – EXPERIMENTAL (to be removed in rollback)
+- [x] Large same-direction speed jump crossfade with threshold detection – EXPERIMENTAL (to be removed in rollback)
+- [x] Parameterization of reverse & speed-jump crossfade lengths + threshold ratio – EXPERIMENTAL
+- [ ] Zero-cross alignment for transition points (Deferred)
+- [ ] Adaptive crossfade length scaling by speed delta magnitude (Deferred)
+- [ ] Formal measurement: pre/post click energy comparison (Deferred)
+- [ ] Configurable UI exposure of crossfade parameters (Deferred)
+
+Rollback Plan:
+
+1. Remove added crossfade state (reverse & speed-jump) from `AudioBuffer`.
+2. Retain existing slice crossfade + speed smoothing only.
+3. Keep checklist section so rationale & approach aren't lost.
+
+---
+
 ---
 
 ## Open Questions (Need clarification)
@@ -263,3 +288,5 @@ Add clarifications inline as decisions are made.
 - 2025-09-30: Initial architecture skeleton & checklist created.
 - 2025-09-30: Added per-pad filename labels, direct selection callbacks, pad flash animation; updated checklist statuses.
 - 2025-09-30: Implemented per-pad playing-state indicator (green outline updated via timer), unified UI refinement.
+- 2025-10-01: Integrated UpcomingModifierDisplay progress bar & suppression mode; scheduler now absolute-time with quantization backend; Reverse/Speed/ResetAll modifiers fully active with ResetAll preserving playback.
+- 2025-10-01: Implemented experimental reverse & speed-jump crossfades (artifact mitigation); decision made to defer & plan rollback; checklist updated to reflect true current state.

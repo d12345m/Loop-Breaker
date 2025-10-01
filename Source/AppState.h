@@ -111,6 +111,48 @@ struct AppState : public ModifierSchedulerListener
                 }
                 break;
             }
+            case ModifierType::BeatSliceRandom:
+            {
+                if (targets.isEmpty()) break;
+                // Musical division set (per bar) mapping factors relative to beatsPerBar
+                // 1/4, 1/8, 1/8T, 1/16, 1/32, 1/64
+                struct Division { const char* name; double factorPerBeat; }; // slices per beat
+                static const Division divisions[] {
+                    {"1/4", 1.0 / 1.0},   // 1 slice per beat
+                    {"1/8", 2.0 / 1.0},   // 2 slices per beat
+                    {"1/8T", 3.0 / 1.0},  // triplet: 3 per beat
+                    {"1/16", 4.0 / 1.0},  // 4 per beat
+                    {"1/32", 8.0 / 1.0},  // 8 per beat
+                    {"1/64", 16.0 / 1.0}, // 16 per beat
+                };
+                juce::Random r;
+                int choice = r.nextInt((int)std::size(divisions));
+                auto div = divisions[choice];
+
+                double beatsPerBar = settings.getBeatsPerBar();
+                double secondsPerBar = settings.getSecondsPerBar();
+
+                for (int idx : targets)
+                {
+                    if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
+                    {
+                        double durSeconds = b->getDurationInSeconds();
+                        if (durSeconds <= 0.0) continue;
+                        double approxBars = durSeconds / secondsPerBar;
+                        // Round to at least 1 bar; allow fractional scaling but clamp total slices
+                        double barsFactor = juce::jmax(1.0, approxBars);
+                        double slicesD = beatsPerBar * div.factorPerBeat * barsFactor;
+                        int slices = juce::jlimit(1, 64, (int)std::round(slicesD));
+                        if (slices < 2) continue; // no slicing benefit
+                        b->setNumSlices(slices);
+                        // Start continuous random slicing (will crossfade automatically)
+                        b->startContinuousRandomSlicing();
+                        if (!b->isPlaying())
+                            b->play(); // ensure playback so slicing audible
+                    }
+                }
+                break;
+            }
             default:
                 break; // Other types not yet implemented
         }

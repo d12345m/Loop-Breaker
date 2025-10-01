@@ -102,6 +102,10 @@ void ModifierScheduler::triggerIfDue()
         {
             auto targets = selectTargetBuffers(descriptor);
             for (auto* l : listeners) l->modifierTriggered(descriptor, targets);
+            // After a successful trigger, if user had explicitly selected buffers, clear them so
+            // next cycle requires fresh selection (pad UI will be updated by listener/owner).
+            if (!userSelectedBuffers.isEmpty())
+                userSelectedBuffers.clearQuick();
         }
         // Even if suppressed, we still advance scheduling windows & pick next upcoming
         lastTriggerAbsoluteSeconds = accumulatedSecondsTotal;

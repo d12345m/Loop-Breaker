@@ -39,7 +39,8 @@ namespace {
     class ResetAllModifier : public SimpleModifierBase
     {
     public:
-        ResetAllModifier() : SimpleModifierBase({ ModifierType::ResetAll, ModifierCategory::GlobalUtility, "Reset", "Reset all buffers" }) {}
+        // Re-categorized as BufferTransform so it behaves like a pad-targeted modifier instead of global.
+        ResetAllModifier() : SimpleModifierBase({ ModifierType::ResetAll, ModifierCategory::BufferTransform, "Reset", "Reset selected buffers to defaults" }) {}
         bool begin(const ModifierContext& ctx) override;
     };
 
@@ -77,8 +78,8 @@ juce::OwnedArray<IModifier> ModifierFactory::createAllPrototypes()
     add(ModifierType::MasterHighPassOn, ModifierCategory::MasterEffect, "MHPF", "Master high pass on");
     add(ModifierType::MasterLowPassOff, ModifierCategory::MasterEffect, "MLPFoff", "Master low pass off");
 
-    // Global
-    add(ModifierType::ResetAll, ModifierCategory::GlobalUtility, "Reset", "Reset all modifiers / FX");
+    // Reset (pad-targeted: previously global, now treated as buffer transform)
+    add(ModifierType::ResetAll, ModifierCategory::BufferTransform, "Reset", "Reset selected buffers / FX state");
 
     return list;
 }

@@ -157,6 +157,13 @@ void MainAppComponent::modifierTriggered(const ModifierDescriptor& desc, const j
     statusLabel.setText("Triggered: " + desc.shortName + " -> " + targetStr, juce::dontSendNotification);
     padGrid.flashPads(targets);
     modifierHistory.addEntry(desc, targets);
+    // If specific user-selected pads were targeted, clear their selection state so user
+    // must actively choose new targets for the next modifier cycle.
+    if (!targets.isEmpty())
+    {
+        padGrid.clearSelections();
+        // Scheduler already cleared its internal userSelectedBuffers; no need to update again.
+    }
 }
 
 void MainAppComponent::timerCallback()

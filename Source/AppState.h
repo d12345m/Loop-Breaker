@@ -95,19 +95,18 @@ struct AppState : public ModifierSchedulerListener
             }
             case ModifierType::ResetAll:
             {
-                // Preserve which buffers were playing; reset params & restart if they had audio loaded.
+                // Reset only targeted buffers (now pad-specific). If no targets array provided, scheduler
+                // has already randomized targets; we thus expect non-empty list or treat empty as no-op.
+                if (targets.isEmpty()) break;
                 auto playing = bufferManager.getPlayingBufferIndices();
-                auto loaded = bufferManager.getLoadedBufferIndices();
-                for (int idx : loaded)
+                for (int idx : targets)
                 {
                     if (auto* b = bufferManager.getBuffer(idx))
                     {
                         bool wasPlaying = playing.contains(idx);
-                        // Reset core params but keep loop + speed default (forward, 1.0)
                         b->resetToDefaults();
                         b->resetToBeginning();
-                        if (wasPlaying)
-                            b->play();
+                        if (wasPlaying) b->play();
                     }
                 }
                 break;

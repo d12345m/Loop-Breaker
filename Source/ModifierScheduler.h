@@ -78,6 +78,13 @@ public:
     void setRestrictToImplemented(bool enabled) { restrictToImplemented.store(enabled); }
     bool isRestrictToImplemented() const { return restrictToImplemented.load(); }
 
+#if defined (JUCE_DEBUG) || defined (JUCE_UNIT_TESTS)
+    // Test inspection helpers (not for production use)
+    double TEST_getNextTriggerAbsoluteSeconds() const { return nextTriggerAbsoluteSeconds; }
+    double TEST_getLastTriggerAbsoluteSeconds() const { return lastTriggerAbsoluteSeconds; }
+    void   TEST_offsetNextTriggerSeconds(double delta) { nextTriggerAbsoluteSeconds += delta; }
+#endif
+
 private:
     const SessionSettings& settings; // reference to live settings
     bool running = false;
@@ -105,6 +112,7 @@ private:
     void broadcastUpcoming();
     ModifierDescriptor pickRandomDescriptor() const;
     juce::Array<int> selectTargetBuffers(const ModifierDescriptor& desc) const;
+    void maybeResnapQuantized();
 
     juce::Array<ModifierSchedulerListener*> listeners;
 };

@@ -166,11 +166,29 @@ void ModifierScheduler::setRandomSeed(int64_t seed)
 
 void ModifierScheduler::setQuantizationEnabled(bool enabled)
 {
-    quantizationEnabled.store(enabled);
+    bool was = quantizationEnabled.exchange(enabled);
+    if (running && was != enabled)
+        maybeResnapQuantized();
 }
 
 void ModifierScheduler::setQuantizationSubdivision(int value)
 {
     if (value < 1) value = 1;
-    subdivisionsPerBar.store(value);
+    int prev = subdivisionsPerBar.exchange(value);
+    if (running && prev != value && quantizationEnabled.load())
+        maybeResnapQuantized();
+}
+
+void ModifierScheduler::maybeResnapQuantized()
+{
+    if (!quantizationEnabled.load()) return;
+    // Recompute nextTriggerAbsoluteSeconds by treating current remaining time proportionally within new grid.
+    // Simpler approach: snap from 'now' using remaining barsBetweenModifiers window boundaries.
+    // We keep the existing upcoming selection but adjust the trigger wall-clock.
+    double remaining = nextTriggerAbsoluteSeconds - accumulatedSecondsTotal;
+    if (remaining < 0.0) remaining = 0.0;
+    // Base new scheduling from now respecting full barsBetweenModifiers distance then quantize forward.
+    // Reuse scheduleNextTrigger logic but temporarily adjust lastTrigger so progress stays monotonic.
+    lastTriggerAbsoluteSeconds = accumulatedSecondsTotal; // restart window
+    scheduleNextTrigger();
 }

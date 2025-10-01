@@ -60,7 +60,7 @@ Legend:
 - [ ] Unit test: Trigger exactly every N bars (tolerance < 1 audio block)
 - [ ] Support changing BPM at runtime (scheduler recalculates remaining time proportionally)
 - [ ] Support changing barsBetweenModifiers mid-cycle (policy: adjust next trigger using remaining proportion)
-- [-] Quantized trigger option (core scheduling logic + progress API implemented; UI selector & full test coverage pending)
+- [x] Quantized trigger option (UI toggle + subdivision selector + resnap logic + unit test)
 - [x] Drift resilience: use absolute nextTriggerTime (monotonic) instead of resetting window accumulator
 - [x] UI: countdown / progress display (UpcomingModifierDisplay progress bar)
 - [x] Suppression mode: maintain visual progress while preventing modifier firing when modifiers toggle off

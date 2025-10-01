@@ -37,6 +37,19 @@ MainAppComponent::MainAppComponent()
     implementedOnlyToggle.onClick = [this]{ implementedOnlyToggled(); };
     addAndMakeVisible(implementedOnlyToggle);
 
+    // Quantization toggle & subdivision selector
+    quantizeToggle.setToggleState(false, juce::dontSendNotification);
+    quantizeToggle.onClick = [this]{ quantizeToggled(); };
+    addAndMakeVisible(quantizeToggle);
+    quantizeSubdivisionBox.addItem("Bar", 1);          // 1
+    quantizeSubdivisionBox.addItem("1/2", 2);          // 2
+    quantizeSubdivisionBox.addItem("1/4 (Beat)", 3);   // internally map to 4 later (IDs must be unique)
+    quantizeSubdivisionBox.addItem("1/8", 4);          // map to 8
+    quantizeSubdivisionBox.addItem("1/16", 5);         // map to 16
+    quantizeSubdivisionBox.setSelectedId(3, juce::dontSendNotification); // default beats
+    quantizeSubdivisionBox.onChange = [this]{ quantizeSubdivisionChanged(); };
+    addAndMakeVisible(quantizeSubdivisionBox);
+
     // BPM slider
     bpmSlider.setRange(40.0, 240.0, 1.0);
     bpmSlider.setValue(app.settings.bpm, juce::dontSendNotification);
@@ -118,6 +131,8 @@ void MainAppComponent::resized()
     // Add a small horizontal gap before the toggle to visually separate
     rightRegion.removeFromRight(36);
     implementedOnlyToggle.setBounds(rightRegion.removeFromRight(150).reduced(2));
+    quantizeSubdivisionBox.setBounds(rightRegion.removeFromRight(110).reduced(2));
+    quantizeToggle.setBounds(rightRegion.removeFromRight(100).reduced(2));
     statusLabel.setBounds(rightRegion.reduced(2));
 
     area.removeFromTop(10);
@@ -227,6 +242,34 @@ void MainAppComponent::implementedOnlyToggled()
 {
     bool enabled = implementedOnlyToggle.getToggleState();
     app.scheduler.setRestrictToImplemented(enabled);
+}
+
+static int mapQuantizeIdToSubdivision(int id)
+{
+    switch(id)
+    {
+        case 1: return 1;  // Bar
+        case 2: return 2;  // Half bar
+        case 3: return 4;  // Beat (assuming 4/4)
+        case 4: return 8;  // 8th
+        case 5: return 16; // 16th
+        default: return 4;
+    }
+}
+
+void MainAppComponent::quantizeToggled()
+{
+    bool enabled = quantizeToggle.getToggleState();
+    app.scheduler.setQuantizationEnabled(enabled);
+    if (enabled)
+        quantizeSubdivisionChanged(); // apply current selection
+}
+
+void MainAppComponent::quantizeSubdivisionChanged()
+{
+    int id = quantizeSubdivisionBox.getSelectedId();
+    int subdiv = mapQuantizeIdToSubdivision(id);
+    app.scheduler.setQuantizationSubdivision(subdiv);
 }
 
 void MainAppComponent::bpmChanged()

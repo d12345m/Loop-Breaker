@@ -40,26 +40,33 @@ public:
                 if (commandLine.contains("--run-tests"))
                 {
                     #if JUCE_UNIT_TESTS
-                        juce::Logger::writeToLog("Running JUCE unit tests...");
-                        struct CountingRunner : juce::UnitTestRunner {
-                            int failures = 0;
-                            void logMessage (const juce::String& m) override {
-                                juce::UnitTestRunner::logMessage(m);
-                                if (m.containsIgnoreCase("FAILED")) ++failures;
-                            }
-                        } runner;
-                        runner.setAssertOnFailure(false);
-                        runner.runAllTests();
-                        if (runner.failures > 0) {
-                            juce::Logger::writeToLog(juce::String(runner.failures) + " test failure line(s) detected.");
-                            std::exit(1);
-                        } else {
-                            juce::Logger::writeToLog("All tests passed.");
-                            std::exit(0);
-                        }
+            testMode = true;
+            juce::Logger::writeToLog("Running JUCE unit tests (graceful shutdown mode)...");
+            struct CountingRunner : juce::UnitTestRunner {
+                int failures = 0;
+                void logMessage (const juce::String& m) override {
+                    juce::UnitTestRunner::logMessage(m);
+                    if (m.containsIgnoreCase("FAILED")) ++failures;
+                }
+            } runner;
+            runner.setAssertOnFailure(false);
+            runner.runAllTests();
+            if (runner.failures > 0) {
+                juce::Logger::writeToLog(juce::String(runner.failures) + " failure line(s) detected.");
+                setApplicationReturnValue(1);
+            } else {
+                juce::Logger::writeToLog("All tests passed.");
+                setApplicationReturnValue(0);
+            }
+            // Trigger standard JUCE shutdown path to allow leak detectors a clean teardown
+            quit();
+            return;
                     #else
-                        juce::Logger::writeToLog("--run-tests specified but JUCE_UNIT_TESTS not enabled in this build.");
-                        std::exit(2);
+            testMode = true;
+            juce::Logger::writeToLog("--run-tests specified but JUCE_UNIT_TESTS not enabled in this build.");
+            setApplicationReturnValue(2);
+            quit();
+            return;
                     #endif
                 }
 #endif // desktop only test harness
@@ -140,6 +147,7 @@ public:
 
 private:
     std::unique_ptr<MainWindow> mainWindow;
+    bool testMode = false; // if true we avoid extra UI allocations after tests
 };
 
 //==============================================================================

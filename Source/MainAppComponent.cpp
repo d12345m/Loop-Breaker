@@ -66,6 +66,9 @@ MainAppComponent::MainAppComponent()
     modifierSelectionPanel.setForceSelectionCallback([this](ModifierType type){
         app.scheduler.forceUpcomingModifier(type);
     });
+    modifierSelectionPanel.setForceVariantCallback([this](ModifierType type, const juce::String& variant){
+        app.scheduler.forceUpcomingVariant(type, variant);
+    });
 
     // Listen for scheduler callbacks
     app.scheduler.addListener(this);

@@ -80,6 +80,7 @@ public:
 
     // Force upcoming modifier (developer/testing aid). If type not found, ignored.
     void forceUpcomingModifier(ModifierType type);
+    void forceUpcomingVariant(ModifierType type, const juce::String& variant);
 
 #if defined (JUCE_DEBUG) || defined (JUCE_UNIT_TESTS)
     // Test inspection helpers (not for production use)
@@ -110,12 +111,17 @@ private:
     std::atomic<bool> restrictToImplemented { true }; // default: only schedule implemented modifiers
     std::atomic<bool> suppressed { false }; // skip firing while keeping progress
 
+    // Variant planning for upcoming modifier (developer detail shown in UI)
+    double plannedSpeedValue = 1.0; // for Speed modifier
+    juce::String plannedSliceLabel; // for BeatSliceRandom e.g. "12 slices" or division
+
     void scheduleNextTrigger();
     void triggerIfDue();
     void broadcastUpcoming();
     ModifierDescriptor pickRandomDescriptor() const;
     juce::Array<int> selectTargetBuffers(const ModifierDescriptor& desc) const;
     void maybeResnapQuantized();
+    ModifierDescriptor prepareVariantDescriptor(const ModifierDescriptor& base) const;
 
     juce::Array<ModifierSchedulerListener*> listeners;
 };

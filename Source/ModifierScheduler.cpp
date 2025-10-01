@@ -39,7 +39,8 @@ void ModifierScheduler::stop()
 
 void ModifierScheduler::selectNextModifier()
 {
-    upcoming = pickRandomDescriptor();
+    auto base = pickRandomDescriptor();
+    upcoming = prepareVariantDescriptor(base);
     broadcastUpcoming();
 }
 
@@ -134,6 +135,32 @@ void ModifierScheduler::forceUpcomingModifier(ModifierType type)
     }
 }
 
+void ModifierScheduler::forceUpcomingVariant(ModifierType type, const juce::String& variant)
+{
+    for (auto* proto : prototypeCache)
+    {
+        if (proto->getDescriptor().type == type)
+        {
+            auto base = proto->getDescriptor();
+            if (type == ModifierType::Speed)
+            {
+                double val = variant.getDoubleValue();
+                if (val <= 0.0) val = 1.0;
+                plannedSpeedValue = val;
+                base.description = base.description + " -> " + juce::String(val, 2) + "x";
+            }
+            else if (type == ModifierType::BeatSliceRandom)
+            {
+                plannedSliceLabel = variant; // expect one of division labels
+                base.description = base.description + " -> " + plannedSliceLabel;
+            }
+            upcoming = base;
+            broadcastUpcoming();
+            return;
+        }
+    }
+}
+
 ModifierDescriptor ModifierScheduler::pickRandomDescriptor() const
 {
     if (prototypeCache.isEmpty())
@@ -155,6 +182,30 @@ ModifierDescriptor ModifierScheduler::pickRandomDescriptor() const
     const juce::SpinLock::ScopedLockType lock(rngLock);
     int choice = rng.nextInt(candidateIndices.size());
     return prototypeCache[candidateIndices[choice]]->getDescriptor();
+}
+
+ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDescriptor& base) const
+{
+    ModifierDescriptor modified = base;
+    if (base.type == ModifierType::Speed)
+    {
+        static const double speeds[] { 0.25, 0.5, 1.0, 2.0 };
+        const juce::SpinLock::ScopedLockType lock(rngLock);
+        double chosen = speeds[rng.nextInt((int)std::size(speeds))];
+        const_cast<ModifierScheduler*>(this)->plannedSpeedValue = chosen; // persist for trigger
+        modified.description = base.description + " -> " + juce::String(chosen, 2) + "x";
+    }
+    else if (base.type == ModifierType::BeatSliceRandom)
+    {
+        // Choose division label
+        static const juce::StringArray sliceOptions { "1/4", "1/8", "1/8T", "1/16", "1/32", "1/64" };
+        const juce::SpinLock::ScopedLockType lock(rngLock);
+        int idx = rng.nextInt(sliceOptions.size());
+        juce::String label = sliceOptions[idx];
+        const_cast<ModifierScheduler*>(this)->plannedSliceLabel = label; // e.g. used by UI / potential future logic
+        modified.description = base.description + " -> " + label;
+    }
+    return modified;
 }
 
 juce::Array<int> ModifierScheduler::selectTargetBuffers(const ModifierDescriptor& desc) const

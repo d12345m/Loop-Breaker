@@ -7,6 +7,7 @@ class ModifierSelectionPanel : public juce::Component
 {
 public:
     using SelectionCallback = std::function<void(ModifierType)>;
+    using VariantCallback = std::function<void(ModifierType, const juce::String&)>;
 
     ModifierSelectionPanel()
     {
@@ -31,9 +32,20 @@ public:
         };
 
         addToggle(ModifierType::Reverse, "Reverse");
-        addToggle(ModifierType::Speed, "Speed");
+        addToggle(ModifierType::Speed, "Speed (rand)");
+        // Speed variants
+        addVariantToggle(ModifierType::Speed, "Speed 0.25x", "0.25");
+        addVariantToggle(ModifierType::Speed, "Speed 0.50x", "0.5");
+        addVariantToggle(ModifierType::Speed, "Speed 1.00x", "1.0");
+        addVariantToggle(ModifierType::Speed, "Speed 2.00x", "2.0");
         addToggle(ModifierType::ResetAll, "Reset");
-        addToggle(ModifierType::BeatSliceRandom, "Slice");
+        addToggle(ModifierType::BeatSliceRandom, "Slice (rand)");
+        addVariantToggle(ModifierType::BeatSliceRandom, "Slice 1/4", "1/4");
+        addVariantToggle(ModifierType::BeatSliceRandom, "Slice 1/8", "1/8");
+        addVariantToggle(ModifierType::BeatSliceRandom, "Slice 1/8T", "1/8T");
+        addVariantToggle(ModifierType::BeatSliceRandom, "Slice 1/16", "1/16");
+        addVariantToggle(ModifierType::BeatSliceRandom, "Slice 1/32", "1/32");
+        addVariantToggle(ModifierType::BeatSliceRandom, "Slice 1/64", "1/64");
     }
 
     void resized() override
@@ -45,8 +57,25 @@ public:
     }
 
     void setForceSelectionCallback(SelectionCallback cb) { onForceSelection = std::move(cb); }
+    void setForceVariantCallback(VariantCallback cb) { onForceVariant = std::move(cb); }
 
 private:
     juce::OwnedArray<juce::ToggleButton> toggles;
     SelectionCallback onForceSelection;
+    VariantCallback onForceVariant;
+
+    void addVariantToggle(ModifierType type, const juce::String& label, const juce::String& variant)
+    {
+        auto* t = toggles.add(new juce::ToggleButton(label));
+        t->onClick = [this, type, variant, t]
+        {
+            if (t->getToggleState())
+            {
+                for (auto* other : toggles)
+                    if (other != t) other->setToggleState(false, juce::dontSendNotification);
+                if (onForceVariant) onForceVariant(type, variant);
+            }
+        };
+        addAndMakeVisible(t);
+    }
 };

@@ -46,115 +46,114 @@ struct AppState : public ModifierSchedulerListener
 
     void modifierTriggered(const ModifierDescriptor& desc, const juce::Array<int>& targets) override
     {
-        // Apply immediate, stateless modifier effects to targeted buffers.
         switch (desc.type)
         {
             case ModifierType::Reverse:
-            {
-                auto applyReverse = [&](AudioBuffer* b)
-                {
-                    if (!b) return;
-                    double current = b->getSpeed();
-                    if (current == 0.0) current = 1.0; // avoid zero speed flip
-                    b->setSpeed(-current); // flipping sign reverses playback direction
-                };
-                if (targets.isEmpty())
-                {
-                    // If no explicit targets, treat as global buffer transform: apply to all loaded
-                    auto loaded = bufferManager.getLoadedBufferIndices();
-                    for (int idx : loaded) applyReverse(bufferManager.getBuffer(idx));
-                }
-                else
-                {
-                    for (int idx : targets) applyReverse(bufferManager.getBuffer(idx));
-                }
+                applyReverse(targets);
                 break;
-            }
             case ModifierType::Speed:
-            {
-                // Choose a random discrete speed per trigger (shared for all targets) for musical cohesion
-                static const double speeds[] { 0.25, 0.5, 1.0, 2.0 };
-                juce::Random r;
-                double newSpeed = speeds[r.nextInt((int)std::size(speeds))];
-                auto applySpeed = [&](AudioBuffer* b)
-                {
-                    if (!b) return;
-                    double sign = b->getSpeed() < 0.0 ? -1.0 : 1.0; // preserve direction
-                    b->setSpeed(sign * newSpeed);
-                };
-                if (targets.isEmpty())
-                {
-                    auto loaded = bufferManager.getLoadedBufferIndices();
-                    for (int idx : loaded) applySpeed(bufferManager.getBuffer(idx));
-                }
-                else
-                {
-                    for (int idx : targets) applySpeed(bufferManager.getBuffer(idx));
-                }
+                applySpeed(desc, targets);
                 break;
-            }
             case ModifierType::ResetAll:
-            {
-                // Reset only targeted buffers (now pad-specific). If no targets array provided, scheduler
-                // has already randomized targets; we thus expect non-empty list or treat empty as no-op.
-                if (targets.isEmpty()) break;
-                auto playing = bufferManager.getPlayingBufferIndices();
-                for (int idx : targets)
-                {
-                    if (auto* b = bufferManager.getBuffer(idx))
-                    {
-                        bool wasPlaying = playing.contains(idx);
-                        b->resetToDefaults();
-                        b->resetToBeginning();
-                        if (wasPlaying) b->play();
-                    }
-                }
+                applyReset(targets);
                 break;
-            }
             case ModifierType::BeatSliceRandom:
-            {
-                if (targets.isEmpty()) break;
-                // Musical division set (per bar) mapping factors relative to beatsPerBar
-                // 1/4, 1/8, 1/8T, 1/16, 1/32, 1/64
-                struct Division { const char* name; double factorPerBeat; }; // slices per beat
-                static const Division divisions[] {
-                    {"1/4", 1.0 / 1.0},   // 1 slice per beat
-                    {"1/8", 2.0 / 1.0},   // 2 slices per beat
-                    {"1/8T", 3.0 / 1.0},  // triplet: 3 per beat
-                    {"1/16", 4.0 / 1.0},  // 4 per beat
-                    {"1/32", 8.0 / 1.0},  // 8 per beat
-                    {"1/64", 16.0 / 1.0}, // 16 per beat
-                };
-                juce::Random r;
-                int choice = r.nextInt((int)std::size(divisions));
-                auto div = divisions[choice];
-
-                double beatsPerBar = settings.getBeatsPerBar();
-                double secondsPerBar = settings.getSecondsPerBar();
-
-                for (int idx : targets)
-                {
-                    if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
-                    {
-                        double durSeconds = b->getDurationInSeconds();
-                        if (durSeconds <= 0.0) continue;
-                        double approxBars = durSeconds / secondsPerBar;
-                        // Round to at least 1 bar; allow fractional scaling but clamp total slices
-                        double barsFactor = juce::jmax(1.0, approxBars);
-                        double slicesD = beatsPerBar * div.factorPerBeat * barsFactor;
-                        int slices = juce::jlimit(1, 64, (int)std::round(slicesD));
-                        if (slices < 2) continue; // no slicing benefit
-                        b->setNumSlices(slices);
-                        // Start continuous random slicing (will crossfade automatically)
-                        b->startContinuousRandomSlicing();
-                        if (!b->isPlaying())
-                            b->play(); // ensure playback so slicing audible
-                    }
-                }
+                applyBeatSliceRandom(desc, targets);
                 break;
-            }
             default:
-                break; // Other types not yet implemented
+                break; // Unimplemented modifiers ignored for now
+        }
+    }
+private:
+    void applyReverse(const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        for (int idx : targets)
+        {
+            if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
+            {
+                double s = b->getSpeed();
+                if (s == 0.0) s = 1.0;
+                b->setSpeed(-std::abs(s));
+                if (!b->isPlaying()) b->play();
+            }
+        }
+    }
+
+    void applySpeed(const ModifierDescriptor& desc, const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        // Parse planned speed value from description after '->'
+        double speedVal = 1.0;
+        auto text = desc.description;
+        int arrow = text.lastIndexOf("->");
+        if (arrow >= 0)
+        {
+            auto part = text.substring(arrow + 2).trim(); // e.g. "0.50x"
+            if (part.endsWithIgnoreCase("x"))
+                part = part.dropLastCharacters(1);
+            double v = part.getDoubleValue();
+            if (v > 0.0) speedVal = v;
+        }
+        for (int idx : targets)
+        {
+            if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
+            {
+                b->setSpeed(speedVal);
+                if (!b->isPlaying()) b->play();
+            }
+        }
+    }
+
+    void applyReset(const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        auto playing = bufferManager.getPlayingBufferIndices();
+        for (int idx : targets)
+        {
+            if (auto* b = bufferManager.getBuffer(idx))
+            {
+                bool wasPlaying = playing.contains(idx);
+                b->resetToDefaults();
+                b->resetToBeginning();
+                if (wasPlaying) b->play();
+            }
+        }
+    }
+
+    void applyBeatSliceRandom(const ModifierDescriptor& desc, const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        struct Division { juce::String name; double factorPerBeat; };
+        static const Division divisions[] {
+            {"1/4", 1.0}, {"1/8", 2.0}, {"1/8T", 3.0}, {"1/16", 4.0}, {"1/32", 8.0}, {"1/64", 16.0 }
+        };
+        Division chosen {"1/8", 2.0};
+        auto dd = desc.description;
+        int arrow = dd.lastIndexOf("->");
+        if (arrow >= 0)
+        {
+            auto label = dd.substring(arrow + 2).trim();
+            for (auto& d : divisions)
+                if (label == d.name) { chosen = d; break; }
+        }
+        double beatsPerBar = settings.getBeatsPerBar();
+        double secondsPerBar = settings.getSecondsPerBar();
+        for (int idx : targets)
+        {
+            if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
+            {
+                double durSeconds = b->getDurationInSeconds();
+                if (durSeconds <= 0.0) continue;
+                double approxBars = durSeconds / secondsPerBar;
+                double barsFactor = juce::jmax(1.0, approxBars);
+                double slicesD = beatsPerBar * chosen.factorPerBeat * barsFactor;
+                int slices = juce::jlimit(1, 64, (int)std::round(slicesD));
+                if (slices < 2) continue;
+                b->setNumSlices(slices);
+                b->startContinuousRandomSlicing();
+                if (!b->isPlaying()) b->play();
+            }
         }
     }
 };

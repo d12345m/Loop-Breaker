@@ -130,7 +130,7 @@ ModifierDescriptor ModifierScheduler::pickRandomDescriptor() const
         for (int i = 0; i < prototypeCache.size(); ++i)
         {
             auto t = prototypeCache[i]->getDescriptor().type;
-            if (t == ModifierType::Reverse || t == ModifierType::Speed || t == ModifierType::ResetAll)
+            if (t == ModifierType::Reverse || t == ModifierType::Speed || t == ModifierType::ResetAll || t == ModifierType::BeatSliceRandom)
                 candidateIndices.add(i);
         }
     }

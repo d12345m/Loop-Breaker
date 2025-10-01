@@ -78,6 +78,9 @@ public:
     void setRestrictToImplemented(bool enabled) { restrictToImplemented.store(enabled); }
     bool isRestrictToImplemented() const { return restrictToImplemented.load(); }
 
+    // Force upcoming modifier (developer/testing aid). If type not found, ignored.
+    void forceUpcomingModifier(ModifierType type);
+
 #if defined (JUCE_DEBUG) || defined (JUCE_UNIT_TESTS)
     // Test inspection helpers (not for production use)
     double TEST_getNextTriggerAbsoluteSeconds() const { return nextTriggerAbsoluteSeconds; }

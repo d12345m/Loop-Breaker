@@ -120,6 +120,20 @@ void ModifierScheduler::broadcastUpcoming()
     for (auto* l : listeners) l->upcomingModifierChanged(upcoming.value());
 }
 
+void ModifierScheduler::forceUpcomingModifier(ModifierType type)
+{
+    // Find prototype descriptor for given type
+    for (auto* proto : prototypeCache)
+    {
+        if (proto->getDescriptor().type == type)
+        {
+            upcoming = proto->getDescriptor();
+            broadcastUpcoming();
+            return;
+        }
+    }
+}
+
 ModifierDescriptor ModifierScheduler::pickRandomDescriptor() const
 {
     if (prototypeCache.isEmpty())

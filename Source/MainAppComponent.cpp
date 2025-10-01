@@ -16,6 +16,7 @@ MainAppComponent::MainAppComponent()
     addAndMakeVisible(modifierDisplay);
     addAndMakeVisible(padGrid);
     addAndMakeVisible(modifierHistory);
+    addAndMakeVisible(modifierSelectionPanel);
 
     addAndMakeVisible(playAllButton); playAllButton.onClick = [this]{ playAllClicked(); };
     addAndMakeVisible(stopAllButton); stopAllButton.onClick = [this]{ stopAllClicked(); };
@@ -61,6 +62,10 @@ MainAppComponent::MainAppComponent()
     addAndMakeVisible(bpmLabel);
 
     attachPadCallbacks();
+
+    modifierSelectionPanel.setForceSelectionCallback([this](ModifierType type){
+        app.scheduler.forceUpcomingModifier(type);
+    });
 
     // Listen for scheduler callbacks
     app.scheduler.addListener(this);
@@ -139,7 +144,11 @@ void MainAppComponent::resized()
     auto gridHeight = 300;
     padGrid.setBounds(area.removeFromTop(gridHeight));
     area.removeFromTop(6);
-    modifierHistory.setBounds(area);
+    // Split remaining bottom area: left = history, right = modifier selection panel
+    auto bottomArea = area;
+    auto rightPanel = bottomArea.removeFromRight(bottomArea.getWidth() / 3).reduced(4);
+    modifierSelectionPanel.setBounds(rightPanel);
+    modifierHistory.setBounds(bottomArea.reduced(2));
 }
 
 void MainAppComponent::upcomingModifierChanged(const ModifierDescriptor& desc)

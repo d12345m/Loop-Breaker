@@ -15,6 +15,7 @@
 #include "PadGridComponent.h"
 #include "UpcomingModifierDisplay.h"
 #include "ModifierHistoryPanel.h"
+#include "ModifierSelectionPanel.h"
 
 class MainAppComponent : public juce::AudioAppComponent,
                          public ModifierSchedulerListener,
@@ -44,6 +45,7 @@ private:
     UpcomingModifierDisplay modifierDisplay;
   ModifierHistoryPanel modifierHistory;
     PadGridComponent padGrid;
+  ModifierSelectionPanel modifierSelectionPanel; // new developer panel
     juce::TextButton playAllButton { "Play All" };
     juce::TextButton stopAllButton { "Stop All" };
   juce::ToggleButton modifiersToggle { "Modifiers" }; // Links playback to scheduler when ON

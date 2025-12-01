@@ -30,12 +30,19 @@ public:
             else if (desc->plannedDelayDivision.isNotEmpty() || desc->plannedDelayWet.has_value())
             {
                 juce::String parts;
-                if (desc->plannedDelayDivision.isNotEmpty())
+                if (!desc->plannedDelayDivisions.isEmpty())
+                    parts << desc->plannedDelayDivisions.joinIntoString(",");
+                else if (desc->plannedDelayDivision.isNotEmpty())
                     parts << desc->plannedDelayDivision;
                 if (desc->plannedDelayWet.has_value())
                 {
                     if (parts.isNotEmpty()) parts << " | ";
                     parts << juce::String((int)std::round(desc->plannedDelayWet.value() * 100.0)) << "%";
+                }
+                if (desc->plannedDelayFeedback.has_value())
+                {
+                    if (parts.isNotEmpty()) parts << " | ";
+                    parts << "FB " << (int)std::round(desc->plannedDelayFeedback.value() * 100.0) << "%";
                 }
                 upcomingVariant = juce::String("Delay ") + parts;
             }

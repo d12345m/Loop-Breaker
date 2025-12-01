@@ -180,29 +180,23 @@ void ModifierScheduler::forceUpcomingVariant(ModifierType type, const juce::Stri
             }
             else if (type == ModifierType::BufferDelayOn)
             {
-                // Support combined variant syntax: "division|wet" (e.g. "1/8|0.50")
-                juce::String divPart, wetPart;
-                if (variant.containsChar('|'))
+                // Combined syntax: divisions comma-separated | wet | fb:feedback
+                auto parts = juce::StringArray::fromTokens(variant, "|", "");
+                juce::String divisionsPart, wetPart, fbPart;
+                if (parts.size() > 0) divisionsPart = parts[0].trim();
+                if (parts.size() > 1) wetPart = parts[1].trim();
+                if (parts.size() > 2) fbPart = parts[2].trim();
+                auto isDivision = [](const juce::String& s){ return s.containsChar('/') || s.contains("D") || s.contains("T"); };
+                if (divisionsPart.isNotEmpty())
                 {
-                    auto parts = juce::StringArray::fromTokens(variant, "|", "");
-                    if (parts.size() >= 1) divPart = parts[0].trim();
-                    if (parts.size() >= 2) wetPart = parts[1].trim();
-                }
-                else
-                {
-                    // Single part: could be division or wet
-                    divPart = variant.trim();
-                }
-                // Decide if divPart is actually a division label; if not treat as wet
-                auto isDivision = [&](const juce::String& s){ return s.containsChar('/') || s.contains("D") || s.contains("T"); };
-                if (isDivision(divPart))
-                {
-                    base.plannedDelayDivision = divPart;
-                }
-                else if (divPart.isNotEmpty())
-                {
-                    wetPart = divPart; // reinterpret as wet value
-                    divPart.clear();
+                    auto divTokens = juce::StringArray::fromTokens(divisionsPart, ",", "");
+                    for (auto d : divTokens)
+                    {
+                        d = d.trim();
+                        if (isDivision(d)) base.plannedDelayDivisions.addIfNotAlreadyThere(d);
+                    }
+                    if (base.plannedDelayDivisions.size() == 1)
+                        base.plannedDelayDivision = base.plannedDelayDivisions[0]; // backward compatibility single
                 }
                 if (wetPart.isNotEmpty())
                 {
@@ -210,14 +204,29 @@ void ModifierScheduler::forceUpcomingVariant(ModifierType type, const juce::Stri
                     wet = juce::jlimit(0.0, 1.0, wet);
                     base.plannedDelayWet = wet;
                 }
+                if (fbPart.isNotEmpty())
+                {
+                    // Expect fb:0.75 or just numeric if previous parsing stripped prefix
+                    juce::String numeric = fbPart;
+                    if (numeric.startsWithIgnoreCase("fb:")) numeric = numeric.substring(3).trim();
+                    double fb = numeric.getDoubleValue();
+                    fb = juce::jlimit(0.0, 0.95, fb);
+                    base.plannedDelayFeedback = fb;
+                }
                 // Build description fragment
                 juce::String frag(" -> Delay ");
                 juce::String combo;
-                if (base.plannedDelayDivision.isNotEmpty()) combo << base.plannedDelayDivision;
+                if (! base.plannedDelayDivisions.isEmpty())
+                    combo << base.plannedDelayDivisions.joinIntoString(",");
                 if (base.plannedDelayWet.has_value())
                 {
                     if (combo.isNotEmpty()) combo << " | ";
                     combo << (int)std::round(base.plannedDelayWet.value() * 100.0) << "%";
+                }
+                if (base.plannedDelayFeedback.has_value())
+                {
+                    if (combo.isNotEmpty()) combo << " | ";
+                    combo << "FB " << (int)std::round(base.plannedDelayFeedback.value() * 100.0) << "%";
                 }
                 base.description = base.description + frag + combo;
             }

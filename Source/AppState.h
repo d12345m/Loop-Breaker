@@ -273,28 +273,55 @@ private:
                 // Provide simple scaling: if BPM fast (<90) extend to 1.5 beats for more space
                 double bpm = settings.bpm;
                 double targetMs = (bpm < 90.0 ? beatMs * 1.5 : beatMs);
-                if (desc.plannedDelayDivision.isNotEmpty())
+                juce::Array<float> tapTimesMs;
+                auto mapDivisionToMult = [](const juce::String& label)->double{
+                    if (label == "1/4") return 1.0;
+                    if (label == "1/8") return 0.5;
+                    if (label == "1/8D") return 0.75;
+                    if (label == "1/8T") return 1.0/3.0;
+                    return 1.0;
+                };
+                if (!desc.plannedDelayDivisions.isEmpty())
                 {
-                    // Map division label to beat multiplier
-                    double mult = 1.0; // quarter note default
-                    auto label = desc.plannedDelayDivision;
-                    if (label == "1/4") mult = 1.0;
-                    else if (label == "1/8") mult = 0.5;
-                    else if (label == "1/8D") mult = 0.75; // dotted eighth
-                    else if (label == "1/8T") mult = 1.0/3.0; // eighth triplet
+                    for (auto d : desc.plannedDelayDivisions)
+                    {
+                        double mult = mapDivisionToMult(d);
+                        tapTimesMs.add((float) juce::jlimit(1.0, 2000.0, beatMs * mult));
+                    }
+                    // Fallback: first division defines primary param for single-tap compatibility
+                    if (tapTimesMs.size() > 0)
+                        targetMs = tapTimesMs[0];
+                    strip.setDelayTapTimesMs(tapTimesMs);
+                }
+                else if (desc.plannedDelayDivision.isNotEmpty())
+                {
+                    double mult = mapDivisionToMult(desc.plannedDelayDivision);
                     targetMs = beatMs * mult;
+                    tapTimesMs.add((float) juce::jlimit(1.0, 2000.0, targetMs));
+                    strip.setDelayTapTimesMs(tapTimesMs);
+                }
+                else
+                {
+                    // No divisions specified; ensure previous multi-tap cleared
+                    strip.setDelayTapTimesMs(juce::Array<float>());
                 }
                 // Delay wet override if provided
                 if (desc.plannedDelayWet.has_value())
                 {
                     strip.getMutableFxParams().delayWet = (float) juce::jlimit(0.0, 1.0, desc.plannedDelayWet.value());
                 }
+                if (desc.plannedDelayFeedback.has_value())
+                {
+                    // Immediate set rather than envelope if explicit feedback variant provided
+                    strip.getMutableFxParams().delayFeedback = (float) juce::jlimit(0.0, 0.95, desc.plannedDelayFeedback.value());
+                }
                 // Update params directly
                 // (Would add setter if encapsulation demanded)
                 strip.advanceEnvelopes(0.0f); // noop ensuring structure
                 strip.effects().delayEnabled = true;
                 // Ramp feedback to 0.35 over 2 bars for audible repeats
-                strip.setDelayFeedbackEnvelope(strip.getFxParams().delayFeedback, 0.35f, 2.0f);
+                if (!desc.plannedDelayFeedback.has_value())
+                    strip.setDelayFeedbackEnvelope(strip.getFxParams().delayFeedback, 0.35f, 2.0f);
                 // If no explicit wet variant, use default baseline
                 if (!desc.plannedDelayWet.has_value())
                     strip.getMutableFxParams().delayWet = 0.40f; // baseline

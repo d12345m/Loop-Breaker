@@ -75,6 +75,8 @@ struct ModifierDescriptor
     juce::String plannedSliceDivision;            // e.g. "1/8", "1/8T" for BeatSliceRandom (empty if unset)
     juce::String plannedDelayDivision;            // e.g. "1/4", "1/8", "1/8D", "1/8T" for Delay (empty if unset)
     std::optional<double> plannedDelayWet;        // e.g. 0.25, 0.50, 0.75, 1.00 for Delay wet mix
+    juce::StringArray plannedDelayDivisions;      // Multiple divisions (if multi-tap selected)
+    std::optional<double> plannedDelayFeedback;  // Explicit feedback override (0..1)
 };
 
 // Execution context passed to modifiers when ultimately applied.

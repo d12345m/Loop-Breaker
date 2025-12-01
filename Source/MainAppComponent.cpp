@@ -105,6 +105,10 @@ MainAppComponent::~MainAppComponent()
 {
     stopTimer();
     app.scheduler.removeListener(this);
+    // Ensure scheduler stopped and audio callbacks no longer reference lambdas
+    if (app.scheduler.isRunning()) app.scheduler.stop();
+    // Clear per-buffer processor to avoid processing after destruction
+    app.bufferManager.setPerBufferProcessor(nullptr);
     shutdownAudio();
 }
 

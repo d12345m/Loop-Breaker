@@ -73,25 +73,45 @@ public:
             }
 
             // Compute delay samples from params (clamped)
-            int delaySamples = (int) std::round((params.delayTimeMs / 1000.0) * juce::jmax(1.0, lastSampleRate));
-            delaySamples = juce::jlimit(1, delayBufferSize - 1, delaySamples);
+            juce::Array<int> tapSamples;
+            if (delayTapTimesMs.isEmpty())
+            {
+                int single = (int) std::round((params.delayTimeMs / 1000.0) * juce::jmax(1.0, lastSampleRate));
+                single = juce::jlimit(1, delayBufferSize - 1, single);
+                tapSamples.add(single);
+            }
+            else
+            {
+                for (auto tMs : delayTapTimesMs)
+                {
+                    int s = (int) std::round((tMs / 1000.0f) * juce::jmax(1.0, lastSampleRate));
+                    s = juce::jlimit(1, delayBufferSize - 1, s);
+                    tapSamples.addIfNotAlreadyThere(s);
+                }
+            }
             float fb = juce::jlimit(0.0f, 0.95f, params.delayFeedback); // safety limit
             float wet = juce::jlimit(0.0f, 1.0f, params.delayWet);
+            int numTaps = tapSamples.size();
+            if (numTaps < 1) numTaps = 1;
 
             for (int i = 0; i < numSamples; ++i)
             {
                 int writePos = delayWritePos;
-                int readPos = writePos - delaySamples;
-                if (readPos < 0) readPos += delayBufferSize;
                 for (int ch = 0; ch < numChannels; ++ch)
                 {
                     auto* delayData = delayBuffer.getWritePointer(ch);
                     float inSample = tempBuffer.getSample(ch, i);
-                    float delayed = delayData[readPos];
-                    // Write with feedback (simple feed-forward + feedback model)
-                    delayData[writePos] = inSample + delayed * fb;
-                    // Mix delayed signal
-                    float out = inSample + delayed * wet;
+                    float delayedSum = 0.0f;
+                    for (int tapIdx = 0; tapIdx < tapSamples.size(); ++tapIdx)
+                    {
+                        int readPosTap = writePos - tapSamples[tapIdx];
+                        if (readPosTap < 0) readPosTap += delayBufferSize;
+                        delayedSum += delayData[readPosTap];
+                    }
+                    float delayedAvg = delayedSum / (float) numTaps;
+                    // Single write using averaged delayed signal for feedback stability
+                    delayData[writePos] = inSample + delayedAvg * fb;
+                    float out = inSample + delayedAvg * wet;
                     tempBuffer.setSample(ch, i, out);
                 }
                 if (++delayWritePos >= delayBufferSize) delayWritePos = 0;
@@ -306,4 +326,17 @@ private:
     int delayBufferSize = 0; // allocated in prepare
     int delayWritePos = 0;
     static constexpr double kMaxDelayMs = 2000.0; // 2 seconds max
+    // Multi-tap support: user may select multiple divisions (times in ms)
+    juce::Array<float> delayTapTimesMs; // if empty -> single params.delayTimeMs
+public:
+    void setDelayTapTimesMs(const juce::Array<float>& times)
+    {
+        delayTapTimesMs.clear();
+        for (auto t : times)
+        {
+            t = juce::jlimit(1.0f, (float) kMaxDelayMs, t);
+            delayTapTimesMs.add(t);
+        }
+    }
+private:
 };

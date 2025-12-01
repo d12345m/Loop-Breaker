@@ -73,6 +73,7 @@ struct ModifierDescriptor
     std::optional<double> plannedSpeed;           // e.g. 0.50, 1.00, 2.00 for Speed
     std::optional<double> plannedWet;             // e.g. 0.25, 0.50, 0.75, 1.00 for Reverb
     juce::String plannedSliceDivision;            // e.g. "1/8", "1/8T" for BeatSliceRandom (empty if unset)
+    juce::String plannedDelayDivision;            // e.g. "1/4", "1/8", "1/8D", "1/8T" for Delay (empty if unset)
 };
 
 // Execution context passed to modifiers when ultimately applied.

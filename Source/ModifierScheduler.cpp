@@ -178,6 +178,12 @@ void ModifierScheduler::forceUpcomingVariant(ModifierType type, const juce::Stri
                 base.plannedSliceDivision = variant; // expect one of division labels
                 base.description = base.description + " -> " + base.plannedSliceDivision;
             }
+            else if (type == ModifierType::BufferDelayOn)
+            {
+                // Accept division labels: 1/4, 1/8, 1/8D (dotted eighth), 1/8T (eighth triplet)
+                base.plannedDelayDivision = variant;
+                base.description = base.description + " -> Delay " + base.plannedDelayDivision;
+            }
             upcoming = base;
             broadcastUpcoming();
             return;
@@ -236,6 +242,15 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
         double wet = wets[rng.nextInt((int)std::size(wets))];
     modified.plannedWet = wet;
     modified.description = base.description + " -> Reverb " + juce::String((int)std::round(wet * 100.0)) + "%";
+    }
+    else if (base.type == ModifierType::BufferDelayOn)
+    {
+        static const juce::StringArray divs { "1/4", "1/8", "1/8D", "1/8T" };
+        const juce::SpinLock::ScopedLockType lock(rngLock);
+        int idx = rng.nextInt(divs.size());
+        juce::String label = divs[idx];
+        modified.plannedDelayDivision = label;
+        modified.description = base.description + " -> Delay " + label;
     }
     return modified;
 }

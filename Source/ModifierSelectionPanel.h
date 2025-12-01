@@ -40,7 +40,11 @@ public:
     addVariantToggle(ModifierType::BufferReverbOn, "Reverb 75%", "0.75");
     addVariantToggle(ModifierType::BufferReverbOn, "Reverb 100%", "1.00");
     addToggle(ModifierType::BufferReverbOff, "Reverb Off");
-    addToggle(ModifierType::BufferDelayOn, "Delay On");
+    addToggle(ModifierType::BufferDelayOn, "Delay On (rand)");
+    addVariantToggle(ModifierType::BufferDelayOn, "Delay 1/4", "1/4");
+    addVariantToggle(ModifierType::BufferDelayOn, "Delay 1/8", "1/8");
+    addVariantToggle(ModifierType::BufferDelayOn, "Delay 1/8D", "1/8D");
+    addVariantToggle(ModifierType::BufferDelayOn, "Delay 1/8T", "1/8T");
     addToggle(ModifierType::BufferDelayOff, "Delay Off");
     addToggle(ModifierType::BufferLowPassOn, "LPF On");
     addToggle(ModifierType::BufferLowPassOff, "LPF Off");

@@ -47,6 +47,7 @@ private:
   ModifierHistoryPanel modifierHistory;
     PadGridComponent padGrid;
   ModifierSelectionPanel modifierSelectionPanel; // new developer panel
+  juce::Viewport modifierSelectionViewport; // scroll container for selection panel
   FxStatusPanel fxStatusPanel { app }; // read-only FX status
     juce::TextButton playAllButton { "Play All" };
     juce::TextButton stopAllButton { "Stop All" };

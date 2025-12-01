@@ -16,7 +16,9 @@ MainAppComponent::MainAppComponent()
     addAndMakeVisible(modifierDisplay);
     addAndMakeVisible(padGrid);
     addAndMakeVisible(modifierHistory);
-    addAndMakeVisible(modifierSelectionPanel);
+    // Selection panel now inside a scrollable viewport
+    modifierSelectionViewport.setViewedComponent(&modifierSelectionPanel, false);
+    addAndMakeVisible(modifierSelectionViewport);
     addAndMakeVisible(fxStatusPanel);
     // Dev controls
     addAndMakeVisible(triggerNowButton); triggerNowButton.onClick = [this]{ app.scheduler.triggerNow(); };
@@ -178,17 +180,24 @@ void MainAppComponent::resized()
     padSelectForLoad.setBounds(projArea.removeFromLeft(110).reduced(2));
     loadFileButton.setBounds(projArea.removeFromLeft(150).reduced(2));
     area.removeFromTop(6);
-    auto gridHeight = 300;
+    auto gridHeight = 220; // reduced pad grid height for more dev control space
     padGrid.setBounds(area.removeFromTop(gridHeight));
     area.removeFromTop(6);
     // Split remaining bottom area: left = history, right = modifier selection panel
     auto bottomArea = area;
     auto rightPanel = bottomArea.removeFromRight(bottomArea.getWidth() / 3).reduced(4);
-    auto rightTop = rightPanel.removeFromTop(rightPanel.getHeight() / 2);
-    modifierSelectionPanel.setBounds(rightTop.removeFromTop(rightTop.getHeight() - 28));
-    // Place dev controls at the bottom of the right-top area
+    auto rightTop = rightPanel.removeFromTop(int(rightPanel.getHeight() * 0.65f)); // allocate more space for selection panel
+    // Desired internal height for selection panel (all toggles): rough estimate rows * 26
+    int toggleCount = 0;
+    // We don't store count directly; approximate by child components count of modifierSelectionPanel
+    toggleCount = modifierSelectionPanel.getNumChildComponents();
+    int desiredHeight = juce::jmax(rightTop.getHeight() - 60, toggleCount * 26 + 20);
+    modifierSelectionPanel.setSize(rightTop.getWidth() - 8, desiredHeight);
+    modifierSelectionViewport.setBounds(rightTop.removeFromTop(rightTop.getHeight() - 28));
+    // Place dev controls below viewport
     triggerNowButton.setBounds(rightTop.removeFromLeft(120).reduced(2));
     skipUpcomingButton.setBounds(rightTop.removeFromLeft(90).reduced(2));
+    // FX status panel gets remaining lower portion
     fxStatusPanel.setBounds(rightPanel);
     modifierHistory.setBounds(bottomArea.reduced(2));
 }

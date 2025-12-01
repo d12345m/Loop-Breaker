@@ -88,7 +88,7 @@ struct AppState : public ModifierSchedulerListener
                 applyBufferReverbOff(targets);
                 break;
             case ModifierType::BufferDelayOn:
-                applyBufferDelayOn(targets);
+                applyBufferDelayOn(desc, targets);
                 break;
             case ModifierType::BufferDelayOff:
                 applyBufferDelayOff(targets);
@@ -247,7 +247,7 @@ private:
         }
     }
 
-    void applyBufferDelayOn(const juce::Array<int>& targets)
+    void applyBufferDelayOn(const ModifierDescriptor& desc, const juce::Array<int>& targets)
     {
         if (targets.isEmpty()) return;
         for (int idx : targets)
@@ -256,8 +256,34 @@ private:
             {
                 auto& strip = *channelStrips[idx];
                 strip.effects().delayEnabled = true;
-                // Ramp delay feedback to 0.25 over 2 bars
-                strip.setDelayFeedbackEnvelope(strip.getFxParams().delayFeedback, 0.25f, 2.0f);
+                // Set delay time to one beat length from settings
+                double beatMs = settings.getSecondsPerBeat() * 1000.0;
+                // Clamp to max defined in ChannelStrip
+                strip.getFxParams(); // ensure params accessed (unused result suppressed by ignore)
+                // Direct param assignment (no envelope for time yet)
+                // Provide simple scaling: if BPM fast (<90) extend to 1.5 beats for more space
+                double bpm = settings.bpm;
+                double targetMs = (bpm < 90.0 ? beatMs * 1.5 : beatMs);
+                if (desc.plannedDelayDivision.isNotEmpty())
+                {
+                    // Map division label to beat multiplier
+                    double mult = 1.0; // quarter note default
+                    auto label = desc.plannedDelayDivision;
+                    if (label == "1/4") mult = 1.0;
+                    else if (label == "1/8") mult = 0.5;
+                    else if (label == "1/8D") mult = 0.75; // dotted eighth
+                    else if (label == "1/8T") mult = 1.0/3.0; // eighth triplet
+                    targetMs = beatMs * mult;
+                }
+                // Update params directly
+                // (Would add setter if encapsulation demanded)
+                strip.advanceEnvelopes(0.0f); // noop ensuring structure
+                strip.effects().delayEnabled = true;
+                // Ramp feedback to 0.35 over 2 bars for audible repeats
+                strip.setDelayFeedbackEnvelope(strip.getFxParams().delayFeedback, 0.35f, 2.0f);
+                // Adjust wet mix implicitly by modifying FxParams (not yet enveloped)
+                strip.getMutableFxParams().delayWet = 0.40f; // slightly wetter than default
+                strip.getMutableFxParams().delayTimeMs = (float) juce::jlimit(1.0, 2000.0, targetMs);
             }
         }
     }
@@ -270,7 +296,10 @@ private:
             if (juce::isPositiveAndBelow(idx, channelStrips.size()))
             {
                 auto& strip = *channelStrips[idx];
+                // Ramp feedback down to zero over 2 bars; then auto-disable will clear flag
                 strip.setDelayFeedbackEnvelope(strip.getFxParams().delayFeedback, 0.0f, 2.0f);
+                // Optionally reduce wet immediately for a cleaner tail decay
+                strip.getMutableFxParams().delayWet = 0.20f;
                 strip.effects().delayEnabled = true; // keep on during ramp
             }
         }

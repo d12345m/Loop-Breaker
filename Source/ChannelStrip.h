@@ -51,9 +51,49 @@ public:
 
     void processDSP(juce::AudioBuffer<float>& tempBuffer)
     {
-        if (!effects().reverbEnabled) return;
         const int numSamples = tempBuffer.getNumSamples();
         const int numChannels = tempBuffer.getNumChannels();
+
+        // --- Delay Processing (pre-reverb) ---
+        if (effects().delayEnabled)
+        {
+            // Allocate delay line if needed
+            if (delayBuffer.getNumChannels() != numChannels || delayBuffer.getNumSamples() != delayBufferSize)
+            {
+                delayBuffer.setSize(numChannels, delayBufferSize, false, false, true);
+                delayBuffer.clear();
+                delayWritePos = 0;
+            }
+
+            // Compute delay samples from params (clamped)
+            int delaySamples = (int) std::round((params.delayTimeMs / 1000.0) * juce::jmax(1.0, lastSampleRate));
+            delaySamples = juce::jlimit(1, delayBufferSize - 1, delaySamples);
+            float fb = juce::jlimit(0.0f, 0.95f, params.delayFeedback); // safety limit
+            float wet = juce::jlimit(0.0f, 1.0f, params.delayWet);
+
+            for (int i = 0; i < numSamples; ++i)
+            {
+                int writePos = delayWritePos;
+                int readPos = writePos - delaySamples;
+                if (readPos < 0) readPos += delayBufferSize;
+                for (int ch = 0; ch < numChannels; ++ch)
+                {
+                    auto* delayData = delayBuffer.getWritePointer(ch);
+                    float inSample = tempBuffer.getSample(ch, i);
+                    float delayed = delayData[readPos];
+                    // Write with feedback (simple feed-forward + feedback model)
+                    delayData[writePos] = inSample + delayed * fb;
+                    // Mix delayed signal
+                    float out = inSample + delayed * wet;
+                    tempBuffer.setSample(ch, i, out);
+                }
+                if (++delayWritePos >= delayBufferSize) delayWritePos = 0;
+            }
+        }
+
+        // --- Reverb Processing ---
+        if (!effects().reverbEnabled)
+            return; // skip reverb portion if disabled (delay may still have processed)
 
         // Ensure pre-delay buffer matches channel count (reallocate if channel count changed)
         if (preDelayBuffer.getNumChannels() != numChannels)
@@ -148,7 +188,9 @@ public:
     {
         float reverbWet = 0.0f;
         float reverbPreDelayMs = 0.0f; // pre-delay applied to reverb wet path only
-        float delayFeedback = 0.0f;
+        float delayFeedback = 0.0f;    // 0..~0.9
+        float delayTimeMs = 400.0f;     // default ~quarter note at 150 BPM (placeholder)
+        float delayWet = 0.35f;         // mix level for delay repeats
         float lowPassCutoff = 20000.0f;
         float highPassCutoff = 20.0f;
         float tremoloDepth = 0.0f;
@@ -216,6 +258,9 @@ public:
         // Delay feedback
         params.delayFeedback = delayFeedbackEnv.isActive() ? delayFeedbackEnv.current(params.delayFeedback) : params.delayFeedback;
         if (delayFeedbackEnv.isActive()) delayFeedbackEnv.advance(barsDelta);
+        // Auto-disable delay when feedback essentially zero and no active envelope
+        if (chain.delayEnabled && !delayFeedbackEnv.isActive() && params.delayFeedback <= 0.0001f)
+            chain.delayEnabled = false;
         // LPF cutoff
         params.lowPassCutoff = lowPassCutoffEnv.isActive() ? lowPassCutoffEnv.current(params.lowPassCutoff) : params.lowPassCutoff;
         if (lowPassCutoffEnv.isActive()) lowPassCutoffEnv.advance(barsDelta);
@@ -228,6 +273,7 @@ public:
     }
 
     const FxParams& getFxParams() const { return params; }
+    FxParams& getMutableFxParams() { return params; }
 
 private:
     AudioBuffer* buffer = nullptr; // not owned
@@ -248,4 +294,9 @@ private:
     int preDelayBufferSize = 0;
     int preDelayWritePos = 0;
     static constexpr double kMaxPreDelayMs = 60.0; // matches envelope clamp
+    // Delay line
+    juce::AudioBuffer<float> delayBuffer;
+    int delayBufferSize = 0; // allocated in prepare
+    int delayWritePos = 0;
+    static constexpr double kMaxDelayMs = 2000.0; // 2 seconds max
 };

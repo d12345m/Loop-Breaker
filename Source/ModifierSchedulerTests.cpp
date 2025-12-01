@@ -120,4 +120,57 @@ public:
 
 static ModifierSchedulerVariantsTest modifierSchedulerVariantsTestInstance;
 
+class ModifierSchedulerEveryNBarsTest : public juce::UnitTest {
+public:
+    ModifierSchedulerEveryNBarsTest() : juce::UnitTest("ModifierScheduler Every N Bars") {}
+    
+    struct CaptureListener : public ModifierSchedulerListener {
+        ModifierScheduler& sched;
+        juce::Array<double> triggerBars;
+        explicit CaptureListener(ModifierScheduler& s) : sched(s) {}
+        void modifierTriggered(const ModifierDescriptor&, const juce::Array<int>&) override {
+            triggerBars.add(sched.getAccumulatedBars());
+        }
+    };
+
+    void runTest() override {
+        beginTest("Triggers fire exactly every N bars within < 1 block tolerance");
+        SessionSettings settings; // default 4/4, 120 BPM
+        settings.barsBetweenModifiers = 2; // test interval
+        ModifierScheduler scheduler(settings);
+        scheduler.setQuantizationEnabled(false); // base periodic mode
+        scheduler.setRandomSeed(42);
+        CaptureListener listener(scheduler);
+        scheduler.addListener(&listener);
+        scheduler.start();
+
+        const double secondsPerBar = settings.getSecondsPerBar();
+        const double step = secondsPerBar / 256.0; // ~7.8ms at 120BPM; treat as "one block"
+
+        const int triggersToCapture = 6;
+        while (listener.triggerBars.size() < triggersToCapture) {
+            scheduler.updateTime(step);
+        }
+
+        // Expect first trigger at N bars, then every N bars afterward
+        const double expectedIntervalBars = (double) settings.barsBetweenModifiers;
+        const double toleranceBars = step / secondsPerBar + 1e-6; // < one step worth of bars
+
+        // First trigger
+        expectWithinAbsoluteError(listener.triggerBars[0], expectedIntervalBars, toleranceBars,
+                                  "First trigger not at N bars");
+
+        for (int i = 1; i < listener.triggerBars.size(); ++i) {
+            double interval = listener.triggerBars[i] - listener.triggerBars[i-1];
+            expectWithinAbsoluteError(interval, expectedIntervalBars, toleranceBars,
+                                      "Subsequent trigger not spaced by N bars");
+        }
+
+        scheduler.removeListener(&listener);
+        scheduler.stop();
+    }
+};
+
+static ModifierSchedulerEveryNBarsTest modifierSchedulerEveryNBarsTestInstance;
+
 #endif // JUCE_UNIT_TESTS

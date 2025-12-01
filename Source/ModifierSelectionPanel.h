@@ -13,7 +13,8 @@ public:
     {
         auto addToggle = [&](ModifierType type, const juce::String& label)
         {
-            auto* t = toggles.add(new juce::ToggleButton(label));
+            auto* t = new juce::ToggleButton(label);
+            toggles.add(t);
             t->onClick = [this, type, t]
             {
                 if (t->getToggleState())
@@ -88,13 +89,15 @@ public:
     void setForceVariantCallback(VariantCallback cb) { onForceVariant = std::move(cb); }
 
 private:
-    juce::OwnedArray<juce::ToggleButton> toggles;
+    // Parent Component owns children added via addAndMakeVisible; store non-owning pointers to avoid double deletion
+    juce::Array<juce::ToggleButton*> toggles;
     SelectionCallback onForceSelection;
     VariantCallback onForceVariant;
 
     void addVariantToggle(ModifierType type, const juce::String& label, const juce::String& variant)
     {
-        auto* t = toggles.add(new juce::ToggleButton(label));
+        auto* t = new juce::ToggleButton(label);
+        toggles.add(t);
         t->onClick = [this, type, variant, t]
         {
             if (t->getToggleState())
@@ -110,7 +113,8 @@ private:
     // Delay division toggle that coexists with delay wet toggles
     void makeDelayDivisionToggle(const juce::String& label, const juce::String& division)
     {
-        auto* t = toggles.add(new juce::ToggleButton(label));
+        auto* t = new juce::ToggleButton(label);
+        toggles.add(t);
         delayDivisionToggles.add(t);
         t->onClick = [this, t, division]
         {
@@ -129,7 +133,8 @@ private:
 
     void makeDelayWetToggle(const juce::String& label, const juce::String& wetStr)
     {
-        auto* t = toggles.add(new juce::ToggleButton(label));
+        auto* t = new juce::ToggleButton(label);
+        toggles.add(t);
         delayWetToggles.add(t);
         t->onClick = [this, t, wetStr]
         {
@@ -171,15 +176,16 @@ private:
             onForceVariant(ModifierType::BufferDelayOn, combined);
     }
 
-    juce::OwnedArray<juce::ToggleButton> delayDivisionToggles;
-    juce::OwnedArray<juce::ToggleButton> delayWetToggles;
-    juce::OwnedArray<juce::ToggleButton> delayFeedbackToggles;
+    juce::Array<juce::ToggleButton*> delayDivisionToggles;
+    juce::Array<juce::ToggleButton*> delayWetToggles;
+    juce::Array<juce::ToggleButton*> delayFeedbackToggles;
     juce::StringArray selectedDelayDivisions;
     juce::String currentDelayWet;
     juce::String currentDelayFeedback;
     void makeDelayFeedbackToggle(const juce::String& label, const juce::String& fbStr)
     {
-        auto* t = toggles.add(new juce::ToggleButton(label));
+        auto* t = new juce::ToggleButton(label);
+        toggles.add(t);
         delayFeedbackToggles.add(t);
         t->onClick = [this, t, fbStr]
         {

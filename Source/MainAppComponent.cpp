@@ -109,6 +109,8 @@ MainAppComponent::~MainAppComponent()
     if (app.scheduler.isRunning()) app.scheduler.stop();
     // Clear per-buffer processor to avoid processing after destruction
     app.bufferManager.setPerBufferProcessor(nullptr);
+    // Cancel any active file chooser to prevent late callbacks
+    fileChooser.reset();
     shutdownAudio();
 }
 
@@ -267,17 +269,19 @@ void MainAppComponent::loadFileClicked()
 
     fileChooser = std::make_unique<juce::FileChooser>("Select audio file...", juce::File(), "*.wav;*.mp3;*.aif;*.aiff;*.flac");
     auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
-    fileChooser->launchAsync(flags, [this, padIndex](const juce::FileChooser& fc){
+    juce::Component::SafePointer<MainAppComponent> safeThis(this);
+    fileChooser->launchAsync(flags, [safeThis, padIndex](const juce::FileChooser& fc){
+        if (safeThis == nullptr) return; // component destroyed; ignore callback
+        auto& self = *safeThis.getComponent();
         auto f = fc.getResult();
         if (f == juce::File()) return;
-        if (app.bufferManager.loadAudioFile(padIndex, f, formatManager))
+        if (self.app.bufferManager.loadAudioFile(padIndex, f, self.formatManager))
         {
-            statusLabel.setText("Loaded to Pad " + juce::String(padIndex+1) + ": " + f.getFileName(), juce::dontSendNotification);
-            padGrid.setPadFileName(padIndex, f.getFileNameWithoutExtension());
-            // Persist absolute path for project save
-            while (app.settings.padFilePaths.size() < AudioBufferManager::MAX_BUFFERS)
-                app.settings.padFilePaths.add(juce::String());
-            app.settings.padFilePaths.set(padIndex, f.getFullPathName());
+            self.statusLabel.setText("Loaded to Pad " + juce::String(padIndex+1) + ": " + f.getFileName(), juce::dontSendNotification);
+            self.padGrid.setPadFileName(padIndex, f.getFileNameWithoutExtension());
+            while (self.app.settings.padFilePaths.size() < AudioBufferManager::MAX_BUFFERS)
+                self.app.settings.padFilePaths.add(juce::String());
+            self.app.settings.padFilePaths.set(padIndex, f.getFullPathName());
         } else {
             juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Load Failed", "Could not load file.");
         }

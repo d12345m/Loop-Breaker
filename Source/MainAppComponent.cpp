@@ -117,13 +117,13 @@ void MainAppComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& bu
     app.bufferManager.processBlock(*bufferToFill.buffer);
 
     // Feed scheduler with accurate elapsed seconds for this block (sample accurate scheduling step coming later)
+    double blockSeconds = bufferToFill.numSamples / hostSampleRate;
     if (app.scheduler.isRunning())
     {
-        double blockSeconds = bufferToFill.numSamples / hostSampleRate;
         app.scheduler.updateTime(blockSeconds);
-        // Advance FX envelopes using musical bars derived from block duration
-        app.advanceFxEnvelopes(blockSeconds);
     }
+    // Advance FX envelopes every block regardless of scheduler state so FX ramps occur even when modifiers are suppressed or scheduler is paused
+    app.advanceFxEnvelopes(blockSeconds);
 }
 
 void MainAppComponent::releaseResources()

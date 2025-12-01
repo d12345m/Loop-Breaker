@@ -30,9 +30,16 @@ public:
     // DSP: simple reverb processor (per-strip). Prepare once and process temp buffers.
     void prepareDSP(double sampleRate, int blockSize)
     {
-        juce::dsp::ProcessSpec spec { sampleRate, (juce::uint32) blockSize, 2 };
-        reverb.reset();
-        reverb.prepare(spec);
+        // Prepare once or when configuration changes; do NOT reset every audio block
+        if (!reverbPrepared || lastSampleRate != sampleRate || lastBlockSize != blockSize)
+        {
+            juce::dsp::ProcessSpec spec { sampleRate, (juce::uint32) blockSize, 2 };
+            reverb.reset();
+            reverb.prepare(spec);
+            reverbPrepared = true;
+            lastSampleRate = sampleRate;
+            lastBlockSize = blockSize;
+        }
     }
 
     void processDSP(juce::AudioBuffer<float>& tempBuffer)
@@ -40,8 +47,8 @@ public:
         if (!effects().reverbEnabled) return;
         // Map params to JUCE Reverb
         juce::dsp::Reverb::Parameters p;
-    p.roomSize = 0.8f;   // larger room for audibility
-    p.damping  = 0.4f;   // slightly more damping
+    p.roomSize = 0.95f;  // very large room for longer tail
+    p.damping  = 0.20f;  // less damping for longer decay
     p.wetLevel = juce::jlimit(0.0f, 1.0f, params.reverbWet);
     p.dryLevel = 1.0f;   // keep dry at full; rely on wet level for blend
         p.width    = 1.0f;
@@ -126,6 +133,9 @@ public:
         // Reverb wet
         params.reverbWet = reverbWetEnv.isActive() ? reverbWetEnv.current(params.reverbWet) : params.reverbWet;
         if (reverbWetEnv.isActive()) reverbWetEnv.advance(barsDelta);
+        // Auto-disable reverb when wet reaches zero and no active envelope
+        if (chain.reverbEnabled && !reverbWetEnv.isActive() && params.reverbWet <= 0.0001f)
+            chain.reverbEnabled = false;
         // Delay feedback
         params.delayFeedback = delayFeedbackEnv.isActive() ? delayFeedbackEnv.current(params.delayFeedback) : params.delayFeedback;
         if (delayFeedbackEnv.isActive()) delayFeedbackEnv.advance(barsDelta);
@@ -152,4 +162,7 @@ private:
     EffectEnvelope highPassCutoffEnv;
     EffectEnvelope tremoloDepthEnv;
     juce::dsp::Reverb reverb;
+    bool reverbPrepared = false;
+    double lastSampleRate = 0.0;
+    int lastBlockSize = 0;
 };

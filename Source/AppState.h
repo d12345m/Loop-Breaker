@@ -193,8 +193,8 @@ private:
             {
                 auto& strip = *channelStrips[idx];
                 strip.effects().reverbEnabled = true;
-                // Ramp reverb wet up to 0.70 over 2 bars (make it audible)
-                strip.setReverbWetEnvelope(strip.getFxParams().reverbWet, 0.70f, 2.0f);
+                // Ramp reverb wet up to 0.85 over 2 bars (more audible)
+                strip.setReverbWetEnvelope(strip.getFxParams().reverbWet, 0.85f, 2.0f);
             }
         }
     }

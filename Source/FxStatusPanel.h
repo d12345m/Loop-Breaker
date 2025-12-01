@@ -33,7 +33,7 @@ public:
             g.setColour(juce::Colours::lightgrey);
             g.drawText(line, row, juce::Justification::centredLeft);
             // Params line
-            juce::String p = juce::String::formatted(" wet=%.2f fb=%.2f lpf=%.0f hpf=%.0f trem=%.2f",
+            juce::String p = juce::String::formatted(" rvb=%.2f fb=%.2f lpf=%.0f hpf=%.0f trem=%.2f",
                                                      params.reverbWet, params.delayFeedback,
                                                      params.lowPassCutoff, params.highPassCutoff,
                                                      params.tremoloDepth);

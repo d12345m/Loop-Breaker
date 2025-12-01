@@ -35,10 +35,10 @@ public:
         addToggle(ModifierType::Speed, "Speed (rand)");
     // Buffer FX (placeholders)
     addToggle(ModifierType::BufferReverbOn, "Reverb On");
-    addToggle(ModifierType::BufferReverbWet25, "Reverb Wet 25%");
-    addToggle(ModifierType::BufferReverbWet50, "Reverb Wet 50%");
-    addToggle(ModifierType::BufferReverbWet75, "Reverb Wet 75%");
-    addToggle(ModifierType::BufferReverbWet100, "Reverb Wet 100%");
+    addVariantToggle(ModifierType::BufferReverbOn, "Reverb 25%", "0.25");
+    addVariantToggle(ModifierType::BufferReverbOn, "Reverb 50%", "0.50");
+    addVariantToggle(ModifierType::BufferReverbOn, "Reverb 75%", "0.75");
+    addVariantToggle(ModifierType::BufferReverbOn, "Reverb 100%", "1.00");
     addToggle(ModifierType::BufferReverbOff, "Reverb Off");
     addToggle(ModifierType::BufferDelayOn, "Delay On");
     addToggle(ModifierType::BufferDelayOff, "Delay Off");

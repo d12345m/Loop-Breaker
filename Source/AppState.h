@@ -70,7 +70,7 @@ struct AppState : public ModifierSchedulerListener
                 applyBeatSliceRandom(desc, targets);
                 break;
             case ModifierType::BufferReverbOn:
-                applyBufferReverbOn(targets);
+                applyBufferReverbOn(desc, targets);
                 break;
             case ModifierType::BufferReverbWet25:
                 applyBufferReverbWet(targets, 0.25f);
@@ -196,7 +196,7 @@ private:
         }
     }
 
-    void applyBufferReverbOn(const juce::Array<int>& targets)
+    void applyBufferReverbOn(const ModifierDescriptor& desc, const juce::Array<int>& targets)
     {
         if (targets.isEmpty()) return;
         for (int idx : targets)
@@ -205,8 +205,10 @@ private:
             {
                 auto& strip = *channelStrips[idx];
                 strip.effects().reverbEnabled = true;
-                // Ramp reverb wet up to 0.85 over 2 bars (more audible)
-                strip.setReverbWetEnvelope(strip.getFxParams().reverbWet, 0.85f, 2.0f);
+                // If a planned wet is provided, use it; else default to 0.85
+                float targetWet = desc.plannedWet.has_value() ? (float)desc.plannedWet.value() : 0.85f;
+                float durationBars = desc.plannedWet.has_value() ? 1.0f : 2.0f; // variants are snappier
+                strip.setReverbWetEnvelope(strip.getFxParams().reverbWet, targetWet, durationBars);
             }
         }
     }

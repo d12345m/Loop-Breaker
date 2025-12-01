@@ -166,6 +166,13 @@ void ModifierScheduler::forceUpcomingVariant(ModifierType type, const juce::Stri
                 base.plannedSpeed = val;
                 base.description = base.description + " -> " + juce::String(val, 2) + "x";
             }
+            else if (type == ModifierType::BufferReverbOn)
+            {
+                double wet = variant.getDoubleValue();
+                wet = juce::jlimit(0.0, 1.0, wet);
+                base.plannedWet = wet;
+                base.description = base.description + " -> Reverb " + juce::String((int)std::round(wet * 100.0)) + "%";
+            }
             else if (type == ModifierType::BeatSliceRandom)
             {
                 base.plannedSliceDivision = variant; // expect one of division labels
@@ -221,6 +228,14 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
         juce::String label = sliceOptions[idx];
         modified.plannedSliceDivision = label;
         modified.description = base.description + " -> " + label;
+    }
+    else if (base.type == ModifierType::BufferReverbOn)
+    {
+        static const double wets[] { 0.25, 0.5, 0.75, 1.0 };
+        const juce::SpinLock::ScopedLockType lock(rngLock);
+        double wet = wets[rng.nextInt((int)std::size(wets))];
+    modified.plannedWet = wet;
+    modified.description = base.description + " -> Reverb " + juce::String((int)std::round(wet * 100.0)) + "%";
     }
     return modified;
 }

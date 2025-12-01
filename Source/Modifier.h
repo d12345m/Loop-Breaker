@@ -71,6 +71,7 @@ struct ModifierDescriptor
     // If set, these values should be used by the application of the modifier instead of
     // re-randomizing or parsing from description text.
     std::optional<double> plannedSpeed;           // e.g. 0.50, 1.00, 2.00 for Speed
+    std::optional<double> plannedWet;             // e.g. 0.25, 0.50, 0.75, 1.00 for Reverb
     juce::String plannedSliceDivision;            // e.g. "1/8", "1/8T" for BeatSliceRandom (empty if unset)
 };
 

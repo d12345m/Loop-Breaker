@@ -46,6 +46,13 @@ public:
             preDelayWritePos = 0;
             preDelayBuffer.setSize(2, preDelayBufferSize, false, false, true);
             preDelayBuffer.clear();
+
+            // (Re)allocate delay line buffer similarly (max delay + blockSize + 1)
+            const int maxMainDelaySamples = (int) std::ceil((kMaxDelayMs / 1000.0) * juce::jmax(1.0, lastSampleRate));
+            delayBufferSize = maxMainDelaySamples + blockSize + 1; // +1 guard
+            delayWritePos = 0;
+            delayBuffer.setSize(2, delayBufferSize, false, false, true);
+            delayBuffer.clear();
         }
     }
 

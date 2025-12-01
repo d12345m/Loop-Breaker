@@ -27,8 +27,18 @@ public:
                 upcomingVariant = desc->plannedSliceDivision;
             else if (desc->plannedWet.has_value())
                 upcomingVariant = juce::String("Reverb ") + juce::String((int)std::round(desc->plannedWet.value() * 100.0)) + "%";
-            else if (desc->plannedDelayDivision.isNotEmpty())
-                upcomingVariant = juce::String("Delay ") + desc->plannedDelayDivision;
+            else if (desc->plannedDelayDivision.isNotEmpty() || desc->plannedDelayWet.has_value())
+            {
+                juce::String parts;
+                if (desc->plannedDelayDivision.isNotEmpty())
+                    parts << desc->plannedDelayDivision;
+                if (desc->plannedDelayWet.has_value())
+                {
+                    if (parts.isNotEmpty()) parts << " | ";
+                    parts << juce::String((int)std::round(desc->plannedDelayWet.value() * 100.0)) << "%";
+                }
+                upcomingVariant = juce::String("Delay ") + parts;
+            }
 
             // Show base description without any appended arrow details (UI will show variant separately)
             auto d = desc->description;

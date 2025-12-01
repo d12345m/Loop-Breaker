@@ -275,14 +275,20 @@ private:
                     else if (label == "1/8T") mult = 1.0/3.0; // eighth triplet
                     targetMs = beatMs * mult;
                 }
+                // Delay wet override if provided
+                if (desc.plannedDelayWet.has_value())
+                {
+                    strip.getMutableFxParams().delayWet = (float) juce::jlimit(0.0, 1.0, desc.plannedDelayWet.value());
+                }
                 // Update params directly
                 // (Would add setter if encapsulation demanded)
                 strip.advanceEnvelopes(0.0f); // noop ensuring structure
                 strip.effects().delayEnabled = true;
                 // Ramp feedback to 0.35 over 2 bars for audible repeats
                 strip.setDelayFeedbackEnvelope(strip.getFxParams().delayFeedback, 0.35f, 2.0f);
-                // Adjust wet mix implicitly by modifying FxParams (not yet enveloped)
-                strip.getMutableFxParams().delayWet = 0.40f; // slightly wetter than default
+                // If no explicit wet variant, use default baseline
+                if (!desc.plannedDelayWet.has_value())
+                    strip.getMutableFxParams().delayWet = 0.40f; // baseline
                 strip.getMutableFxParams().delayTimeMs = (float) juce::jlimit(1.0, 2000.0, targetMs);
             }
         }

@@ -180,9 +180,20 @@ void ModifierScheduler::forceUpcomingVariant(ModifierType type, const juce::Stri
             }
             else if (type == ModifierType::BufferDelayOn)
             {
-                // Accept division labels: 1/4, 1/8, 1/8D (dotted eighth), 1/8T (eighth triplet)
-                base.plannedDelayDivision = variant;
-                base.description = base.description + " -> Delay " + base.plannedDelayDivision;
+                // Accept either division labels (contain '/' or 'D' or 'T') OR numeric wet values
+                bool looksLikeDivision = variant.containsChar('/') || variant.contains("D") || variant.contains("T");
+                if (looksLikeDivision)
+                {
+                    base.plannedDelayDivision = variant; // e.g. 1/8D
+                    base.description = base.description + " -> Delay " + base.plannedDelayDivision;
+                }
+                else
+                {
+                    double wet = variant.getDoubleValue();
+                    wet = juce::jlimit(0.0, 1.0, wet);
+                    base.plannedDelayWet = wet;
+                    base.description = base.description + " -> Delay Wet " + juce::String((int)std::round(wet * 100.0)) + "%";
+                }
             }
             upcoming = base;
             broadcastUpcoming();

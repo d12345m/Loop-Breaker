@@ -83,18 +83,8 @@ private:
     void applySpeed(const ModifierDescriptor& desc, const juce::Array<int>& targets)
     {
         if (targets.isEmpty()) return;
-        // Parse planned speed value from description after '->'
-        double speedVal = 1.0;
-        auto text = desc.description;
-        int arrow = text.lastIndexOf("->");
-        if (arrow >= 0)
-        {
-            auto part = text.substring(arrow + 2).trim(); // e.g. "0.50x"
-            if (part.endsWithIgnoreCase("x"))
-                part = part.dropLastCharacters(1);
-            double v = part.getDoubleValue();
-            if (v > 0.0) speedVal = v;
-        }
+        // Use structured planned speed if provided; else default to 1.0 (no change)
+        double speedVal = desc.plannedSpeed.has_value() ? desc.plannedSpeed.value() : 1.0;
         for (int idx : targets)
         {
             if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
@@ -129,11 +119,9 @@ private:
             {"1/4", 1.0}, {"1/8", 2.0}, {"1/8T", 3.0}, {"1/16", 4.0}, {"1/32", 8.0}, {"1/64", 16.0 }
         };
         Division chosen {"1/8", 2.0};
-        auto dd = desc.description;
-        int arrow = dd.lastIndexOf("->");
-        if (arrow >= 0)
+        juce::String label = desc.plannedSliceDivision;
+        if (label.isNotEmpty())
         {
-            auto label = dd.substring(arrow + 2).trim();
             for (auto& d : divisions)
                 if (label == d.name) { chosen = d; break; }
         }

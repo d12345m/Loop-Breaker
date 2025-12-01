@@ -111,9 +111,7 @@ private:
     std::atomic<bool> restrictToImplemented { true }; // default: only schedule implemented modifiers
     std::atomic<bool> suppressed { false }; // skip firing while keeping progress
 
-    // Variant planning for upcoming modifier (developer detail shown in UI)
-    double plannedSpeedValue = 1.0; // for Speed modifier
-    juce::String plannedSliceLabel; // for BeatSliceRandom e.g. "12 slices" or division
+    // Variant planning now carried on the upcoming ModifierDescriptor itself
 
     void scheduleNextTrigger();
     void triggerIfDue();

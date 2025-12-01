@@ -57,6 +57,12 @@ struct ModifierDescriptor
     ModifierCategory category { ModifierCategory::BufferTransform };
     juce::String shortName;
     juce::String description;
+
+    // Structured planned variant data (optional, set by scheduler when preparing upcoming)
+    // If set, these values should be used by the application of the modifier instead of
+    // re-randomizing or parsing from description text.
+    std::optional<double> plannedSpeed;           // e.g. 0.50, 1.00, 2.00 for Speed
+    juce::String plannedSliceDivision;            // e.g. "1/8", "1/8T" for BeatSliceRandom (empty if unset)
 };
 
 // Execution context passed to modifiers when ultimately applied.

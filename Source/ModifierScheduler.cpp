@@ -146,13 +146,13 @@ void ModifierScheduler::forceUpcomingVariant(ModifierType type, const juce::Stri
             {
                 double val = variant.getDoubleValue();
                 if (val <= 0.0) val = 1.0;
-                plannedSpeedValue = val;
+                base.plannedSpeed = val;
                 base.description = base.description + " -> " + juce::String(val, 2) + "x";
             }
             else if (type == ModifierType::BeatSliceRandom)
             {
-                plannedSliceLabel = variant; // expect one of division labels
-                base.description = base.description + " -> " + plannedSliceLabel;
+                base.plannedSliceDivision = variant; // expect one of division labels
+                base.description = base.description + " -> " + base.plannedSliceDivision;
             }
             upcoming = base;
             broadcastUpcoming();
@@ -192,7 +192,7 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
         static const double speeds[] { 0.25, 0.5, 1.0, 2.0 };
         const juce::SpinLock::ScopedLockType lock(rngLock);
         double chosen = speeds[rng.nextInt((int)std::size(speeds))];
-        const_cast<ModifierScheduler*>(this)->plannedSpeedValue = chosen; // persist for trigger
+        modified.plannedSpeed = chosen;
         modified.description = base.description + " -> " + juce::String(chosen, 2) + "x";
     }
     else if (base.type == ModifierType::BeatSliceRandom)
@@ -202,7 +202,7 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
         const juce::SpinLock::ScopedLockType lock(rngLock);
         int idx = rng.nextInt(sliceOptions.size());
         juce::String label = sliceOptions[idx];
-        const_cast<ModifierScheduler*>(this)->plannedSliceLabel = label; // e.g. used by UI / potential future logic
+        modified.plannedSliceDivision = label;
         modified.description = base.description + " -> " + label;
     }
     return modified;

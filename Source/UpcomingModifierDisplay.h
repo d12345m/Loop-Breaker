@@ -19,12 +19,23 @@ public:
         if (desc.has_value())
         {
             upcomingName = desc->shortName;
-            upcomingDescription = desc->description;
+            // Prefer structured variant fields for display
+            upcomingVariant.clear();
+            if (desc->plannedSpeed.has_value())
+                upcomingVariant = juce::String(desc->plannedSpeed.value(), 2) + "x";
+            else if (desc->plannedSliceDivision.isNotEmpty())
+                upcomingVariant = desc->plannedSliceDivision;
+
+            // Show base description without any appended arrow details (UI will show variant separately)
+            auto d = desc->description;
+            int arrow = d.lastIndexOf("->");
+            upcomingDescription = (arrow >= 0 ? d.substring(0, arrow).trim() : d);
         }
         else
         {
             upcomingName = "--";
             upcomingDescription = "";
+            upcomingVariant.clear();
         }
         repaint();
     }
@@ -53,7 +64,9 @@ public:
             g.setFont(f);
         }
         auto topHalf = getLocalBounds().removeFromTop(getHeight()/2);
-        g.drawText("Next: " + upcomingName, topHalf, juce::Justification::centredLeft);
+    juce::String nextLine = "Next: " + upcomingName;
+    if (upcomingVariant.isNotEmpty()) nextLine += "  ->  " + upcomingVariant;
+        g.drawText(nextLine, topHalf, juce::Justification::centredLeft);
 
         // Simple horizontal progress bar at the right side of top half
         auto barArea = topHalf.removeFromRight(160).reduced(4);
@@ -67,7 +80,8 @@ public:
         if (suppressed)
         {
             g.setColour(juce::Colours::orange.withAlpha(0.8f));
-            juce::Font pausedFont(11.0f, juce::Font::bold);
+            auto pausedFont = juce::Font(juce::FontOptions().withHeight(11.0f));
+            pausedFont.setBold(true);
             g.setFont(pausedFont);
             g.drawFittedText("PAUSED", barArea, juce::Justification::centred, 1);
         }
@@ -83,6 +97,7 @@ public:
 private:
     juce::String upcomingName { "--" };
     juce::String upcomingDescription;
+    juce::String upcomingVariant;
     double secondsRemaining = 0.0;
     double barsRemaining = 0.0;
     double progress = 0.0; // 0..1

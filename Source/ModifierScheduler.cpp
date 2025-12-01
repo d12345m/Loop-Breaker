@@ -188,7 +188,7 @@ ModifierDescriptor ModifierScheduler::pickRandomDescriptor() const
         for (int i = 0; i < prototypeCache.size(); ++i)
         {
             auto t = prototypeCache[i]->getDescriptor().type;
-                if (t == ModifierType::Reverse || t == ModifierType::Speed || t == ModifierType::ResetAll || t == ModifierType::BeatSliceRandom || t == ModifierType::BufferReverbOn || t == ModifierType::BufferReverbOff || t == ModifierType::BufferDelayOn || t == ModifierType::BufferDelayOff || t == ModifierType::BufferLowPassOn || t == ModifierType::BufferLowPassOff || t == ModifierType::BufferHighPassOn || t == ModifierType::BufferHighPassOff || t == ModifierType::BufferTremolo || t == ModifierType::BufferTremoloOff)
+                if (t == ModifierType::Reverse || t == ModifierType::Speed || t == ModifierType::ResetAll || t == ModifierType::BeatSliceRandom || t == ModifierType::BufferReverbOn || t == ModifierType::BufferReverbWet25 || t == ModifierType::BufferReverbWet50 || t == ModifierType::BufferReverbWet75 || t == ModifierType::BufferReverbWet100 || t == ModifierType::BufferReverbOff || t == ModifierType::BufferDelayOn || t == ModifierType::BufferDelayOff || t == ModifierType::BufferLowPassOn || t == ModifierType::BufferLowPassOff || t == ModifierType::BufferHighPassOn || t == ModifierType::BufferHighPassOff || t == ModifierType::BufferTremolo || t == ModifierType::BufferTremoloOff)
                 candidateIndices.add(i);
         }
     }

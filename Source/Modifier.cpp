@@ -70,6 +70,10 @@ juce::OwnedArray<IModifier> ModifierFactory::createAllPrototypes()
     add(ModifierType::BufferDelayOn, ModifierCategory::BufferEffect, "Delay On", "Enable delay wet signal");
     add(ModifierType::BufferDelayOff, ModifierCategory::BufferEffect, "Delay Off", "Disable delay (ramp to 0)");
     add(ModifierType::BufferReverbOn, ModifierCategory::BufferEffect, "Reverb On", "Enable reverb wet signal");
+    add(ModifierType::BufferReverbWet25, ModifierCategory::BufferEffect, "Reverb Wet 25%", "Set reverb wet level to 0.25");
+    add(ModifierType::BufferReverbWet50, ModifierCategory::BufferEffect, "Reverb Wet 50%", "Set reverb wet level to 0.50");
+    add(ModifierType::BufferReverbWet75, ModifierCategory::BufferEffect, "Reverb Wet 75%", "Set reverb wet level to 0.75");
+    add(ModifierType::BufferReverbWet100, ModifierCategory::BufferEffect, "Reverb Wet 100%", "Set reverb wet level to 1.00");
     add(ModifierType::BufferReverbOff, ModifierCategory::BufferEffect, "Reverb Off", "Disable reverb (ramp to 0)");
     add(ModifierType::BufferLowPassOn, ModifierCategory::BufferEffect, "LPF On", "Enable low pass filter");
     add(ModifierType::BufferLowPassOff, ModifierCategory::BufferEffect, "LPF Off", "Disable low pass (reset cutoff)");

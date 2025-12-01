@@ -152,12 +152,21 @@ private:
         auto playing = bufferManager.getPlayingBufferIndices();
         for (int idx : targets)
         {
+            bool wasPlaying = playing.contains(idx);
+            // Reset audio buffer + FX strip state
+            if (juce::isPositiveAndBelow(idx, channelStrips.size()))
+            {
+                // ChannelStrip::reset also resets underlying buffer to defaults
+                channelStrips[idx]->reset();
+            }
+            else if (auto* b = bufferManager.getBuffer(idx))
+            {
+                b->resetToDefaults();
+            }
             if (auto* b = bufferManager.getBuffer(idx))
             {
-                bool wasPlaying = playing.contains(idx);
-                b->resetToDefaults();
                 b->resetToBeginning();
-                if (wasPlaying) b->play();
+                if (wasPlaying && b->hasAudioLoaded()) b->play();
             }
         }
     }

@@ -180,20 +180,46 @@ void ModifierScheduler::forceUpcomingVariant(ModifierType type, const juce::Stri
             }
             else if (type == ModifierType::BufferDelayOn)
             {
-                // Accept either division labels (contain '/' or 'D' or 'T') OR numeric wet values
-                bool looksLikeDivision = variant.containsChar('/') || variant.contains("D") || variant.contains("T");
-                if (looksLikeDivision)
+                // Support combined variant syntax: "division|wet" (e.g. "1/8|0.50")
+                juce::String divPart, wetPart;
+                if (variant.containsChar('|'))
                 {
-                    base.plannedDelayDivision = variant; // e.g. 1/8D
-                    base.description = base.description + " -> Delay " + base.plannedDelayDivision;
+                    auto parts = juce::StringArray::fromTokens(variant, "|", "");
+                    if (parts.size() >= 1) divPart = parts[0].trim();
+                    if (parts.size() >= 2) wetPart = parts[1].trim();
                 }
                 else
                 {
-                    double wet = variant.getDoubleValue();
+                    // Single part: could be division or wet
+                    divPart = variant.trim();
+                }
+                // Decide if divPart is actually a division label; if not treat as wet
+                auto isDivision = [&](const juce::String& s){ return s.containsChar('/') || s.contains("D") || s.contains("T"); };
+                if (isDivision(divPart))
+                {
+                    base.plannedDelayDivision = divPart;
+                }
+                else if (divPart.isNotEmpty())
+                {
+                    wetPart = divPart; // reinterpret as wet value
+                    divPart.clear();
+                }
+                if (wetPart.isNotEmpty())
+                {
+                    double wet = wetPart.getDoubleValue();
                     wet = juce::jlimit(0.0, 1.0, wet);
                     base.plannedDelayWet = wet;
-                    base.description = base.description + " -> Delay Wet " + juce::String((int)std::round(wet * 100.0)) + "%";
                 }
+                // Build description fragment
+                juce::String frag(" -> Delay ");
+                juce::String combo;
+                if (base.plannedDelayDivision.isNotEmpty()) combo << base.plannedDelayDivision;
+                if (base.plannedDelayWet.has_value())
+                {
+                    if (combo.isNotEmpty()) combo << " | ";
+                    combo << (int)std::round(base.plannedDelayWet.value() * 100.0) << "%";
+                }
+                base.description = base.description + frag + combo;
             }
             upcoming = base;
             broadcastUpcoming();

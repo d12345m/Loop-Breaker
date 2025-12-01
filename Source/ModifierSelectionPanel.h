@@ -40,15 +40,16 @@ public:
     addVariantToggle(ModifierType::BufferReverbOn, "Reverb 75%", "0.75");
     addVariantToggle(ModifierType::BufferReverbOn, "Reverb 100%", "1.00");
     addToggle(ModifierType::BufferReverbOff, "Reverb Off");
-    addToggle(ModifierType::BufferDelayOn, "Delay On");
-    addVariantToggle(ModifierType::BufferDelayOn, "Delay 1/4", "1/4");
-    addVariantToggle(ModifierType::BufferDelayOn, "Delay 1/8", "1/8");
-    addVariantToggle(ModifierType::BufferDelayOn, "Delay 1/8D", "1/8D");
-    addVariantToggle(ModifierType::BufferDelayOn, "Delay 1/8T", "1/8T");
-    addVariantToggle(ModifierType::BufferDelayOn, "Delay Wet 25%", "0.25");
-    addVariantToggle(ModifierType::BufferDelayOn, "Delay Wet 50%", "0.50");
-    addVariantToggle(ModifierType::BufferDelayOn, "Delay Wet 75%", "0.75");
-    addVariantToggle(ModifierType::BufferDelayOn, "Delay Wet 100%", "1.00");
+        addToggle(ModifierType::BufferDelayOn, "Delay On");
+        // Delay division + wet multi-select group (allow simultaneous selection creating combined variant)
+        makeDelayDivisionToggle("Delay 1/4", "1/4");
+        makeDelayDivisionToggle("Delay 1/8", "1/8");
+        makeDelayDivisionToggle("Delay 1/8D", "1/8D");
+        makeDelayDivisionToggle("Delay 1/8T", "1/8T");
+        makeDelayWetToggle("Delay Wet 25%", "0.25");
+        makeDelayWetToggle("Delay Wet 50%", "0.50");
+        makeDelayWetToggle("Delay Wet 75%", "0.75");
+        makeDelayWetToggle("Delay Wet 100%", "1.00");
     addToggle(ModifierType::BufferDelayOff, "Delay Off");
     addToggle(ModifierType::BufferLowPassOn, "LPF On");
     addToggle(ModifierType::BufferLowPassOff, "LPF Off");
@@ -101,4 +102,60 @@ private:
         };
         addAndMakeVisible(t);
     }
+
+    // Delay division toggle that coexists with delay wet toggles
+    void makeDelayDivisionToggle(const juce::String& label, const juce::String& division)
+    {
+        auto* t = toggles.add(new juce::ToggleButton(label));
+        delayDivisionToggles.add(t);
+        t->onClick = [this, t, division]
+        {
+            if (t->getToggleState())
+                currentDelayDivision = division;
+            else if (currentDelayDivision == division)
+                currentDelayDivision.clear();
+            // Don't untoggle other delay division toggles automatically; user can combine but we keep only last active one visually
+            for (auto* other : delayDivisionToggles)
+                if (other != t && other->getToggleState()) other->setToggleState(false, juce::dontSendNotification);
+            dispatchCombinedDelayVariant();
+        };
+        addAndMakeVisible(t);
+    }
+
+    void makeDelayWetToggle(const juce::String& label, const juce::String& wetStr)
+    {
+        auto* t = toggles.add(new juce::ToggleButton(label));
+        delayWetToggles.add(t);
+        t->onClick = [this, t, wetStr]
+        {
+            if (t->getToggleState())
+                currentDelayWet = wetStr;
+            else if (currentDelayWet == wetStr)
+                currentDelayWet.clear();
+            // Single selection among wet toggles
+            for (auto* other : delayWetToggles)
+                if (other != t && other->getToggleState()) other->setToggleState(false, juce::dontSendNotification);
+            dispatchCombinedDelayVariant();
+        };
+        addAndMakeVisible(t);
+    }
+
+    void dispatchCombinedDelayVariant()
+    {
+        if (!onForceVariant) return;
+        // If both chosen, send combined; else send whichever exists (division or wet)
+        if (currentDelayDivision.isNotEmpty() && currentDelayWet.isNotEmpty())
+            onForceVariant(ModifierType::BufferDelayOn, currentDelayDivision + "|" + currentDelayWet);
+        else if (currentDelayDivision.isNotEmpty())
+            onForceVariant(ModifierType::BufferDelayOn, currentDelayDivision);
+        else if (currentDelayWet.isNotEmpty())
+            onForceVariant(ModifierType::BufferDelayOn, currentDelayWet);
+        else
+            ; // nothing selected; leave upcoming unchanged
+    }
+
+    juce::OwnedArray<juce::ToggleButton> delayDivisionToggles;
+    juce::OwnedArray<juce::ToggleButton> delayWetToggles;
+    juce::String currentDelayDivision;
+    juce::String currentDelayWet;
 };

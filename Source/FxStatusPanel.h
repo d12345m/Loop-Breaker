@@ -33,8 +33,8 @@ public:
             g.setColour(juce::Colours::lightgrey);
             g.drawText(line, row, juce::Justification::centredLeft);
             // Params line
-            juce::String p = juce::String::formatted(" rvb=%.2f fb=%.2f lpf=%.0f hpf=%.0f trem=%.2f",
-                                                     params.reverbWet, params.delayFeedback,
+            juce::String p = juce::String::formatted(" rvb=%.2f pd=%.0fms fb=%.2f lpf=%.0f hpf=%.0f trem=%.2f",
+                                                     params.reverbWet, params.reverbPreDelayMs, params.delayFeedback,
                                                      params.lowPassCutoff, params.highPassCutoff,
                                                      params.tremoloDepth);
             g.drawText(p, row.withX(row.getX()+180), juce::Justification::centredLeft);

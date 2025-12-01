@@ -207,8 +207,11 @@ private:
                 strip.effects().reverbEnabled = true;
                 // If a planned wet is provided, use it; else default to 0.85
                 float targetWet = desc.plannedWet.has_value() ? (float)desc.plannedWet.value() : 0.85f;
-                float durationBars = desc.plannedWet.has_value() ? 1.0f : 2.0f; // variants are snappier
+                // Use a consistent ramp duration for stability
+                float durationBars = desc.plannedWet.has_value() ? 1.0f : 2.0f;
                 strip.setReverbWetEnvelope(strip.getFxParams().reverbWet, targetWet, durationBars);
+                // Standardize pre-delay: fixed 20 ms for all reverb states to avoid jumping
+                strip.setReverbPreDelayEnvelope(strip.getFxParams().reverbPreDelayMs, 20.0f, 0.5f);
             }
         }
     }

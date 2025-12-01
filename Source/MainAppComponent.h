@@ -82,6 +82,7 @@ private:
   void quantizeSubdivisionChanged();
   void saveProjectClicked();
   void loadProjectClicked();
+  void restorePadFilesFromSettings();
 
     void attachPadCallbacks();
 

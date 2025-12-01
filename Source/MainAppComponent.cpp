@@ -138,8 +138,6 @@ void MainAppComponent::resized()
         modifiersToggle.setBounds(controlBar.removeFromLeft(120).reduced(2));
     padSelectForLoad.setBounds(controlBar.removeFromLeft(110).reduced(2));
     loadFileButton.setBounds(controlBar.removeFromLeft(150).reduced(2));
-    saveProjectButton.setBounds(controlBar.removeFromLeft(120).reduced(2));
-    loadProjectButton.setBounds(controlBar.removeFromLeft(120).reduced(2));
     // Right side region for BPM & toggle & status
     auto rightRegion = controlBar;
     // Place BPM slider at the rightmost ~220px
@@ -155,7 +153,12 @@ void MainAppComponent::resized()
     quantizeToggle.setBounds(rightRegion.removeFromRight(100).reduced(2));
     statusLabel.setBounds(rightRegion.reduced(2));
 
-    area.removeFromTop(10);
+    // New second row for project actions (Save/Load) to free room for BPM slider
+    auto projectBar = area.removeFromTop(28);
+    auto projLeft = projectBar.removeFromLeft(300);
+    saveProjectButton.setBounds(projLeft.removeFromLeft(130).reduced(2));
+    loadProjectButton.setBounds(projLeft.removeFromLeft(130).reduced(2));
+    area.removeFromTop(6);
     auto gridHeight = 300;
     padGrid.setBounds(area.removeFromTop(gridHeight));
     area.removeFromTop(6);
@@ -234,6 +237,10 @@ void MainAppComponent::loadFileClicked()
         {
             statusLabel.setText("Loaded to Pad " + juce::String(padIndex+1) + ": " + f.getFileName(), juce::dontSendNotification);
             padGrid.setPadFileName(padIndex, f.getFileNameWithoutExtension());
+            // Persist absolute path for project save
+            while (app.settings.padFilePaths.size() < AudioBufferManager::MAX_BUFFERS)
+                app.settings.padFilePaths.add(juce::String());
+            app.settings.padFilePaths.set(padIndex, f.getFullPathName());
         } else {
             juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Load Failed", "Could not load file.");
         }
@@ -344,6 +351,9 @@ void MainAppComponent::loadProjectClicked()
             app.scheduler.setQuantizationSubdivision(app.settings.quantizeSubdivision);
             if (running) app.scheduler.start();
 
+            // Restore pad files
+            restorePadFilesFromSettings();
+
             statusLabel.setText("Loaded project: " + file.getFileNameWithoutExtension(), juce::dontSendNotification);
         }
         else
@@ -351,6 +361,38 @@ void MainAppComponent::loadProjectClicked()
             juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Load Failed", "Could not load project.");
         }
     });
+}
+
+void MainAppComponent::restorePadFilesFromSettings()
+{
+    // Iterate through settings.padFilePaths and attempt to load each existing file
+    for (int i = 0; i < app.settings.padFilePaths.size() && i < AudioBufferManager::MAX_BUFFERS; ++i)
+    {
+        auto path = app.settings.padFilePaths[i];
+        if (path.isEmpty())
+        {
+            padGrid.setPadFileName(i, juce::String());
+            continue;
+        }
+        juce::File f(path);
+        if (f.existsAsFile())
+        {
+            if (app.bufferManager.loadAudioFile(i, f, formatManager))
+            {
+                padGrid.setPadFileName(i, f.getFileNameWithoutExtension());
+            }
+            else
+            {
+                // Loading failed despite file existing; show minimal feedback
+                padGrid.setPadFileName(i, "[missing]");
+            }
+        }
+        else
+        {
+            // Missing file; keep path in settings but indicate missing in UI
+            padGrid.setPadFileName(i, "[missing]");
+        }
+    }
 }
 
 void MainAppComponent::bpmChanged()

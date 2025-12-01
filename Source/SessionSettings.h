@@ -31,6 +31,9 @@ struct SessionSettings
     // Visual / UX
     juce::String themeName { "Default" };
 
+  // Pad file paths (absolute). Index corresponds to pad/buffer index. Empty means no file.
+  juce::StringArray padFilePaths { "", "", "", "", "", "", "", "" };
+
     // Persistence meta
     juce::String projectName { "Untitled Project" };
     juce::String projectId { juce::Uuid().toString() };

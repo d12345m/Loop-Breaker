@@ -121,6 +121,23 @@ void ModifierScheduler::broadcastUpcoming()
     for (auto* l : listeners) l->upcomingModifierChanged(upcoming.value());
 }
 
+void ModifierScheduler::triggerNow()
+{
+    if (!running || !upcoming.has_value()) return;
+    // Set next trigger to now and attempt immediate trigger
+    nextTriggerAbsoluteSeconds = accumulatedSecondsTotal;
+    triggerIfDue();
+}
+
+void ModifierScheduler::skipUpcoming()
+{
+    if (!running || !upcoming.has_value()) return;
+    // Simulate that we reached the trigger without firing, then select next and reschedule
+    lastTriggerAbsoluteSeconds = accumulatedSecondsTotal;
+    scheduleNextTrigger();
+    selectNextModifier();
+}
+
 void ModifierScheduler::forceUpcomingModifier(ModifierType type)
 {
     // Find prototype descriptor for given type

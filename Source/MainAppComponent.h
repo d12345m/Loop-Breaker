@@ -63,6 +63,9 @@ private:
   juce::ComboBox quantizeSubdivisionBox; // values: 1,2,4,8,16
   juce::Slider bpmSlider; // horizontal BPM control
   juce::Label bpmLabel { {}, "BPM" };
+  // Dev controls
+  juce::TextButton triggerNowButton { "Trigger Now" };
+  juce::TextButton skipUpcomingButton { "Skip" };
 
     juce::AudioFormatManager formatManager;
     std::unique_ptr<juce::FileChooser> fileChooser;

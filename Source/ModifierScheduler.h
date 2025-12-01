@@ -82,6 +82,10 @@ public:
     void forceUpcomingModifier(ModifierType type);
     void forceUpcomingVariant(ModifierType type, const juce::String& variant);
 
+    // Developer controls
+    void triggerNow();
+    void skipUpcoming();
+
 #if defined (JUCE_DEBUG) || defined (JUCE_UNIT_TESTS)
     // Test inspection helpers (not for production use)
     double TEST_getNextTriggerAbsoluteSeconds() const { return nextTriggerAbsoluteSeconds; }

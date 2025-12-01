@@ -18,6 +18,9 @@ MainAppComponent::MainAppComponent()
     addAndMakeVisible(modifierHistory);
     addAndMakeVisible(modifierSelectionPanel);
     addAndMakeVisible(fxStatusPanel);
+    // Dev controls
+    addAndMakeVisible(triggerNowButton); triggerNowButton.onClick = [this]{ app.scheduler.triggerNow(); };
+    addAndMakeVisible(skipUpcomingButton); skipUpcomingButton.onClick = [this]{ app.scheduler.skipUpcoming(); };
 
     addAndMakeVisible(playAllButton); playAllButton.onClick = [this]{ playAllClicked(); };
     addAndMakeVisible(stopAllButton); stopAllButton.onClick = [this]{ stopAllClicked(); };
@@ -181,7 +184,11 @@ void MainAppComponent::resized()
     // Split remaining bottom area: left = history, right = modifier selection panel
     auto bottomArea = area;
     auto rightPanel = bottomArea.removeFromRight(bottomArea.getWidth() / 3).reduced(4);
-    modifierSelectionPanel.setBounds(rightPanel.removeFromTop(rightPanel.getHeight() / 2));
+    auto rightTop = rightPanel.removeFromTop(rightPanel.getHeight() / 2);
+    modifierSelectionPanel.setBounds(rightTop.removeFromTop(rightTop.getHeight() - 28));
+    // Place dev controls at the bottom of the right-top area
+    triggerNowButton.setBounds(rightTop.removeFromLeft(120).reduced(2));
+    skipUpcomingButton.setBounds(rightTop.removeFromLeft(90).reduced(2));
     fxStatusPanel.setBounds(rightPanel);
     modifierHistory.setBounds(bottomArea.reduced(2));
 }

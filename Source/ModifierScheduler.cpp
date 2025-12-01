@@ -171,7 +171,7 @@ ModifierDescriptor ModifierScheduler::pickRandomDescriptor() const
         for (int i = 0; i < prototypeCache.size(); ++i)
         {
             auto t = prototypeCache[i]->getDescriptor().type;
-            if (t == ModifierType::Reverse || t == ModifierType::Speed || t == ModifierType::ResetAll || t == ModifierType::BeatSliceRandom)
+                if (t == ModifierType::Reverse || t == ModifierType::Speed || t == ModifierType::ResetAll || t == ModifierType::BeatSliceRandom || t == ModifierType::BufferReverbOn || t == ModifierType::BufferDelayOn || t == ModifierType::BufferLowPassOn || t == ModifierType::BufferHighPassOn || t == ModifierType::BufferTremolo)
                 candidateIndices.add(i);
         }
     }

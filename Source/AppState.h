@@ -60,6 +60,21 @@ struct AppState : public ModifierSchedulerListener
             case ModifierType::BeatSliceRandom:
                 applyBeatSliceRandom(desc, targets);
                 break;
+            case ModifierType::BufferReverbOn:
+                applyBufferReverbOn(targets);
+                break;
+            case ModifierType::BufferDelayOn:
+                applyBufferDelayOn(targets);
+                break;
+            case ModifierType::BufferLowPassOn:
+                applyBufferLowPassOn(targets);
+                break;
+            case ModifierType::BufferHighPassOn:
+                applyBufferHighPassOn(targets);
+                break;
+            case ModifierType::BufferTremolo:
+                applyBufferTremoloOn(targets);
+                break;
             default:
                 break; // Unimplemented modifiers ignored for now
         }
@@ -143,5 +158,91 @@ private:
                 if (!b->isPlaying()) b->play();
             }
         }
+    }
+
+    void applyBufferReverbOn(const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        for (int idx : targets)
+        {
+            if (juce::isPositiveAndBelow(idx, channelStrips.size()))
+            {
+                auto& strip = channelStrips.getReference(idx);
+                strip.effects().reverbEnabled = true;
+                // Set a simple wet envelope: ramp from 0.0 to 0.35 over 2 bars
+                strip.setReverbWetEnvelope(strip.getFxParams().reverbWet, 0.35f, 2.0f);
+            }
+        }
+    }
+
+    void applyBufferDelayOn(const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        for (int idx : targets)
+        {
+            if (juce::isPositiveAndBelow(idx, channelStrips.size()))
+            {
+                auto& strip = channelStrips.getReference(idx);
+                strip.effects().delayEnabled = true;
+                // Ramp delay feedback to 0.25 over 2 bars
+                strip.setDelayFeedbackEnvelope(strip.getFxParams().delayFeedback, 0.25f, 2.0f);
+            }
+        }
+    }
+
+    void applyBufferLowPassOn(const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        for (int idx : targets)
+        {
+            if (juce::isPositiveAndBelow(idx, channelStrips.size()))
+            {
+                auto& strip = channelStrips.getReference(idx);
+                strip.effects().lowPassEnabled = true;
+                // Sweep LPF cutoff down to 4000 Hz over 1 bar
+                strip.setLowPassCutoffEnvelope(strip.getFxParams().lowPassCutoff, 4000.0f, 1.0f);
+            }
+        }
+    }
+
+    void applyBufferHighPassOn(const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        for (int idx : targets)
+        {
+            if (juce::isPositiveAndBelow(idx, channelStrips.size()))
+            {
+                auto& strip = channelStrips.getReference(idx);
+                strip.effects().highPassEnabled = true;
+                // Raise HPF cutoff up to 120 Hz over 1 bar
+                strip.setHighPassCutoffEnvelope(strip.getFxParams().highPassCutoff, 120.0f, 1.0f);
+            }
+        }
+    }
+
+    void applyBufferTremoloOn(const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        for (int idx : targets)
+        {
+            if (juce::isPositiveAndBelow(idx, channelStrips.size()))
+            {
+                auto& strip = channelStrips.getReference(idx);
+                strip.effects().tremoloEnabled = true;
+                // Increase tremolo depth to 0.5 over 2 bars
+                strip.setTremoloDepthEnvelope(strip.getFxParams().tremoloDepth, 0.5f, 2.0f);
+            }
+        }
+    }
+
+public:
+    // Advance FX envelopes per audio block. Call with blockSeconds from audio thread owner.
+    void advanceFxEnvelopes(double blockSeconds)
+    {
+        double secondsPerBar = settings.getSecondsPerBar();
+        if (secondsPerBar <= 0.0) secondsPerBar = 1.0;
+        float barsDelta = (float)(blockSeconds / secondsPerBar);
+        for (int i = 0; i < channelStrips.size(); ++i)
+            channelStrips.getReference(i).advanceEnvelopes(barsDelta);
     }
 };

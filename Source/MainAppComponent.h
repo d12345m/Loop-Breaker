@@ -16,6 +16,7 @@
 #include "UpcomingModifierDisplay.h"
 #include "ModifierHistoryPanel.h"
 #include "ModifierSelectionPanel.h"
+#include "FxStatusPanel.h"
 
 class MainAppComponent : public juce::AudioAppComponent,
                          public ModifierSchedulerListener,
@@ -46,6 +47,7 @@ private:
   ModifierHistoryPanel modifierHistory;
     PadGridComponent padGrid;
   ModifierSelectionPanel modifierSelectionPanel; // new developer panel
+  FxStatusPanel fxStatusPanel { app }; // read-only FX status
     juce::TextButton playAllButton { "Play All" };
     juce::TextButton stopAllButton { "Stop All" };
   juce::ToggleButton modifiersToggle { "Modifiers" }; // Links playback to scheduler when ON

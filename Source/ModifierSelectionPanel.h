@@ -33,6 +33,12 @@ public:
 
         addToggle(ModifierType::Reverse, "Reverse");
         addToggle(ModifierType::Speed, "Speed (rand)");
+    // Buffer FX (placeholders)
+    addToggle(ModifierType::BufferReverbOn, "Reverb (on)");
+    addToggle(ModifierType::BufferDelayOn, "Delay (on)");
+    addToggle(ModifierType::BufferLowPassOn, "LPF (on)");
+    addToggle(ModifierType::BufferHighPassOn, "HPF (on)");
+    addToggle(ModifierType::BufferTremolo, "Tremolo (on)");
         // Speed variants
         addVariantToggle(ModifierType::Speed, "Speed 0.25x", "0.25");
         addVariantToggle(ModifierType::Speed, "Speed 0.50x", "0.5");

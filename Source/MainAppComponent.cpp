@@ -17,6 +17,7 @@ MainAppComponent::MainAppComponent()
     addAndMakeVisible(padGrid);
     addAndMakeVisible(modifierHistory);
     addAndMakeVisible(modifierSelectionPanel);
+    addAndMakeVisible(fxStatusPanel);
 
     addAndMakeVisible(playAllButton); playAllButton.onClick = [this]{ playAllClicked(); };
     addAndMakeVisible(stopAllButton); stopAllButton.onClick = [this]{ stopAllClicked(); };
@@ -117,6 +118,8 @@ void MainAppComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& bu
     {
         double blockSeconds = bufferToFill.numSamples / hostSampleRate;
         app.scheduler.updateTime(blockSeconds);
+        // Advance FX envelopes using musical bars derived from block duration
+        app.advanceFxEnvelopes(blockSeconds);
     }
 }
 
@@ -178,7 +181,8 @@ void MainAppComponent::resized()
     // Split remaining bottom area: left = history, right = modifier selection panel
     auto bottomArea = area;
     auto rightPanel = bottomArea.removeFromRight(bottomArea.getWidth() / 3).reduced(4);
-    modifierSelectionPanel.setBounds(rightPanel);
+    modifierSelectionPanel.setBounds(rightPanel.removeFromTop(rightPanel.getHeight() / 2));
+    fxStatusPanel.setBounds(rightPanel);
     modifierHistory.setBounds(bottomArea.reduced(2));
 }
 

@@ -39,6 +39,13 @@ public:
             reverbPrepared = true;
             lastSampleRate = sampleRate;
             lastBlockSize = blockSize;
+
+            // (Re)allocate circular pre-delay buffer: size = maxDelaySamples + blockSize + 1
+            const int maxDelaySamples = (int) std::ceil((kMaxPreDelayMs / 1000.0) * juce::jmax(1.0, lastSampleRate));
+            preDelayBufferSize = maxDelaySamples + blockSize + 1; // +1 guard for modular arithmetic
+            preDelayWritePos = 0;
+            preDelayBuffer.setSize(2, preDelayBufferSize, false, false, true);
+            preDelayBuffer.clear();
         }
     }
 
@@ -48,44 +55,61 @@ public:
         const int numSamples = tempBuffer.getNumSamples();
         const int numChannels = tempBuffer.getNumChannels();
 
-        // Build a wet-only path by processing a delayed copy through the reverb
-        juce::AudioBuffer<float> wetBuffer(numChannels, numSamples);
-        wetBuffer.makeCopyOf(tempBuffer);
-
-        // Apply simple pre-delay (intra-block shift) only if it fits inside current block
-        const int delaySamples = (int) std::round((params.reverbPreDelayMs / 1000.0) * juce::jmax(1.0, lastSampleRate));
-        if (delaySamples > 0 && delaySamples < numSamples)
+        // Ensure pre-delay buffer matches channel count (reallocate if channel count changed)
+        if (preDelayBuffer.getNumChannels() != numChannels)
         {
+            juce::AudioBuffer<float> newBuf(numChannels, preDelayBufferSize);
+            newBuf.clear();
+            // copy existing channel data where possible (up to min channels)
+            const int copyCh = juce::jmin(preDelayBuffer.getNumChannels(), newBuf.getNumChannels());
+            for (int ch = 0; ch < copyCh; ++ch)
+                newBuf.copyFrom(ch, 0, preDelayBuffer, ch, 0, preDelayBufferSize);
+            preDelayBuffer = std::move(newBuf);
+        }
+
+        // Prepare wet buffer (delayed input) size
+        juce::AudioBuffer<float> wetBuffer(numChannels, numSamples);
+        wetBuffer.clear();
+
+        // Compute desired pre-delay samples from params (circular buffer based, continuous across blocks)
+        const int delaySamples = (int) juce::jlimit(0.0, (kMaxPreDelayMs / 1000.0) * lastSampleRate,
+                                                  (params.reverbPreDelayMs / 1000.0) * juce::jmax(1.0, lastSampleRate));
+
+        // Circular buffer read/write (advance position once per sample for all channels to avoid inter-channel drift)
+        const int bufferSize = preDelayBufferSize;
+        for (int i = 0; i < numSamples; ++i)
+        {
+            int writePos = preDelayWritePos;
+            int readPos = writePos - delaySamples;
+            if (readPos < 0) readPos += bufferSize;
             for (int ch = 0; ch < numChannels; ++ch)
             {
-                auto* data = wetBuffer.getWritePointer(ch);
-                // Shift from end backward to avoid overwrite
-                for (int i = numSamples - 1; i >= delaySamples; --i)
-                    data[i] = data[i - delaySamples];
-                // Zero the newly exposed leading region
-                juce::FloatVectorOperations::clear(data, delaySamples);
+                auto* delayData = preDelayBuffer.getWritePointer(ch);
+                const float inSample = tempBuffer.getSample(ch, i);
+                delayData[writePos] = inSample;
+                const float delayed = delaySamples > 0 ? delayData[readPos] : inSample;
+                wetBuffer.setSample(ch, i, delayed);
             }
+            if (++preDelayWritePos >= bufferSize) preDelayWritePos = 0;
         }
-        // If delaySamples >= numSamples we skip (avoids full zeroing that killed reverb input)
 
+        // Reverb parameters: wet-only processing
         juce::dsp::Reverb::Parameters rp;
-        rp.roomSize = 0.95f;  // very large room for longer tail
-        rp.damping  = 0.20f;  // less damping for longer decay
+    rp.roomSize = 0.80f; // slightly smaller to reduce metallic density
+    rp.damping  = 0.40f; // more damping to tame highs
         rp.width    = 1.0f;
-        rp.wetLevel = 1.0f;   // wet-only output
-        rp.dryLevel = 0.0f;   // keep dry at unity in original buffer
+        rp.wetLevel = 1.0f;
+        rp.dryLevel = 0.0f;
         reverb.setParameters(rp);
 
         juce::dsp::AudioBlock<float> wetBlock(wetBuffer);
         juce::dsp::ProcessContextReplacing<float> wetCtx(wetBlock);
         reverb.process(wetCtx);
 
-        // Perceptual scaling: make low percentages less dominant, high more noticeable
+        // Perceptual scaling of wet contribution
         float linearWet = juce::jlimit(0.0f, 1.0f, params.reverbWet);
-        // Map: 0.25->0.20, 0.50->0.45, 0.75->0.75, 1.0->1.0 approximately using a gentle curve
-        float wetGain = std::pow(linearWet, 0.85f); // exponent < 1 lifts higher values
-        // Slight dry attenuation at high wet to reveal tail without killing presence
-        float dryGain = 1.0f - (wetGain * 0.3f); // up to -0.3 at full wet
+        float wetGain = std::pow(linearWet, 0.85f);
+        float dryGain = 1.0f - (wetGain * 0.3f);
         dryGain = juce::jlimit(0.7f, 1.0f, dryGain);
         for (int ch = 0; ch < numChannels; ++ch)
         {
@@ -219,4 +243,9 @@ private:
     bool reverbPrepared = false;
     double lastSampleRate = 0.0;
     int lastBlockSize = 0;
+    // Circular pre-delay buffer
+    juce::AudioBuffer<float> preDelayBuffer; // channels match current audio block
+    int preDelayBufferSize = 0;
+    int preDelayWritePos = 0;
+    static constexpr double kMaxPreDelayMs = 60.0; // matches envelope clamp
 };

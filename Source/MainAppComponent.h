@@ -50,6 +50,8 @@ private:
     juce::TextButton stopAllButton { "Stop All" };
   juce::ToggleButton modifiersToggle { "Modifiers" }; // Links playback to scheduler when ON
     juce::TextButton loadFileButton { "Load File To Pad..." };
+    juce::TextButton saveProjectButton { "Save Project" };
+    juce::TextButton loadProjectButton { "Load Project" };
     juce::ComboBox padSelectForLoad;
     juce::Label statusLabel { {}, "Status: Idle" };
   juce::ToggleButton implementedOnlyToggle { "Implemented Only" };
@@ -78,6 +80,8 @@ private:
   void updatePlaybackModifierLink();
   void quantizeToggled();
   void quantizeSubdivisionChanged();
+  void saveProjectClicked();
+  void loadProjectClicked();
 
     void attachPadCallbacks();
 

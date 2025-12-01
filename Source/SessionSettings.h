@@ -19,6 +19,10 @@ struct SessionSettings
     int timeSigDenominator = 4;         // e.g. 4 in 4/4
     int barsBetweenModifiers = 4;       // How many bars elapse before next modifier is applied
 
+  // Scheduler quantization
+  bool quantizeEnabled = false;       // If true, triggers snap to grid
+  int quantizeSubdivision = 4;        // Subdivisions per bar when quantized (1,2,4,8,16)
+
     // Project / playback configuration
     bool multiChannelRecording = false; // If true, render each buffer to its own output bus (future)
     int numBuffers = 8;                 // Always 8 for MPC-style grid (matches AudioBufferManager::MAX_BUFFERS)

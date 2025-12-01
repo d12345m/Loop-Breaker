@@ -24,6 +24,8 @@ MainAppComponent::MainAppComponent()
         modifiersToggle.setToggleState(true, juce::dontSendNotification);
         modifiersToggle.onClick = [this]{ modifiersToggleChanged(); };
     addAndMakeVisible(loadFileButton); loadFileButton.onClick = [this]{ loadFileClicked(); };
+    addAndMakeVisible(saveProjectButton); saveProjectButton.onClick = [this]{ saveProjectClicked(); };
+    addAndMakeVisible(loadProjectButton); loadProjectButton.onClick = [this]{ loadProjectClicked(); };
 
     addAndMakeVisible(padSelectForLoad);
     for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
@@ -38,8 +40,8 @@ MainAppComponent::MainAppComponent()
     implementedOnlyToggle.onClick = [this]{ implementedOnlyToggled(); };
     addAndMakeVisible(implementedOnlyToggle);
 
-    // Quantization toggle & subdivision selector
-    quantizeToggle.setToggleState(false, juce::dontSendNotification);
+    // Quantization toggle & subdivision selector (init from settings)
+    quantizeToggle.setToggleState(app.settings.quantizeEnabled, juce::dontSendNotification);
     quantizeToggle.onClick = [this]{ quantizeToggled(); };
     addAndMakeVisible(quantizeToggle);
     quantizeSubdivisionBox.addItem("Bar", 1);          // 1
@@ -47,7 +49,11 @@ MainAppComponent::MainAppComponent()
     quantizeSubdivisionBox.addItem("1/4 (Beat)", 3);   // internally map to 4 later (IDs must be unique)
     quantizeSubdivisionBox.addItem("1/8", 4);          // map to 8
     quantizeSubdivisionBox.addItem("1/16", 5);         // map to 16
-    quantizeSubdivisionBox.setSelectedId(3, juce::dontSendNotification); // default beats
+    // Helper to map settings.quantizeSubdivision to UI id
+    auto subdivisionToId = [](int subdiv)->int{
+        switch (subdiv) { case 1: return 1; case 2: return 2; case 4: return 3; case 8: return 4; case 16: return 5; default: return 3; }
+    };
+    quantizeSubdivisionBox.setSelectedId(subdivisionToId(app.settings.quantizeSubdivision), juce::dontSendNotification);
     quantizeSubdivisionBox.onChange = [this]{ quantizeSubdivisionChanged(); };
     addAndMakeVisible(quantizeSubdivisionBox);
 
@@ -77,6 +83,10 @@ MainAppComponent::MainAppComponent()
     setSize(920, 600);
 
     startTimerHz(10); // 100ms UI refresh (status only now; selection via callbacks)
+
+    // Apply initial scheduler settings from SessionSettings
+    app.scheduler.setQuantizationEnabled(app.settings.quantizeEnabled);
+    app.scheduler.setQuantizationSubdivision(app.settings.quantizeSubdivision);
 }
 
 MainAppComponent::~MainAppComponent()
@@ -128,6 +138,8 @@ void MainAppComponent::resized()
         modifiersToggle.setBounds(controlBar.removeFromLeft(120).reduced(2));
     padSelectForLoad.setBounds(controlBar.removeFromLeft(110).reduced(2));
     loadFileButton.setBounds(controlBar.removeFromLeft(150).reduced(2));
+    saveProjectButton.setBounds(controlBar.removeFromLeft(120).reduced(2));
+    loadProjectButton.setBounds(controlBar.removeFromLeft(120).reduced(2));
     // Right side region for BPM & toggle & status
     auto rightRegion = controlBar;
     // Place BPM slider at the rightmost ~220px
@@ -279,6 +291,7 @@ static int mapQuantizeIdToSubdivision(int id)
 void MainAppComponent::quantizeToggled()
 {
     bool enabled = quantizeToggle.getToggleState();
+    app.settings.quantizeEnabled = enabled;
     app.scheduler.setQuantizationEnabled(enabled);
     if (enabled)
         quantizeSubdivisionChanged(); // apply current selection
@@ -288,7 +301,56 @@ void MainAppComponent::quantizeSubdivisionChanged()
 {
     int id = quantizeSubdivisionBox.getSelectedId();
     int subdiv = mapQuantizeIdToSubdivision(id);
+    app.settings.quantizeSubdivision = subdiv;
     app.scheduler.setQuantizationSubdivision(subdiv);
+}
+
+void MainAppComponent::saveProjectClicked()
+{
+    juce::File initialDir = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("BufferTestProjects");
+    initialDir.createDirectory();
+    fileChooser = std::make_unique<juce::FileChooser>("Select project folder to save", initialDir, juce::String());
+    auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories;
+    fileChooser->launchAsync(flags, [this](const juce::FileChooser& fc){
+        auto dir = fc.getResult();
+        if (dir == juce::File()) return;
+        if (app.projectManager.saveProject(dir, true))
+            statusLabel.setText("Project saved to: " + dir.getFullPathName(), juce::dontSendNotification);
+        else
+            juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Save Failed", "Could not save project.");
+    });
+}
+
+void MainAppComponent::loadProjectClicked()
+{
+    juce::File initialDir = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("BufferTestProjects");
+    initialDir.createDirectory();
+    fileChooser = std::make_unique<juce::FileChooser>("Select project file (.json)", initialDir, "*.json");
+    auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
+    fileChooser->launchAsync(flags, [this](const juce::FileChooser& fc){
+        auto file = fc.getResult();
+        if (file == juce::File()) return;
+        if (app.projectManager.loadProject(file))
+        {
+            // Apply loaded settings to UI & scheduler
+            bpmSlider.setValue(app.settings.bpm, juce::dontSendNotification);
+            quantizeToggle.setToggleState(app.settings.quantizeEnabled, juce::dontSendNotification);
+            auto subdivisionToId = [](int subdiv)->int{ switch (subdiv) { case 1: return 1; case 2: return 2; case 4: return 3; case 8: return 4; case 16: return 5; default: return 3; } };
+            quantizeSubdivisionBox.setSelectedId(subdivisionToId(app.settings.quantizeSubdivision), juce::dontSendNotification);
+
+            bool running = app.scheduler.isRunning();
+            if (running) app.scheduler.stop();
+            app.scheduler.setQuantizationEnabled(app.settings.quantizeEnabled);
+            app.scheduler.setQuantizationSubdivision(app.settings.quantizeSubdivision);
+            if (running) app.scheduler.start();
+
+            statusLabel.setText("Loaded project: " + file.getFileNameWithoutExtension(), juce::dontSendNotification);
+        }
+        else
+        {
+            juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Load Failed", "Could not load project.");
+        }
+    });
 }
 
 void MainAppComponent::bpmChanged()

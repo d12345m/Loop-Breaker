@@ -35,6 +35,8 @@ bool ProjectManager::loadProject(const juce::File& file)
     settings.timeSigNumerator    = (int)getOr("tsNum", settings.timeSigNumerator);
     settings.timeSigDenominator  = (int)getOr("tsDen", settings.timeSigDenominator);
     settings.barsBetweenModifiers= (int)getOr("barsBetweenModifiers", settings.barsBetweenModifiers);
+    settings.quantizeEnabled     = (bool)getOr("quantizeEnabled", settings.quantizeEnabled);
+    settings.quantizeSubdivision = (int)getOr("quantizeSubdivision", settings.quantizeSubdivision);
     return true;
 }
 
@@ -53,6 +55,8 @@ bool ProjectManager::saveProject(const juce::File& directory, bool overwrite) co
     obj->setProperty("tsNum", settings.timeSigNumerator);
     obj->setProperty("tsDen", settings.timeSigDenominator);
     obj->setProperty("barsBetweenModifiers", settings.barsBetweenModifiers);
+    obj->setProperty("quantizeEnabled", settings.quantizeEnabled);
+    obj->setProperty("quantizeSubdivision", settings.quantizeSubdivision);
 
     juce::String json = juce::JSON::toString(juce::var(obj.get()), true);
     return file.replaceWithText(json);

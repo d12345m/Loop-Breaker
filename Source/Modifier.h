@@ -34,11 +34,16 @@ enum class ModifierType
 
     // Individual buffer FX modifiers
     BufferDelayOn,
+    BufferDelayOff,
     BufferReverbOn,
+    BufferReverbOff,
     BufferLowPassOn,
+    BufferLowPassOff,
     BufferHighPassOn,
+    BufferHighPassOff,
     BufferVolumeRampDown,
     BufferTremolo,
+    BufferTremoloOff,
 
     // Master FX modifiers
     MasterHighPassOn,

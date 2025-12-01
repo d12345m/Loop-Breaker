@@ -41,6 +41,12 @@ public:
     void releaseResources();
     
     //==============================================================================
+    
+      // Optional per-buffer processing hook (e.g., FX). Called after each buffer renders into tempBuffer, before mix.
+      void setPerBufferProcessor(std::function<void(int /*bufferIndex*/, juce::AudioBuffer<float>& /*tempBuffer*/, double /*sampleRate*/)> fn)
+      {
+        perBufferProcessor = std::move(fn);
+      }
     // Buffer management
     AudioBuffer* getBuffer(int bufferIndex);
     const AudioBuffer* getBuffer(int bufferIndex) const;
@@ -84,11 +90,13 @@ private:
     std::array<std::unique_ptr<AudioBuffer>, MAX_BUFFERS> buffers;
     
     // Master controls
+      std::function<void(int, juce::AudioBuffer<float>&, double)> perBufferProcessor;
     std::atomic<float> masterVolume { 1.0f };
     
     // Audio processing
     juce::AudioBuffer<float> mixBuffer;
     juce::AudioBuffer<float> tempBuffer;
+  double hostSampleRate = 44100.0;
     
     // Listeners
     juce::Array<AudioBufferListener*> listeners;

@@ -35,6 +35,7 @@ void AudioBufferManager::prepare(double sampleRate, int samplesPerBlockExpected)
     // Prepare mixing buffers
     mixBuffer.setSize(2, samplesPerBlockExpected);
     tempBuffer.setSize(2, samplesPerBlockExpected);
+    hostSampleRate = sampleRate;
 }
 
 void AudioBufferManager::processBlock(juce::AudioBuffer<float>& outputBuffer)
@@ -46,13 +47,17 @@ void AudioBufferManager::processBlock(juce::AudioBuffer<float>& outputBuffer)
     outputBuffer.clear();
     
     // Process and mix all loaded buffers
-    for (auto& buffer : buffers)
+    for (int i = 0; i < (int)buffers.size(); ++i)
     {
+        auto& buffer = buffers[i];
         if (buffer->hasAudioLoaded())
         {
             // Process the buffer into temp buffer
             tempBuffer.setSize(numChannels, numSamples, false, true, true);
             buffer->processBlock(tempBuffer);
+            // Per-buffer processing hook (FX)
+            if (perBufferProcessor)
+                perBufferProcessor(i, tempBuffer, hostSampleRate);
             
             // Add to the mix
             for (int channel = 0; channel < numChannels; ++channel)

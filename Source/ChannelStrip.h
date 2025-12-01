@@ -27,6 +27,30 @@ class ChannelStrip
 {
 public:
     explicit ChannelStrip(AudioBuffer* bufferPtr = nullptr) : buffer(bufferPtr) {}
+    // DSP: simple reverb processor (per-strip). Prepare once and process temp buffers.
+    void prepareDSP(double sampleRate, int blockSize)
+    {
+        juce::dsp::ProcessSpec spec { sampleRate, (juce::uint32) blockSize, 2 };
+        reverb.reset();
+        reverb.prepare(spec);
+    }
+
+    void processDSP(juce::AudioBuffer<float>& tempBuffer)
+    {
+        if (!effects().reverbEnabled) return;
+        // Map params to JUCE Reverb
+        juce::dsp::Reverb::Parameters p;
+    p.roomSize = 0.8f;   // larger room for audibility
+    p.damping  = 0.4f;   // slightly more damping
+    p.wetLevel = juce::jlimit(0.0f, 1.0f, params.reverbWet);
+    p.dryLevel = 1.0f;   // keep dry at full; rely on wet level for blend
+        p.width    = 1.0f;
+        reverb.setParameters(p);
+
+        juce::dsp::AudioBlock<float> block(tempBuffer);
+        juce::dsp::ProcessContextReplacing<float> ctx(block);
+        reverb.process(ctx);
+    }
 
     void setAudioBuffer(AudioBuffer* b) { buffer = b; }
     AudioBuffer* getAudioBuffer() const { return buffer; }
@@ -127,4 +151,5 @@ private:
     EffectEnvelope lowPassCutoffEnv;
     EffectEnvelope highPassCutoffEnv;
     EffectEnvelope tremoloDepthEnv;
+    juce::dsp::Reverb reverb;
 };

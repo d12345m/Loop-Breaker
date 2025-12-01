@@ -67,12 +67,17 @@ juce::OwnedArray<IModifier> ModifierFactory::createAllPrototypes()
     add(ModifierType::BeatSliceRandom, ModifierCategory::BufferTransform, "Slice", "Random beat slicing");
 
     // Buffer FX
-    add(ModifierType::BufferDelayOn, ModifierCategory::BufferEffect, "Delay", "Enable delay wet signal");
-    add(ModifierType::BufferReverbOn, ModifierCategory::BufferEffect, "Reverb", "Enable reverb wet signal");
-    add(ModifierType::BufferLowPassOn, ModifierCategory::BufferEffect, "LPF", "Enable low pass filter");
-    add(ModifierType::BufferHighPassOn, ModifierCategory::BufferEffect, "HPF", "Enable high pass filter");
+    add(ModifierType::BufferDelayOn, ModifierCategory::BufferEffect, "Delay On", "Enable delay wet signal");
+    add(ModifierType::BufferDelayOff, ModifierCategory::BufferEffect, "Delay Off", "Disable delay (ramp to 0)");
+    add(ModifierType::BufferReverbOn, ModifierCategory::BufferEffect, "Reverb On", "Enable reverb wet signal");
+    add(ModifierType::BufferReverbOff, ModifierCategory::BufferEffect, "Reverb Off", "Disable reverb (ramp to 0)");
+    add(ModifierType::BufferLowPassOn, ModifierCategory::BufferEffect, "LPF On", "Enable low pass filter");
+    add(ModifierType::BufferLowPassOff, ModifierCategory::BufferEffect, "LPF Off", "Disable low pass (reset cutoff)");
+    add(ModifierType::BufferHighPassOn, ModifierCategory::BufferEffect, "HPF On", "Enable high pass filter");
+    add(ModifierType::BufferHighPassOff, ModifierCategory::BufferEffect, "HPF Off", "Disable high pass (reset cutoff)");
     add(ModifierType::BufferVolumeRampDown, ModifierCategory::BufferEffect, "FadeDn", "Volume ramp down");
-    add(ModifierType::BufferTremolo, ModifierCategory::BufferEffect, "Trem", "Tremolo modulation");
+    add(ModifierType::BufferTremolo, ModifierCategory::BufferEffect, "Trem On", "Tremolo modulation");
+    add(ModifierType::BufferTremoloOff, ModifierCategory::BufferEffect, "Trem Off", "Disable tremolo (ramp depth to 0)");
 
     // Master FX
     add(ModifierType::MasterHighPassOn, ModifierCategory::MasterEffect, "MHPF", "Master high pass on");

@@ -21,13 +21,22 @@ struct AppState : public ModifierSchedulerListener
     ModifierScheduler scheduler { settings };
 
     // Channel strips for FX placeholder wrapping existing buffers
-    juce::Array<ChannelStrip> channelStrips;
+    juce::OwnedArray<ChannelStrip> channelStrips;
 
     AppState()
     {
         // Initialize channel strips referencing underlying buffers
         for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
-            channelStrips.add(ChannelStrip(bufferManager.getBuffer(i)));
+            channelStrips.add(new ChannelStrip(bufferManager.getBuffer(i)));
+
+        // Hook per-buffer processor into AudioBufferManager to apply strip DSP (e.g., reverb)
+        bufferManager.setPerBufferProcessor([this](int idx, juce::AudioBuffer<float>& temp, double sampleRate){
+            if (!juce::isPositiveAndBelow(idx, channelStrips.size())) return;
+            // Ensure DSP prepared (block size from temp buffer)
+            channelStrips[idx]->prepareDSP(sampleRate, temp.getNumSamples());
+            // Update envelopes were advanced per block already; process with current params
+            channelStrips[idx]->processDSP(temp);
+        });
 
         scheduler.addListener(this);
     }
@@ -63,17 +72,32 @@ struct AppState : public ModifierSchedulerListener
             case ModifierType::BufferReverbOn:
                 applyBufferReverbOn(targets);
                 break;
+            case ModifierType::BufferReverbOff:
+                applyBufferReverbOff(targets);
+                break;
             case ModifierType::BufferDelayOn:
                 applyBufferDelayOn(targets);
+                break;
+            case ModifierType::BufferDelayOff:
+                applyBufferDelayOff(targets);
                 break;
             case ModifierType::BufferLowPassOn:
                 applyBufferLowPassOn(targets);
                 break;
+            case ModifierType::BufferLowPassOff:
+                applyBufferLowPassOff(targets);
+                break;
             case ModifierType::BufferHighPassOn:
                 applyBufferHighPassOn(targets);
                 break;
+            case ModifierType::BufferHighPassOff:
+                applyBufferHighPassOff(targets);
+                break;
             case ModifierType::BufferTremolo:
                 applyBufferTremoloOn(targets);
+                break;
+            case ModifierType::BufferTremoloOff:
+                applyBufferTremoloOff(targets);
                 break;
             default:
                 break; // Unimplemented modifiers ignored for now
@@ -167,10 +191,25 @@ private:
         {
             if (juce::isPositiveAndBelow(idx, channelStrips.size()))
             {
-                auto& strip = channelStrips.getReference(idx);
+                auto& strip = *channelStrips[idx];
                 strip.effects().reverbEnabled = true;
-                // Set a simple wet envelope: ramp from 0.0 to 0.35 over 2 bars
-                strip.setReverbWetEnvelope(strip.getFxParams().reverbWet, 0.35f, 2.0f);
+                // Ramp reverb wet up to 0.70 over 2 bars (make it audible)
+                strip.setReverbWetEnvelope(strip.getFxParams().reverbWet, 0.70f, 2.0f);
+            }
+        }
+    }
+
+    void applyBufferReverbOff(const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        for (int idx : targets)
+        {
+            if (juce::isPositiveAndBelow(idx, channelStrips.size()))
+            {
+                auto& strip = *channelStrips[idx];
+                // Ramp wet down to 0 over 2 bars; then disable flag
+                strip.setReverbWetEnvelope(strip.getFxParams().reverbWet, 0.0f, 2.0f);
+                strip.effects().reverbEnabled = true; // keep on during ramp
             }
         }
     }
@@ -182,10 +221,24 @@ private:
         {
             if (juce::isPositiveAndBelow(idx, channelStrips.size()))
             {
-                auto& strip = channelStrips.getReference(idx);
+                auto& strip = *channelStrips[idx];
                 strip.effects().delayEnabled = true;
                 // Ramp delay feedback to 0.25 over 2 bars
                 strip.setDelayFeedbackEnvelope(strip.getFxParams().delayFeedback, 0.25f, 2.0f);
+            }
+        }
+    }
+
+    void applyBufferDelayOff(const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        for (int idx : targets)
+        {
+            if (juce::isPositiveAndBelow(idx, channelStrips.size()))
+            {
+                auto& strip = *channelStrips[idx];
+                strip.setDelayFeedbackEnvelope(strip.getFxParams().delayFeedback, 0.0f, 2.0f);
+                strip.effects().delayEnabled = true; // keep on during ramp
             }
         }
     }
@@ -197,10 +250,25 @@ private:
         {
             if (juce::isPositiveAndBelow(idx, channelStrips.size()))
             {
-                auto& strip = channelStrips.getReference(idx);
+                auto& strip = *channelStrips[idx];
                 strip.effects().lowPassEnabled = true;
                 // Sweep LPF cutoff down to 4000 Hz over 1 bar
                 strip.setLowPassCutoffEnvelope(strip.getFxParams().lowPassCutoff, 4000.0f, 1.0f);
+            }
+        }
+    }
+
+    void applyBufferLowPassOff(const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        for (int idx : targets)
+        {
+            if (juce::isPositiveAndBelow(idx, channelStrips.size()))
+            {
+                auto& strip = *channelStrips[idx];
+                // Reset cutoff back to default (20k) over 1 bar
+                strip.setLowPassCutoffEnvelope(strip.getFxParams().lowPassCutoff, 20000.0f, 1.0f);
+                strip.effects().lowPassEnabled = true; // keep on during ramp
             }
         }
     }
@@ -212,10 +280,25 @@ private:
         {
             if (juce::isPositiveAndBelow(idx, channelStrips.size()))
             {
-                auto& strip = channelStrips.getReference(idx);
+                auto& strip = *channelStrips[idx];
                 strip.effects().highPassEnabled = true;
                 // Raise HPF cutoff up to 120 Hz over 1 bar
                 strip.setHighPassCutoffEnvelope(strip.getFxParams().highPassCutoff, 120.0f, 1.0f);
+            }
+        }
+    }
+
+    void applyBufferHighPassOff(const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        for (int idx : targets)
+        {
+            if (juce::isPositiveAndBelow(idx, channelStrips.size()))
+            {
+                auto& strip = *channelStrips[idx];
+                // Reset HPF cutoff down to default (20 Hz) over 1 bar
+                strip.setHighPassCutoffEnvelope(strip.getFxParams().highPassCutoff, 20.0f, 1.0f);
+                strip.effects().highPassEnabled = true; // keep on during ramp
             }
         }
     }
@@ -227,10 +310,24 @@ private:
         {
             if (juce::isPositiveAndBelow(idx, channelStrips.size()))
             {
-                auto& strip = channelStrips.getReference(idx);
+                auto& strip = *channelStrips[idx];
                 strip.effects().tremoloEnabled = true;
                 // Increase tremolo depth to 0.5 over 2 bars
                 strip.setTremoloDepthEnvelope(strip.getFxParams().tremoloDepth, 0.5f, 2.0f);
+            }
+        }
+    }
+
+    void applyBufferTremoloOff(const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        for (int idx : targets)
+        {
+            if (juce::isPositiveAndBelow(idx, channelStrips.size()))
+            {
+                auto& strip = *channelStrips[idx];
+                strip.setTremoloDepthEnvelope(strip.getFxParams().tremoloDepth, 0.0f, 1.5f);
+                strip.effects().tremoloEnabled = true; // keep on during ramp
             }
         }
     }
@@ -243,6 +340,6 @@ public:
         if (secondsPerBar <= 0.0) secondsPerBar = 1.0;
         float barsDelta = (float)(blockSeconds / secondsPerBar);
         for (int i = 0; i < channelStrips.size(); ++i)
-            channelStrips.getReference(i).advanceEnvelopes(barsDelta);
+            channelStrips[i]->advanceEnvelopes(barsDelta);
     }
 };

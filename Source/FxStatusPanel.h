@@ -20,7 +20,7 @@ public:
         g.drawText("FX Status", area.removeFromTop(lineH), juce::Justification::centredLeft);
         for (int i = 0; i < app.channelStrips.size(); ++i)
         {
-            const auto& strip = app.channelStrips.getReference(i);
+            const auto& strip = *app.channelStrips[i];
             const auto& fx = strip.effects();
             const auto& params = strip.getFxParams();
             juce::String line = "Pad " + juce::String(i+1) + ": "

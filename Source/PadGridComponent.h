@@ -143,6 +143,7 @@ private:
     {
     if (!juce::isPositiveAndBelow(padIndex, padFileLabels.size())) return;
         auto name = padFileNames[padIndex];
+        const bool isMissing = name.equalsIgnoreCase("[missing]");
         if (name.isEmpty())
         {
             padFileLabels[padIndex]->setText("", juce::dontSendNotification);
@@ -152,6 +153,8 @@ private:
         const int maxChars = 10;
         if (name.length() > maxChars)
             name = name.substring(0, maxChars - 1) + "…";
+        // Colour-code missing pads to draw attention
+        padFileLabels[padIndex]->setColour(juce::Label::textColourId, isMissing ? juce::Colours::orangered : juce::Colours::lightgrey);
         padFileLabels[padIndex]->setText(name, juce::dontSendNotification);
     }
 

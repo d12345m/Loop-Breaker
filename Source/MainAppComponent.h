@@ -52,6 +52,8 @@ private:
     juce::TextButton loadFileButton { "Load File To Pad..." };
     juce::TextButton saveProjectButton { "Save Project" };
     juce::TextButton loadProjectButton { "Load Project" };
+    juce::Label projectNameLabel { {}, "Project" };
+    juce::TextEditor projectNameEditor;
     juce::ComboBox padSelectForLoad;
     juce::Label statusLabel { {}, "Status: Idle" };
   juce::ToggleButton implementedOnlyToggle { "Implemented Only" };
@@ -83,6 +85,9 @@ private:
   void saveProjectClicked();
   void loadProjectClicked();
   void restorePadFilesFromSettings();
+  void projectNameEdited();
+  juce::String sanitizeProjectName(const juce::String& in) const;
+  juce::String suggestDefaultProjectName() const;
 
     void attachPadCallbacks();
 

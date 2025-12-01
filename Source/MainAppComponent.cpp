@@ -24,6 +24,12 @@ MainAppComponent::MainAppComponent()
         modifiersToggle.setToggleState(true, juce::dontSendNotification);
         modifiersToggle.onClick = [this]{ modifiersToggleChanged(); };
     addAndMakeVisible(loadFileButton); loadFileButton.onClick = [this]{ loadFileClicked(); };
+    // Project name controls
+    projectNameLabel.attachToComponent(&projectNameEditor, true);
+    addAndMakeVisible(projectNameEditor);
+    projectNameEditor.setText(app.settings.projectName, juce::dontSendNotification);
+    projectNameEditor.onFocusLost = [this]{ projectNameEdited(); };
+    projectNameEditor.onReturnKey = [this]{ projectNameEdited(); };
     addAndMakeVisible(saveProjectButton); saveProjectButton.onClick = [this]{ saveProjectClicked(); };
     addAndMakeVisible(loadProjectButton); loadProjectButton.onClick = [this]{ loadProjectClicked(); };
 
@@ -136,8 +142,7 @@ void MainAppComponent::resized()
     playAllButton.setBounds(controlBar.removeFromLeft(90).reduced(2));
     stopAllButton.setBounds(controlBar.removeFromLeft(90).reduced(2));
         modifiersToggle.setBounds(controlBar.removeFromLeft(120).reduced(2));
-    padSelectForLoad.setBounds(controlBar.removeFromLeft(110).reduced(2));
-    loadFileButton.setBounds(controlBar.removeFromLeft(150).reduced(2));
+    // moved padSelectForLoad and loadFileButton to second row
     // Right side region for BPM & toggle & status
     auto rightRegion = controlBar;
     // Place BPM slider at the rightmost ~220px
@@ -155,9 +160,17 @@ void MainAppComponent::resized()
 
     // New second row for project actions (Save/Load) to free room for BPM slider
     auto projectBar = area.removeFromTop(28);
-    auto projLeft = projectBar.removeFromLeft(300);
-    saveProjectButton.setBounds(projLeft.removeFromLeft(130).reduced(2));
-    loadProjectButton.setBounds(projLeft.removeFromLeft(130).reduced(2));
+    auto projArea = projectBar.reduced(2);
+    // Left portion: Project name label + editor
+    auto nameWidth = 260;
+    auto nameArea = projArea.removeFromLeft(nameWidth);
+    projectNameEditor.setBounds(nameArea);
+    // Middle: Save/Load buttons
+    saveProjectButton.setBounds(projArea.removeFromLeft(130).reduced(2));
+    loadProjectButton.setBounds(projArea.removeFromLeft(130).reduced(2));
+    // Right: Pad selector and Load File
+    padSelectForLoad.setBounds(projArea.removeFromLeft(110).reduced(2));
+    loadFileButton.setBounds(projArea.removeFromLeft(150).reduced(2));
     area.removeFromTop(6);
     auto gridHeight = 300;
     padGrid.setBounds(area.removeFromTop(gridHeight));
@@ -354,6 +367,9 @@ void MainAppComponent::loadProjectClicked()
             // Restore pad files
             restorePadFilesFromSettings();
 
+            // Update project name UI
+            projectNameEditor.setText(app.settings.projectName, juce::dontSendNotification);
+
             statusLabel.setText("Loaded project: " + file.getFileNameWithoutExtension(), juce::dontSendNotification);
         }
         else
@@ -361,6 +377,46 @@ void MainAppComponent::loadProjectClicked()
             juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Load Failed", "Could not load project.");
         }
     });
+}
+
+void MainAppComponent::projectNameEdited()
+{
+    auto raw = projectNameEditor.getText().trim();
+    juce::String finalName = raw;
+    if (finalName.isEmpty())
+        finalName = suggestDefaultProjectName();
+
+    auto sanitized = sanitizeProjectName(finalName);
+    if (sanitized != raw)
+        projectNameEditor.setText(sanitized, juce::dontSendNotification);
+
+    if (sanitized == app.settings.projectName) return; // no effective change
+    if (app.projectManager.renameProject(sanitized))
+        statusLabel.setText("Project renamed: " + sanitized, juce::dontSendNotification);
+}
+
+juce::String MainAppComponent::sanitizeProjectName(const juce::String& in) const
+{
+    if (in.isEmpty()) return in;
+    static const juce::String invalidChars = "/\\:*?\"<>|"; // cross-platform unsafe set
+    juce::String out;
+    out.preallocateBytes(in.getNumBytesAsUTF8());
+    for (auto c : in)
+    {
+        if (c < 32) continue; // drop control chars
+        if (invalidChars.containsChar(c)) { out << '_'; }
+        else { out << c; }
+    }
+    out = out.trim();
+    // Avoid reserved empty or dot names
+    if (out.isEmpty() || out == "." || out == "..") out = "Project";
+    return out;
+}
+
+juce::String MainAppComponent::suggestDefaultProjectName() const
+{
+    auto now = juce::Time::getCurrentTime();
+    return juce::String("Project ") + now.formatted("%Y-%m-%d %H.%M.%S");
 }
 
 void MainAppComponent::restorePadFilesFromSettings()

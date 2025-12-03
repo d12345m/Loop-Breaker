@@ -77,7 +77,8 @@ juce::OwnedArray<IModifier> ModifierFactory::createAllPrototypes()
     add(ModifierType::BufferTremolo, ModifierCategory::BufferEffect, "Trem On", "Tremolo modulation");
 
     // Master FX
-    add(ModifierType::MasterHighPassOn, ModifierCategory::MasterEffect, "MHPF", "Master high pass on");
+    add(ModifierType::MasterHighPassOn, ModifierCategory::MasterEffect, "Master HPF", "Master high pass on");
+    add(ModifierType::MasterLowPassOn,  ModifierCategory::MasterEffect, "Master LPF", "Master low pass on");
 
     // Reset (pad-targeted: previously global, now treated as buffer transform)
     add(ModifierType::ResetAll, ModifierCategory::BufferTransform, "Reset", "Reset selected buffers / FX state");

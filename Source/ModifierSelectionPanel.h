@@ -41,6 +41,9 @@ public:
         // Removed granular delay division/wet/feedback toggles to simplify GUI; runtime randomization will choose values.
     addToggle(ModifierType::BufferLowPassOn, "LPF On");
     addToggle(ModifierType::BufferHighPassOn, "HPF On");
+    // Global (master) filters apply to all tracks under the hood
+    addToggle(ModifierType::MasterLowPassOn, "Master LPF");
+    addToggle(ModifierType::MasterHighPassOn, "Master HPF");
     // PingPong and Wow/Flutter are randomized within Delay variants; no separate toggles.
     addToggle(ModifierType::BufferTremolo, "Tremolo On");
     // Ducking is enabled by default; GUI toggle removed.

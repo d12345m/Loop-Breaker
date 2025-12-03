@@ -44,6 +44,7 @@ enum class ModifierType
 
     // Master FX modifiers
     MasterHighPassOn,
+    MasterLowPassOn,
 
     // Global
     ResetAll,

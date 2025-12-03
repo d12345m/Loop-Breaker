@@ -84,6 +84,22 @@ struct AppState : public ModifierSchedulerListener
             case ModifierType::BufferHighPassOn:
                 applyBufferHighPassOn(targets);
                 break;
+            case ModifierType::MasterLowPassOn:
+            {
+                // Apply LPF to all buffers
+                juce::Array<int> all;
+                for (int i = 0; i < channelStrips.size(); ++i) all.add(i);
+                applyBufferLowPassOn(all);
+                break;
+            }
+            case ModifierType::MasterHighPassOn:
+            {
+                // Apply HPF to all buffers
+                juce::Array<int> all;
+                for (int i = 0; i < channelStrips.size(); ++i) all.add(i);
+                applyBufferHighPassOn(all);
+                break;
+            }
             case ModifierType::BufferTremolo:
                 applyBufferTremoloOn(targets);
                 break;

@@ -72,18 +72,6 @@ struct AppState : public ModifierSchedulerListener
             case ModifierType::BufferReverbOn:
                 applyBufferReverbOn(desc, targets);
                 break;
-            case ModifierType::BufferReverbWet25:
-                applyBufferReverbWet(targets, 0.25f);
-                break;
-            case ModifierType::BufferReverbWet50:
-                applyBufferReverbWet(targets, 0.50f);
-                break;
-            case ModifierType::BufferReverbWet75:
-                applyBufferReverbWet(targets, 0.75f);
-                break;
-            case ModifierType::BufferReverbWet100:
-                applyBufferReverbWet(targets, 1.00f);
-                break;
             case ModifierType::BufferReverbOff:
                 applyBufferReverbOff(targets);
                 break;
@@ -235,29 +223,13 @@ private:
             {
                 auto& strip = *channelStrips[idx];
                 strip.effects().reverbEnabled = true;
-                // If a planned wet is provided, use it; else default to 0.85
-                float targetWet = desc.plannedWet.has_value() ? (float)desc.plannedWet.value() : 0.85f;
-                // Use a consistent ramp duration for stability
-                float durationBars = desc.plannedWet.has_value() ? 1.0f : 2.0f;
+                // Use planned wet value if provided; else default to 0.75
+                float targetWet = desc.plannedWet.has_value() ? (float)desc.plannedWet.value() : 0.75f;
+                // Planned fade duration (bars): 0 = instant, else ramp over bars
+                float durationBars = desc.plannedFxFadeBars.has_value() ? (float)desc.plannedFxFadeBars.value() : 1.0f;
                 strip.setReverbWetEnvelope(strip.getFxParams().reverbWet, targetWet, durationBars);
                 // Standardize pre-delay: fixed 20 ms for all reverb states to avoid jumping
                 strip.setReverbPreDelayEnvelope(strip.getFxParams().reverbPreDelayMs, 20.0f, 0.5f);
-            }
-        }
-    }
-
-    void applyBufferReverbWet(const juce::Array<int>& targets, float targetWet)
-    {
-        if (targets.isEmpty()) return;
-        targetWet = juce::jlimit(0.0f, 1.0f, targetWet);
-        for (int idx : targets)
-        {
-            if (juce::isPositiveAndBelow(idx, channelStrips.size()))
-            {
-                auto& strip = *channelStrips[idx];
-                strip.effects().reverbEnabled = true;
-                // Ramp to requested wet over 1 bar for snappy response
-                strip.setReverbWetEnvelope(strip.getFxParams().reverbWet, targetWet, 1.0f);
             }
         }
     }

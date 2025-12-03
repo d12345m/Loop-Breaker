@@ -220,7 +220,9 @@ void MainAppComponent::modifierTriggered(const ModifierDescriptor& desc, const j
     if (targets.isEmpty()) targetStr = "(master/global)"; else {
         for (int i = 0; i < targets.size(); ++i) targetStr << (i?",":"") << (targets[i]+1);
     }
-    statusLabel.setText("Triggered: " + desc.shortName + " -> " + targetStr, juce::dontSendNotification);
+    // Show detailed descriptor info (including randomized parameters) in status
+    juce::String details = desc.description.isNotEmpty() ? (" | " + desc.description) : juce::String();
+    statusLabel.setText("Triggered: " + desc.shortName + " -> " + targetStr + details, juce::dontSendNotification);
     padGrid.flashPads(targets);
     modifierHistory.addEntry(desc, targets);
     // If specific user-selected pads were targeted, clear their selection state so user

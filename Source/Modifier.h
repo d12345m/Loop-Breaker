@@ -85,6 +85,8 @@ struct ModifierDescriptor
     juce::StringArray plannedDelayDivisions;      // Multiple divisions (if multi-tap selected)
     std::optional<double> plannedDelayFeedback;  // Explicit feedback override (0..1)
     // Future: dub burst durations could be parameterized; for now use defaults
+    // Generic FX fade duration in bars (e.g., reverb ramp)
+    std::optional<double> plannedFxFadeBars;     // e.g., 0 (instant), 1, 2
 };
 
 // Execution context passed to modifiers when ultimately applied.

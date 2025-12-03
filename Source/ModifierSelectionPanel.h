@@ -36,10 +36,6 @@ public:
         addToggle(ModifierType::Speed, "Speed (rand)");
     // Buffer FX (placeholders)
     addToggle(ModifierType::BufferReverbOn, "Reverb On");
-    addVariantToggle(ModifierType::BufferReverbOn, "Reverb 25%", "0.25");
-    addVariantToggle(ModifierType::BufferReverbOn, "Reverb 50%", "0.50");
-    addVariantToggle(ModifierType::BufferReverbOn, "Reverb 75%", "0.75");
-    addVariantToggle(ModifierType::BufferReverbOn, "Reverb 100%", "1.00");
     addToggle(ModifierType::BufferReverbOff, "Reverb Off");
         addToggle(ModifierType::BufferDelayOn, "Delay On");
         // Delay division + wet multi-select group (allow simultaneous selection creating combined variant)

@@ -26,7 +26,15 @@ public:
             else if (desc->plannedSliceDivision.isNotEmpty())
                 upcomingVariant = desc->plannedSliceDivision;
             else if (desc->plannedWet.has_value())
-                upcomingVariant = juce::String("Reverb ") + juce::String((int)std::round(desc->plannedWet.value() * 100.0)) + "%";
+            {
+                juce::String fadeLabel;
+                if (desc->plannedFxFadeBars.has_value())
+                {
+                    double fb = desc->plannedFxFadeBars.value();
+                    fadeLabel = fb <= 0.0 ? "instant" : (fb == 1.0 ? "1 bar" : juce::String((int)fb) + " bars");
+                }
+                upcomingVariant = juce::String("Reverb ") + juce::String((int)std::round(desc->plannedWet.value() * 100.0)) + "%" + (fadeLabel.isNotEmpty() ? juce::String(" | ") + fadeLabel : juce::String());
+            }
             else if (desc->plannedDelayDivision.isNotEmpty() || desc->plannedDelayWet.has_value())
             {
                 juce::String parts;

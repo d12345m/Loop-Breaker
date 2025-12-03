@@ -20,6 +20,7 @@ public:
         juce::String timeString; // HH:MM:SS
         juce::String modifier;   // shortName
         juce::String targets;    // e.g. 1,3,5 or (global)
+        juce::String details;    // descriptor description (randomized params)
         ModifierType type { ModifierType::Unknown };
     };
 
@@ -58,7 +59,8 @@ public:
         Entry e;
         e.timeString = juce::Time::getCurrentTime().toString(true, true, true, false);
         e.modifier = desc.shortName;
-        e.type = desc.type;
+    e.type = desc.type;
+    e.details = desc.description; // include randomized details if present
         if (targets.isEmpty()) e.targets = "(global)"; else {
             for (int i = 0; i < targets.size(); ++i)
                 e.targets << (i?",":"") << (targets[i] + 1);
@@ -94,7 +96,8 @@ public:
             default:                            typeColour = juce::Colours::lightgrey; break;
         }
 
-        auto text = e.timeString + "  |  " + e.modifier + "  ->  " + e.targets;
+    juce::String extra = e.details.isNotEmpty() ? ("  |  " + e.details) : juce::String();
+    auto text = e.timeString + "  |  " + e.modifier + "  ->  " + e.targets + extra;
         g.setColour(typeColour);
         g.setFont(juce::Font(juce::FontOptions().withHeight(12.0f)));
         g.drawFittedText(text, { 6, 0, width - 12, height }, juce::Justification::centredLeft, 1);

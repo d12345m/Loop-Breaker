@@ -145,7 +145,8 @@ void ModifierScheduler::forceUpcomingModifier(ModifierType type)
     {
         if (proto->getDescriptor().type == type)
         {
-            upcoming = proto->getDescriptor();
+            // Prepare a randomized variant so planned fields & description are populated
+            upcoming = prepareVariantDescriptor(proto->getDescriptor());
             broadcastUpcoming();
             return;
         }
@@ -284,10 +285,14 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
     else if (base.type == ModifierType::BufferReverbOn)
     {
         static const double wets[] { 0.25, 0.5, 0.75, 1.0 };
+        static const double fades[] { 0.0, 1.0, 2.0 };
         const juce::SpinLock::ScopedLockType lock(rngLock);
         double wet = wets[rng.nextInt((int)std::size(wets))];
-    modified.plannedWet = wet;
-    modified.description = base.description + " -> Reverb " + juce::String((int)std::round(wet * 100.0)) + "%";
+        double fadeBars = fades[rng.nextInt((int)std::size(fades))];
+        modified.plannedWet = wet;
+        modified.plannedFxFadeBars = fadeBars;
+        juce::String fadeLabel = fadeBars <= 0.0 ? "instant" : (fadeBars == 1.0 ? "1 bar" : juce::String((int)fadeBars) + " bars");
+        modified.description = base.description + " -> Reverb " + juce::String((int)std::round(wet * 100.0)) + "% | " + fadeLabel;
     }
     else if (base.type == ModifierType::BufferDelayOn)
     {

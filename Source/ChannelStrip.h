@@ -333,7 +333,7 @@ public:
         bool  delayPingPong = false;    // ping-pong cross feedback
         float delayFeedbackHighCutHz = 6000.0f; // high-cut inside feedback loop
         float delayFbDrive = 1.0f;      // feedback drive for saturation (1.0 = neutral)
-    bool  duckingEnabled = false;   // enable ducking for delay/reverb wet
+    bool  duckingEnabled = true;    // enable ducking for delay/reverb wet (default ON)
     float duckAmount = 0.5f;        // 0..1 amount of ducking
     float duckReleaseMs = 250.0f;   // release time back to full wet
         // Wow/Flutter (tape-like delay time modulation)

@@ -69,7 +69,7 @@ juce::OwnedArray<IModifier> ModifierFactory::createAllPrototypes()
     // Buffer FX
     add(ModifierType::BufferDelayOn, ModifierCategory::BufferEffect, "Delay On", "Enable delay wet signal (randomized params)");
     add(ModifierType::BufferDelayDubBurst, ModifierCategory::BufferEffect, "Delay Dub Burst", "Dub-style temporary delay burst (rise then fall)");
-    add(ModifierType::BufferDuckingOn, ModifierCategory::BufferEffect, "Ducking On", "Ducks delay/reverb under dry signal");
+    // Ducking is always on by default; no separate modifier prototype.
     add(ModifierType::BufferReverbOn, ModifierCategory::BufferEffect, "Reverb On", "Enable reverb (random wet & fade)");
     add(ModifierType::BufferLowPassOn, ModifierCategory::BufferEffect, "LPF On", "Enable low pass filter");
     add(ModifierType::BufferHighPassOn, ModifierCategory::BufferEffect, "HPF On", "Enable high pass filter");

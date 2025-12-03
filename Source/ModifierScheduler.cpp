@@ -257,8 +257,7 @@ ModifierDescriptor ModifierScheduler::pickRandomDescriptor() const
                 || t == ModifierType::BufferDelayDubBurst
                 || t == ModifierType::BufferLowPassOn
                 || t == ModifierType::BufferHighPassOn
-                || t == ModifierType::BufferTremolo
-                || t == ModifierType::BufferDuckingOn)
+                || t == ModifierType::BufferTremolo)
             {
                 candidateIndices.add(i);
             }

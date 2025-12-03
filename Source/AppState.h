@@ -87,9 +87,7 @@ struct AppState : public ModifierSchedulerListener
             case ModifierType::BufferTremolo:
                 applyBufferTremoloOn(targets);
                 break;
-            case ModifierType::BufferDuckingOn:
-                applyBufferDuckingOn(targets);
-                break;
+            // Ducking is enabled by default; no explicit modifier trigger.
             default:
                 break; // Unimplemented modifiers ignored for now
         }

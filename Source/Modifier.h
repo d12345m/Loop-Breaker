@@ -35,6 +35,8 @@ enum class ModifierType
     // Individual buffer FX modifiers
     BufferDelayOn,
     BufferDelayOff,
+    BufferDelayPingPongOn,
+    BufferDelayPingPongOff,
     BufferReverbOn,
     BufferReverbWet25,
     BufferReverbWet50,
@@ -48,6 +50,7 @@ enum class ModifierType
     BufferVolumeRampDown,
     BufferTremolo,
     BufferTremoloOff,
+    BufferDelayDubBurst,
 
     // Master FX modifiers
     MasterHighPassOn,
@@ -77,6 +80,7 @@ struct ModifierDescriptor
     std::optional<double> plannedDelayWet;        // e.g. 0.25, 0.50, 0.75, 1.00 for Delay wet mix
     juce::StringArray plannedDelayDivisions;      // Multiple divisions (if multi-tap selected)
     std::optional<double> plannedDelayFeedback;  // Explicit feedback override (0..1)
+    // Future: dub burst durations could be parameterized; for now use defaults
 };
 
 // Execution context passed to modifiers when ultimately applied.

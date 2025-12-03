@@ -93,6 +93,15 @@ struct AppState : public ModifierSchedulerListener
             case ModifierType::BufferDelayOff:
                 applyBufferDelayOff(targets);
                 break;
+            case ModifierType::BufferDelayPingPongOn:
+                applyBufferDelayPingPong(targets, true);
+                break;
+            case ModifierType::BufferDelayPingPongOff:
+                applyBufferDelayPingPong(targets, false);
+                break;
+            case ModifierType::BufferDelayDubBurst:
+                applyBufferDelayDubBurst(desc, targets);
+                break;
             case ModifierType::BufferLowPassOn:
                 applyBufferLowPassOn(targets);
                 break;
@@ -347,6 +356,71 @@ private:
         }
     }
 
+    void applyBufferDelayPingPong(const juce::Array<int>& targets, bool enabled)
+    {
+        if (targets.isEmpty()) return;
+        for (int idx : targets)
+        {
+            if (juce::isPositiveAndBelow(idx, channelStrips.size()))
+            {
+                auto& strip = *channelStrips[idx];
+                strip.effects().delayEnabled = true; // ensure on
+                strip.getMutableFxParams().delayPingPong = enabled;
+            }
+        }
+    }
+
+    void applyBufferDelayDubBurst(const ModifierDescriptor& desc, const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        // Dub burst: ramp feedback up quickly, then down to zero, auto-disable after tail
+        for (int idx : targets)
+        {
+            if (juce::isPositiveAndBelow(idx, channelStrips.size()))
+            {
+                auto& strip = *channelStrips[idx];
+                strip.effects().delayEnabled = true;
+                // Determine tap times similar to Delay On
+                double beatMs = settings.getSecondsPerBeat() * 1000.0;
+                juce::Array<float> tapTimesMs;
+                auto mapDivisionToMult = [](const juce::String& label)->double{
+                    if (label == "1/4") return 1.0;
+                    if (label == "1/8") return 0.5;
+                    if (label == "1/8D") return 0.75;
+                    if (label == "1/8T") return 1.0/3.0;
+                    return 1.0;
+                };
+                if (!desc.plannedDelayDivisions.isEmpty())
+                {
+                    for (auto d : desc.plannedDelayDivisions)
+                    {
+                        double mult = mapDivisionToMult(d);
+                        tapTimesMs.add((float) juce::jlimit(1.0, 2000.0, beatMs * mult));
+                    }
+                }
+                else if (desc.plannedDelayDivision.isNotEmpty())
+                {
+                    double mult = mapDivisionToMult(desc.plannedDelayDivision);
+                    tapTimesMs.add((float) juce::jlimit(1.0, 2000.0, beatMs * mult));
+                }
+                else
+                {
+                    // Default to 1/8 burst if unspecified
+                    tapTimesMs.add((float) juce::jlimit(1.0, 2000.0, beatMs * 0.5));
+                }
+                strip.setDelayTapTimesMs(tapTimesMs);
+                // Wet baseline a bit higher for dub
+                strip.getMutableFxParams().delayWet = (float) juce::jlimit(0.0, 1.0, desc.plannedDelayWet.value_or(0.60));
+                // Start rising feedback envelope (fast: 1 bar)
+                float startFb = strip.getFxParams().delayFeedback;
+                float riseTarget = (float) juce::jlimit(0.0, 0.95, desc.plannedDelayFeedback.value_or(0.85));
+                strip.setDelayFeedbackEnvelope(startFb, riseTarget, 1.0f);
+                // Mark dub burst fall parameters inside strip
+                strip.startDubDelayBurst(riseTarget, 1.0f, 0.0f, 2.0f);
+            }
+        }
+    }
+
     void applyBufferLowPassOn(const juce::Array<int>& targets)
     {
         if (targets.isEmpty()) return;
@@ -418,6 +492,10 @@ private:
                 strip.effects().tremoloEnabled = true;
                 // Increase tremolo depth to 0.5 over 2 bars
                 strip.setTremoloDepthEnvelope(strip.getFxParams().tremoloDepth, 0.5f, 2.0f);
+                // Set rate to 1/8-note relative to BPM
+                double secondsPerBeat = settings.getSecondsPerBeat();
+                double rateHz = secondsPerBeat > 0.0 ? (2.0 / secondsPerBeat) : 4.0; // 1/8-note
+                strip.getMutableFxParams().tremoloRateHz = (float) rateHz;
             }
         }
     }

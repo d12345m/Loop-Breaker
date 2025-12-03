@@ -56,10 +56,13 @@ public:
     makeDelayFeedbackToggle("Delay FB 75%", "0.75");
     makeDelayFeedbackToggle("Delay FB 100%", "1.00");
     addToggle(ModifierType::BufferDelayOff, "Delay Off");
+    addToggle(ModifierType::BufferDelayDubBurst, "Delay Dub Burst");
     addToggle(ModifierType::BufferLowPassOn, "LPF On");
     addToggle(ModifierType::BufferLowPassOff, "LPF Off");
     addToggle(ModifierType::BufferHighPassOn, "HPF On");
     addToggle(ModifierType::BufferHighPassOff, "HPF Off");
+    addToggle(ModifierType::BufferDelayPingPongOn, "Delay PingPong On");
+    addToggle(ModifierType::BufferDelayPingPongOff, "Delay PingPong Off");
     addToggle(ModifierType::BufferTremolo, "Tremolo On");
     addToggle(ModifierType::BufferTremoloOff, "Tremolo Off");
         // Speed variants

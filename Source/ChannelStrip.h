@@ -53,6 +53,21 @@ public:
             delayWritePos = 0;
             delayBuffer.setSize(2, delayBufferSize, false, false, true);
             delayBuffer.clear();
+
+            // Prepare filters
+            juce::dsp::ProcessSpec filterSpec { sampleRate, (juce::uint32) blockSize, 2 };
+            for (int ch = 0; ch < 2; ++ch)
+            {
+                lowPass[ch].reset();
+                lowPass[ch].prepare(filterSpec);
+                highPass[ch].reset();
+                highPass[ch].prepare(filterSpec);
+                delayFbHighCut[ch].reset();
+                delayFbHighCut[ch].prepare(filterSpec);
+            }
+            updateLowPassCoeffs(params.lowPassCutoff);
+            updateHighPassCoeffs(params.highPassCutoff);
+            updateDelayHighCutCoeffs(params.delayFeedbackHighCutHz);
         }
     }
 
@@ -61,7 +76,7 @@ public:
         const int numSamples = tempBuffer.getNumSamples();
         const int numChannels = tempBuffer.getNumChannels();
 
-        // --- Delay Processing (pre-reverb) ---
+    // --- Delay Processing (pre-reverb) ---
         if (effects().delayEnabled)
         {
             // Allocate delay line if needed
@@ -100,21 +115,62 @@ public:
                 for (int ch = 0; ch < numChannels; ++ch)
                 {
                     auto* delayData = delayBuffer.getWritePointer(ch);
+                    auto* oppDelayData = delayBuffer.getWritePointer(numChannels > 1 ? (1 - ch) : ch);
                     float inSample = tempBuffer.getSample(ch, i);
                     float delayedSum = 0.0f;
                     for (int tapIdx = 0; tapIdx < tapSamples.size(); ++tapIdx)
                     {
                         int readPosTap = writePos - tapSamples[tapIdx];
                         if (readPosTap < 0) readPosTap += delayBufferSize;
-                        delayedSum += delayData[readPosTap];
+                        // For ping-pong, read from opposite channel buffer
+                        delayedSum += (params.delayPingPong && numChannels > 1 ? oppDelayData[readPosTap] : delayData[readPosTap]);
                     }
                     float delayedAvg = delayedSum / (float) numTaps;
+                    // High-cut only the feedback path to tame highs
+                    float fbSample = delayedAvg;
+                    fbSample = delayFbHighCut[ch].processSample(fbSample);
                     // Single write using averaged delayed signal for feedback stability
-                    delayData[writePos] = inSample + delayedAvg * fb;
+                    delayData[writePos] = inSample + fbSample * fb;
                     float out = inSample + delayedAvg * wet;
                     tempBuffer.setSample(ch, i, out);
                 }
                 if (++delayWritePos >= delayBufferSize) delayWritePos = 0;
+            }
+        }
+
+        // --- Insert filters and tremolo prior to reverb ---
+        // Update filter coefficients if cutoffs changed significantly
+        if (effects().lowPassEnabled)
+            updateLowPassCoeffs(params.lowPassCutoff);
+        if (effects().highPassEnabled)
+            updateHighPassCoeffs(params.highPassCutoff);
+
+        if (effects().lowPassEnabled || effects().highPassEnabled || effects().tremoloEnabled)
+        {
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                auto* data = tempBuffer.getWritePointer(ch);
+                for (int i = 0; i < numSamples; ++i)
+                {
+                    float s = data[i];
+                    if (effects().highPassEnabled) s = highPass[ch].processSample(s);
+                    if (effects().lowPassEnabled)  s = lowPass[ch].processSample(s);
+                    if (effects().tremoloEnabled && params.tremoloDepth > 0.0f)
+                    {
+                        float trem = 0.5f * (1.0f + std::sin(tremoloPhase)); // 0..1
+                        float depth = juce::jlimit(0.0f, 1.0f, params.tremoloDepth);
+                        float gain = (1.0f - depth) + depth * trem; // crossfade to tremolo
+                        s *= gain;
+                        // advance phase once per sample (common to channels); update after ch loop first channel
+                    }
+                    data[i] = s;
+                    if (ch == 0 && effects().tremoloEnabled && params.tremoloDepth > 0.0f)
+                    {
+                        float inc = (float)(2.0 * juce::MathConstants<double>::pi * juce::jmax(0.01f, params.tremoloRateHz) / juce::jmax(1.0, lastSampleRate));
+                        tremoloPhase += inc;
+                        if (tremoloPhase > juce::MathConstants<float>::twoPi) tremoloPhase -= juce::MathConstants<float>::twoPi;
+                    }
+                }
             }
         }
 
@@ -218,9 +274,12 @@ public:
         float delayFeedback = 0.0f;    // 0..~0.9
         float delayTimeMs = 400.0f;     // default ~quarter note at 150 BPM (placeholder)
         float delayWet = 0.35f;         // mix level for delay repeats
+        bool  delayPingPong = false;    // ping-pong cross feedback
+        float delayFeedbackHighCutHz = 6000.0f; // high-cut inside feedback loop
         float lowPassCutoff = 20000.0f;
         float highPassCutoff = 20.0f;
         float tremoloDepth = 0.0f;
+        float tremoloRateHz = 4.0f; // default rate if not set from BPM
     };
 
     void reset()
@@ -285,9 +344,19 @@ public:
         // Delay feedback
         params.delayFeedback = delayFeedbackEnv.isActive() ? delayFeedbackEnv.current(params.delayFeedback) : params.delayFeedback;
         if (delayFeedbackEnv.isActive()) delayFeedbackEnv.advance(barsDelta);
+        // If a dub burst is active, and the rise finished, start the fall envelope exactly once
+        if (dubBurst.active && !dubBurst.fallingStarted && !delayFeedbackEnv.isActive())
+        {
+            setDelayFeedbackEnvelope(params.delayFeedback, dubBurst.fallTarget, dubBurst.fallDurationBars);
+            dubBurst.fallingStarted = true;
+        }
         // Auto-disable delay when feedback essentially zero and no active envelope
         if (chain.delayEnabled && !delayFeedbackEnv.isActive() && params.delayFeedback <= 0.0001f)
+        {
             chain.delayEnabled = false;
+            dubBurst.active = false;
+            dubBurst.fallingStarted = false;
+        }
         // LPF cutoff
         params.lowPassCutoff = lowPassCutoffEnv.isActive() ? lowPassCutoffEnv.current(params.lowPassCutoff) : params.lowPassCutoff;
         if (lowPassCutoffEnv.isActive()) lowPassCutoffEnv.advance(barsDelta);
@@ -338,5 +407,46 @@ public:
             delayTapTimesMs.add(t);
         }
     }
+    // Dub-style burst controller
+    void startDubDelayBurst(float /*riseTarget*/, float /*riseDurationBars*/, float fallTarget, float fallDurationBars)
+    {
+        dubBurst.active = true;
+        dubBurst.fallingStarted = false;
+        dubBurst.fallTarget = juce::jlimit(0.0f, 0.95f, fallTarget);
+        dubBurst.fallDurationBars = juce::jmax(0.0f, fallDurationBars);
+    }
 private:
+    // Filters
+    juce::dsp::IIR::Filter<float> lowPass[2];
+    juce::dsp::IIR::Filter<float> highPass[2];
+    juce::dsp::IIR::Filter<float> delayFbHighCut[2];
+    float lastLowPassCutoff = -1.0f;
+    float lastHighPassCutoff = -1.0f;
+    float lastDelayHighCut = -1.0f;
+    float tremoloPhase = 0.0f;
+    void updateLowPassCoeffs(float cutoff)
+    {
+        cutoff = juce::jlimit(20.0f, 20000.0f, cutoff);
+        if (std::abs(cutoff - lastLowPassCutoff) < 1.0f) return;
+        auto coeff = juce::dsp::IIR::Coefficients<float>::makeLowPass(lastSampleRate, cutoff);
+        for (int ch = 0; ch < 2; ++ch) *lowPass[ch].coefficients = *coeff;
+        lastLowPassCutoff = cutoff;
+    }
+    void updateHighPassCoeffs(float cutoff)
+    {
+        cutoff = juce::jlimit(20.0f, 1000.0f, cutoff);
+        if (std::abs(cutoff - lastHighPassCutoff) < 1.0f) return;
+        auto coeff = juce::dsp::IIR::Coefficients<float>::makeHighPass(lastSampleRate, cutoff);
+        for (int ch = 0; ch < 2; ++ch) *highPass[ch].coefficients = *coeff;
+        lastHighPassCutoff = cutoff;
+    }
+    void updateDelayHighCutCoeffs(float cutoff)
+    {
+        cutoff = juce::jlimit(1000.0f, 12000.0f, cutoff);
+        if (std::abs(cutoff - lastDelayHighCut) < 1.0f) return;
+        auto coeff = juce::dsp::IIR::Coefficients<float>::makeLowPass(lastSampleRate, cutoff);
+        for (int ch = 0; ch < 2; ++ch) *delayFbHighCut[ch].coefficients = *coeff;
+        lastDelayHighCut = cutoff;
+    }
+    struct DubBurstState { bool active = false; bool fallingStarted = false; float fallTarget = 0.0f; float fallDurationBars = 0.0f; } dubBurst;
 };

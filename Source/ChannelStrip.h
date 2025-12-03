@@ -77,10 +77,10 @@ public:
         const int numSamples = tempBuffer.getNumSamples();
         const int numChannels = tempBuffer.getNumChannels();
         // Precompute per-sample ducking gains from incoming signal (before FX)
-        std::vector<float> duckGains;
         if (params.duckingEnabled && numSamples > 0)
         {
-            duckGains.resize((size_t) numSamples);
+            if ((int)duckGains.size() != numSamples)
+                duckGains.resize((size_t) numSamples);
             // compute attack/release coeffs from sample rate and release param
             updateDuckingCoeffs(params.duckReleaseMs);
             for (int i = 0; i < numSamples; ++i)
@@ -526,6 +526,7 @@ private:
     float duckEnv = 0.0f;
     float duckAttackCoeff = 0.0f;
     float duckReleaseCoeff = 0.0f;
+    std::vector<float> duckGains; // reused per-block to avoid allocations
     void updateDuckingCoeffs(float releaseMs)
     {
         releaseMs = juce::jlimit(5.0f, 2000.0f, releaseMs);

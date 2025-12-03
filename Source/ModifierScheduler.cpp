@@ -248,8 +248,20 @@ ModifierDescriptor ModifierScheduler::pickRandomDescriptor() const
         for (int i = 0; i < prototypeCache.size(); ++i)
         {
             auto t = prototypeCache[i]->getDescriptor().type;
-                if (t == ModifierType::Reverse || t == ModifierType::Speed || t == ModifierType::ResetAll || t == ModifierType::BeatSliceRandom || t == ModifierType::BufferReverbOn || t == ModifierType::BufferReverbWet25 || t == ModifierType::BufferReverbWet50 || t == ModifierType::BufferReverbWet75 || t == ModifierType::BufferReverbWet100 || t == ModifierType::BufferReverbOff || t == ModifierType::BufferDelayOn || t == ModifierType::BufferDelayOff || t == ModifierType::BufferDelayDubBurst || t == ModifierType::BufferDelayPingPongOn || t == ModifierType::BufferDelayPingPongOff || t == ModifierType::BufferLowPassOn || t == ModifierType::BufferLowPassOff || t == ModifierType::BufferHighPassOn || t == ModifierType::BufferHighPassOff || t == ModifierType::BufferTremolo || t == ModifierType::BufferTremoloOff || t == ModifierType::BufferDuckingOn || t == ModifierType::BufferDuckingOff || t == ModifierType::BufferDelayWowFlutterOn || t == ModifierType::BufferDelayWowFlutterOff)
+            if (t == ModifierType::Reverse
+                || t == ModifierType::Speed
+                || t == ModifierType::ResetAll
+                || t == ModifierType::BeatSliceRandom
+                || t == ModifierType::BufferReverbOn
+                || t == ModifierType::BufferDelayOn
+                || t == ModifierType::BufferDelayDubBurst
+                || t == ModifierType::BufferLowPassOn
+                || t == ModifierType::BufferHighPassOn
+                || t == ModifierType::BufferTremolo
+                || t == ModifierType::BufferDuckingOn)
+            {
                 candidateIndices.add(i);
+            }
         }
     }
     if (candidateIndices.isEmpty())
@@ -313,12 +325,19 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
         double fadeBars = fades[rng.nextInt((int)std::size(fades))];
         modified.plannedFxFadeBars = fadeBars;
         juce::String fadeLabel = fadeBars <= 0.0 ? "instant" : (fadeBars == 1.0 ? "1 bar" : juce::String((int)fadeBars) + " bars");
-        // Description: include division, wet, feedback, fade
-        juce::String parts;
-        parts << label << " | "
-              << (int)std::round(wet * 100.0) << "%" << " | "
-              << "FB " << (int)std::round(fb * 100.0) << "%" << " | "
-              << fadeLabel;
+      // Random ping-pong and wow/flutter flags
+      bool pp = rng.nextBool();
+      bool wf = rng.nextBool();
+      modified.plannedDelayPingPong = pp;
+      modified.plannedWowFlutter = wf;
+      // Description: include division, wet, feedback, fade, and flags
+      juce::String parts;
+      parts << label << " | "
+          << (int)std::round(wet * 100.0) << "%" << " | "
+          << "FB " << (int)std::round(fb * 100.0) << "%" << " | "
+          << fadeLabel;
+      if (pp) parts << " | PP";
+      if (wf) parts << " | WowFlutter";
         modified.description = base.description + " -> Delay " + parts;
     }
     return modified;

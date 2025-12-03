@@ -67,28 +67,17 @@ juce::OwnedArray<IModifier> ModifierFactory::createAllPrototypes()
     add(ModifierType::BeatSliceRandom, ModifierCategory::BufferTransform, "Slice", "Random beat slicing");
 
     // Buffer FX
-    add(ModifierType::BufferDelayOn, ModifierCategory::BufferEffect, "Delay On", "Enable delay wet signal");
-    add(ModifierType::BufferDelayOff, ModifierCategory::BufferEffect, "Delay Off", "Disable delay (ramp to 0)");
+    add(ModifierType::BufferDelayOn, ModifierCategory::BufferEffect, "Delay On", "Enable delay wet signal (randomized params)");
     add(ModifierType::BufferDelayDubBurst, ModifierCategory::BufferEffect, "Delay Dub Burst", "Dub-style temporary delay burst (rise then fall)");
-    add(ModifierType::BufferDelayPingPongOn, ModifierCategory::BufferEffect, "Delay PingPong On", "Enable ping-pong cross-feedback");
-    add(ModifierType::BufferDelayPingPongOff, ModifierCategory::BufferEffect, "Delay PingPong Off", "Disable ping-pong cross-feedback");
     add(ModifierType::BufferDuckingOn, ModifierCategory::BufferEffect, "Ducking On", "Ducks delay/reverb under dry signal");
-    add(ModifierType::BufferDuckingOff, ModifierCategory::BufferEffect, "Ducking Off", "Disable FX ducking");
-    add(ModifierType::BufferDelayWowFlutterOn, ModifierCategory::BufferEffect, "Wow/Flutter On", "Enable tape-style delay time modulation");
-    add(ModifierType::BufferDelayWowFlutterOff, ModifierCategory::BufferEffect, "Wow/Flutter Off", "Disable wow/flutter modulation");
     add(ModifierType::BufferReverbOn, ModifierCategory::BufferEffect, "Reverb On", "Enable reverb (random wet & fade)");
-    add(ModifierType::BufferReverbOff, ModifierCategory::BufferEffect, "Reverb Off", "Disable reverb (ramp to 0)");
     add(ModifierType::BufferLowPassOn, ModifierCategory::BufferEffect, "LPF On", "Enable low pass filter");
-    add(ModifierType::BufferLowPassOff, ModifierCategory::BufferEffect, "LPF Off", "Disable low pass (reset cutoff)");
     add(ModifierType::BufferHighPassOn, ModifierCategory::BufferEffect, "HPF On", "Enable high pass filter");
-    add(ModifierType::BufferHighPassOff, ModifierCategory::BufferEffect, "HPF Off", "Disable high pass (reset cutoff)");
     add(ModifierType::BufferVolumeRampDown, ModifierCategory::BufferEffect, "FadeDn", "Volume ramp down");
     add(ModifierType::BufferTremolo, ModifierCategory::BufferEffect, "Trem On", "Tremolo modulation");
-    add(ModifierType::BufferTremoloOff, ModifierCategory::BufferEffect, "Trem Off", "Disable tremolo (ramp depth to 0)");
 
     // Master FX
     add(ModifierType::MasterHighPassOn, ModifierCategory::MasterEffect, "MHPF", "Master high pass on");
-    add(ModifierType::MasterLowPassOff, ModifierCategory::MasterEffect, "MLPFoff", "Master low pass off");
 
     // Reset (pad-targeted: previously global, now treated as buffer transform)
     add(ModifierType::ResetAll, ModifierCategory::BufferTransform, "Reset", "Reset selected buffers / FX state");

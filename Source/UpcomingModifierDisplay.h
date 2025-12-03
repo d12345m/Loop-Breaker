@@ -59,6 +59,16 @@ public:
                     if (parts.isNotEmpty()) parts << " | ";
                     parts << fadeLabel;
                 }
+                if (desc->plannedDelayPingPong.has_value() && desc->plannedDelayPingPong.value())
+                {
+                    if (parts.isNotEmpty()) parts << " | ";
+                    parts << "PP";
+                }
+                if (desc->plannedWowFlutter.has_value() && desc->plannedWowFlutter.value())
+                {
+                    if (parts.isNotEmpty()) parts << " | ";
+                    parts << "WowFlutter";
+                }
                 upcomingVariant = juce::String("Delay ") + parts;
             }
 

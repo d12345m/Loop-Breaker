@@ -40,15 +40,10 @@ public:
         // Removed granular delay division/wet/feedback toggles to simplify GUI; runtime randomization will choose values.
     addToggle(ModifierType::BufferLowPassOn, "LPF On");
     addToggle(ModifierType::BufferHighPassOn, "HPF On");
-    addToggle(ModifierType::BufferDelayPingPongOn, "Delay PingPong On");
-    addToggle(ModifierType::BufferDelayWowFlutterOn, "Wow/Flutter On");
+    // PingPong and Wow/Flutter are randomized within Delay variants; no separate toggles.
     addToggle(ModifierType::BufferTremolo, "Tremolo On");
     addToggle(ModifierType::BufferDuckingOn, "Ducking On");
-        // Speed variants
-        addVariantToggle(ModifierType::Speed, "Speed 0.25x", "0.25");
-        addVariantToggle(ModifierType::Speed, "Speed 0.50x", "0.5");
-        addVariantToggle(ModifierType::Speed, "Speed 1.00x", "1.0");
-        addVariantToggle(ModifierType::Speed, "Speed 2.00x", "2.0");
+    // Speed variants removed; Speed is randomized at runtime.
         addToggle(ModifierType::ResetAll, "Reset");
         addToggle(ModifierType::BeatSliceRandom, "Slice (rand)");
         addVariantToggle(ModifierType::BeatSliceRandom, "Slice 1/4", "1/4");

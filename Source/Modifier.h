@@ -34,31 +34,16 @@ enum class ModifierType
 
     // Individual buffer FX modifiers
     BufferDelayOn,
-    BufferDelayOff,
-    BufferDelayPingPongOn,
-    BufferDelayPingPongOff,
     BufferReverbOn,
-    BufferReverbWet25,
-    BufferReverbWet50,
-    BufferReverbWet75,
-    BufferReverbWet100,
-    BufferReverbOff,
     BufferLowPassOn,
-    BufferLowPassOff,
     BufferHighPassOn,
-    BufferHighPassOff,
     BufferVolumeRampDown,
     BufferTremolo,
-    BufferTremoloOff,
     BufferDelayDubBurst,
-    BufferDelayWowFlutterOn,
-    BufferDelayWowFlutterOff,
     BufferDuckingOn,
-    BufferDuckingOff,
 
     // Master FX modifiers
     MasterHighPassOn,
-    MasterLowPassOff,
 
     // Global
     ResetAll,
@@ -84,6 +69,8 @@ struct ModifierDescriptor
     std::optional<double> plannedDelayWet;        // e.g. 0.25, 0.50, 0.75, 1.00 for Delay wet mix
     juce::StringArray plannedDelayDivisions;      // Multiple divisions (if multi-tap selected)
     std::optional<double> plannedDelayFeedback;  // Explicit feedback override (0..1)
+    std::optional<bool>    plannedDelayPingPong; // Enable ping-pong when delay is applied
+    std::optional<bool>    plannedWowFlutter;    // Enable wow/flutter modulation on delay
     // Future: dub burst durations could be parameterized; for now use defaults
     // Generic FX fade duration in bars (e.g., reverb ramp)
     std::optional<double> plannedFxFadeBars;     // e.g., 0 (instant), 1, 2

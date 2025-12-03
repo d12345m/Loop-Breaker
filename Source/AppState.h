@@ -72,26 +72,8 @@ struct AppState : public ModifierSchedulerListener
             case ModifierType::BufferReverbOn:
                 applyBufferReverbOn(desc, targets);
                 break;
-            case ModifierType::BufferReverbOff:
-                applyBufferReverbOff(targets);
-                break;
             case ModifierType::BufferDelayOn:
                 applyBufferDelayOn(desc, targets);
-                break;
-            case ModifierType::BufferDelayOff:
-                applyBufferDelayOff(targets);
-                break;
-            case ModifierType::BufferDelayPingPongOn:
-                applyBufferDelayPingPong(targets, true);
-                break;
-            case ModifierType::BufferDelayPingPongOff:
-                applyBufferDelayPingPong(targets, false);
-                break;
-            case ModifierType::BufferDelayWowFlutterOn:
-                applyBufferDelayWowFlutter(targets, true);
-                break;
-            case ModifierType::BufferDelayWowFlutterOff:
-                applyBufferDelayWowFlutter(targets, false);
                 break;
             case ModifierType::BufferDelayDubBurst:
                 applyBufferDelayDubBurst(desc, targets);
@@ -99,26 +81,14 @@ struct AppState : public ModifierSchedulerListener
             case ModifierType::BufferLowPassOn:
                 applyBufferLowPassOn(targets);
                 break;
-            case ModifierType::BufferLowPassOff:
-                applyBufferLowPassOff(targets);
-                break;
             case ModifierType::BufferHighPassOn:
                 applyBufferHighPassOn(targets);
-                break;
-            case ModifierType::BufferHighPassOff:
-                applyBufferHighPassOff(targets);
                 break;
             case ModifierType::BufferTremolo:
                 applyBufferTremoloOn(targets);
                 break;
-            case ModifierType::BufferTremoloOff:
-                applyBufferTremoloOff(targets);
-                break;
             case ModifierType::BufferDuckingOn:
                 applyBufferDuckingOn(targets);
-                break;
-            case ModifierType::BufferDuckingOff:
-                applyBufferDuckingOff(targets);
                 break;
             default:
                 break; // Unimplemented modifiers ignored for now
@@ -273,6 +243,14 @@ private:
                     // Ramp both wet and feedback over fadeBars
                     strip.setDelayWetEnvelope(strip.getFxParams().delayWet, (float) juce::jlimit(0.0, 1.0, targetWet), (float) fadeBars);
                     strip.setDelayFeedbackEnvelope(strip.getFxParams().delayFeedback, (float) juce::jlimit(0.0, 0.95, targetFb), (float) fadeBars);
+                }
+                // Optional flags from planned descriptor
+                if (desc.plannedDelayPingPong.has_value())
+                    strip.getMutableFxParams().delayPingPong = desc.plannedDelayPingPong.value();
+                if (desc.plannedWowFlutter.has_value())
+                {
+                    strip.getMutableFxParams().wowFlutterEnabled = desc.plannedWowFlutter.value();
+                    // If enabling wow/flutter, keep existing default depths/rates; tempo-sync handled elsewhere
                 }
                 // Ensure enabled
                 strip.effects().delayEnabled = true;

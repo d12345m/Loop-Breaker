@@ -396,16 +396,30 @@ private:
                 strip.getMutableFxParams().wowFlutterEnabled = enabled;
                 if (enabled)
                 {
-                    // Subtle, tempo-synced movement
-                    // Depths: lighter than before
-                    strip.getMutableFxParams().wowDepthMs = 1.5f;
-                    strip.getMutableFxParams().flutterDepthMs = 0.3f;
-                    // Rates: wow = one cycle per 4 bars; flutter = one cycle per 1 bar
+                    // Randomize subtle, tempo-synced movement
+                    juce::Random rng;
+                    // Wow period choices in bars: 1/4 note (0.25), 1/2 (0.5), 1 (whole note), 2 bars, 4 bars
+                    const float wowChoices[] = { 0.25f, 0.5f, 1.0f, 2.0f, 4.0f };
+                    const int wIdx = rng.nextInt({0, (int) (sizeof(wowChoices)/sizeof(wowChoices[0]))});
+                    const float wowPeriodBars = wowChoices[wIdx];
+                    // Flutter period choices in bars: 1 beat (0.25), 1/2 bar (0.5), 1 bar (1.0), 2 bars (2.0)
+                    const float flutterChoices[] = { 0.25f, 0.5f, 1.0f, 2.0f };
+                    const int fIdx = rng.nextInt({0, (int) (sizeof(flutterChoices)/sizeof(flutterChoices[0]))});
+                    const float flutterPeriodBars = flutterChoices[fIdx];
+                    // Depth choices: light to medium
+                    const float wowDepthOpts[] = { 0.8f, 1.2f, 1.5f, 2.0f };
+                    const float flutterDepthOpts[] = { 0.2f, 0.3f, 0.5f };
+                    strip.getMutableFxParams().wowDepthMs = wowDepthOpts[rng.nextInt({0, (int)(sizeof(wowDepthOpts)/sizeof(wowDepthOpts[0]))})];
+                    strip.getMutableFxParams().flutterDepthMs = flutterDepthOpts[rng.nextInt({0, (int)(sizeof(flutterDepthOpts)/sizeof(flutterDepthOpts[0]))})];
+                    // Compute rates from periods
                     const double spbar = settings.getSecondsPerBar();
-                    const double wowHz = spbar > 0.0 ? (1.0 / (spbar * 4.0)) : 0.25; // 4-bar period
-                    const double flutterHz = spbar > 0.0 ? (1.0 / spbar) : 0.5;       // 1-bar period
+                    const double wowHz = spbar > 0.0 ? (1.0 / (spbar * wowPeriodBars)) : 0.25;
+                    const double flutterHz = spbar > 0.0 ? (1.0 / (spbar * flutterPeriodBars)) : 0.5;
                     strip.getMutableFxParams().wowRateHz = (float) wowHz;
                     strip.getMutableFxParams().flutterRateHz = (float) flutterHz;
+                    // Store periods to preserve behavior across BPM changes
+                    strip.getMutableFxParams().wowPeriodBars = wowPeriodBars;
+                    strip.getMutableFxParams().flutterPeriodBars = flutterPeriodBars;
                 }
             }
         }
@@ -605,11 +619,13 @@ public:
                 double rateHz = spb > 0.0 ? (2.0 / spb) : 4.0; // 1/8-note
                 strip.getMutableFxParams().tremoloRateHz = (float) rateHz;
             }
-            // Wow/Flutter: wow=4 bars, flutter=1 bar
+            // Wow/Flutter: recompute from stored periods if set (fallback to defaults)
             if (strip.getFxParams().wowFlutterEnabled)
             {
-                const double wowHz = spbar > 0.0 ? (1.0 / (spbar * 4.0)) : 0.25;
-                const double flutterHz = spbar > 0.0 ? (1.0 / spbar) : 0.5;
+                const float wowBars = strip.getFxParams().wowPeriodBars > 0.0f ? strip.getFxParams().wowPeriodBars : 4.0f;
+                const float flutterBars = strip.getFxParams().flutterPeriodBars > 0.0f ? strip.getFxParams().flutterPeriodBars : 1.0f;
+                const double wowHz = spbar > 0.0 ? (1.0 / (spbar * wowBars)) : 0.25;
+                const double flutterHz = spbar > 0.0 ? (1.0 / (spbar * flutterBars)) : 0.5;
                 strip.getMutableFxParams().wowRateHz = (float) wowHz;
                 strip.getMutableFxParams().flutterRateHz = (float) flutterHz;
             }

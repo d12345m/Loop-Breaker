@@ -342,6 +342,10 @@ public:
         float wowRateHz = 0.35f;
         float flutterDepthMs = 0.8f;
         float flutterRateHz = 6.0f;
+        // Musical periods to preserve tempo-synced choices across BPM changes
+        // If > 0, wowRateHz/flutterRateHz should be derived from these periods in bars
+        float wowPeriodBars = 0.0f;      // e.g., 0.25 (quarter note), 0.5, 1.0, 2.0, 4.0
+        float flutterPeriodBars = 0.0f;  // e.g., 1.0 (one bar), 0.5, 2.0
         float lowPassCutoff = 20000.0f;
         float highPassCutoff = 20.0f;
         float tremoloDepth = 0.0f;

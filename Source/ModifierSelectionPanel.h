@@ -37,6 +37,7 @@ public:
     // Buffer FX (placeholders)
     addToggle(ModifierType::BufferReverbOn, "Reverb On");
     addToggle(ModifierType::BufferDelayOn, "Delay On");
+    addToggle(ModifierType::BufferDelayDubBurst, "Delay Dub Burst");
         // Removed granular delay division/wet/feedback toggles to simplify GUI; runtime randomization will choose values.
     addToggle(ModifierType::BufferLowPassOn, "LPF On");
     addToggle(ModifierType::BufferHighPassOn, "HPF On");

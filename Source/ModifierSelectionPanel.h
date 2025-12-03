@@ -65,6 +65,8 @@ public:
     addToggle(ModifierType::BufferDelayPingPongOff, "Delay PingPong Off");
     addToggle(ModifierType::BufferTremolo, "Tremolo On");
     addToggle(ModifierType::BufferTremoloOff, "Tremolo Off");
+    addToggle(ModifierType::BufferDuckingOn, "Ducking On");
+    addToggle(ModifierType::BufferDuckingOff, "Ducking Off");
         // Speed variants
         addVariantToggle(ModifierType::Speed, "Speed 0.25x", "0.25");
         addVariantToggle(ModifierType::Speed, "Speed 0.50x", "0.5");

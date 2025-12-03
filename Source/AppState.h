@@ -120,6 +120,12 @@ struct AppState : public ModifierSchedulerListener
             case ModifierType::BufferTremoloOff:
                 applyBufferTremoloOff(targets);
                 break;
+            case ModifierType::BufferDuckingOn:
+                applyBufferDuckingOn(targets);
+                break;
+            case ModifierType::BufferDuckingOff:
+                applyBufferDuckingOff(targets);
+                break;
             default:
                 break; // Unimplemented modifiers ignored for now
         }
@@ -519,6 +525,34 @@ private:
                 auto& strip = *channelStrips[idx];
                 strip.setTremoloDepthEnvelope(strip.getFxParams().tremoloDepth, 0.0f, 1.5f);
                 strip.effects().tremoloEnabled = true; // keep on during ramp
+            }
+        }
+    }
+
+    void applyBufferDuckingOn(const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        for (int idx : targets)
+        {
+            if (juce::isPositiveAndBelow(idx, channelStrips.size()))
+            {
+                auto& strip = *channelStrips[idx];
+                strip.getMutableFxParams().duckingEnabled = true;
+                strip.getMutableFxParams().duckAmount = 0.5f;      // moderate default
+                strip.getMutableFxParams().duckReleaseMs = 250.0f;  // musical release
+            }
+        }
+    }
+
+    void applyBufferDuckingOff(const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        for (int idx : targets)
+        {
+            if (juce::isPositiveAndBelow(idx, channelStrips.size()))
+            {
+                auto& strip = *channelStrips[idx];
+                strip.getMutableFxParams().duckingEnabled = false;
             }
         }
     }

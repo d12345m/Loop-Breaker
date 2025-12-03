@@ -51,6 +51,8 @@ enum class ModifierType
     BufferTremolo,
     BufferTremoloOff,
     BufferDelayDubBurst,
+    BufferDuckingOn,
+    BufferDuckingOff,
 
     // Master FX modifiers
     MasterHighPassOn,

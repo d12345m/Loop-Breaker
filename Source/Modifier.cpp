@@ -72,6 +72,8 @@ juce::OwnedArray<IModifier> ModifierFactory::createAllPrototypes()
     add(ModifierType::BufferDelayDubBurst, ModifierCategory::BufferEffect, "Delay Dub Burst", "Dub-style temporary delay burst (rise then fall)");
     add(ModifierType::BufferDelayPingPongOn, ModifierCategory::BufferEffect, "Delay PingPong On", "Enable ping-pong cross-feedback");
     add(ModifierType::BufferDelayPingPongOff, ModifierCategory::BufferEffect, "Delay PingPong Off", "Disable ping-pong cross-feedback");
+    add(ModifierType::BufferDuckingOn, ModifierCategory::BufferEffect, "Ducking On", "Ducks delay/reverb under dry signal");
+    add(ModifierType::BufferDuckingOff, ModifierCategory::BufferEffect, "Ducking Off", "Disable FX ducking");
     add(ModifierType::BufferReverbOn, ModifierCategory::BufferEffect, "Reverb On", "Enable reverb wet signal");
     add(ModifierType::BufferReverbWet25, ModifierCategory::BufferEffect, "Reverb Wet 25%", "Set reverb wet level to 0.25");
     add(ModifierType::BufferReverbWet50, ModifierCategory::BufferEffect, "Reverb Wet 50%", "Set reverb wet level to 0.50");

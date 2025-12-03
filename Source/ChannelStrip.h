@@ -9,6 +9,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include <vector>
 #include "AudioBuffer.h"
 
 struct EffectChainPlaceholder
@@ -75,6 +76,26 @@ public:
     {
         const int numSamples = tempBuffer.getNumSamples();
         const int numChannels = tempBuffer.getNumChannels();
+        // Precompute per-sample ducking gains from incoming signal (before FX)
+        std::vector<float> duckGains;
+        if (params.duckingEnabled && numSamples > 0)
+        {
+            duckGains.resize((size_t) numSamples);
+            // compute attack/release coeffs from sample rate and release param
+            updateDuckingCoeffs(params.duckReleaseMs);
+            for (int i = 0; i < numSamples; ++i)
+            {
+                float x = 0.0f;
+                for (int ch = 0; ch < numChannels; ++ch)
+                    x += std::abs(tempBuffer.getSample(ch, i));
+                x /= (float) juce::jmax(1, numChannels);
+                if (x > duckEnv) duckEnv += duckAttackCoeff * (x - duckEnv);
+                else             duckEnv += duckReleaseCoeff * (x - duckEnv);
+                const float ref = 0.25f; // ~ -12 dB reference
+                float activity = juce::jlimit(0.0f, 1.0f, duckEnv / ref);
+                duckGains[(size_t)i] = 1.0f - (params.duckAmount * activity);
+            }
+        }
 
     // --- Delay Processing (pre-reverb) ---
         if (effects().delayEnabled)
@@ -137,7 +158,8 @@ public:
                     const float fbSat = std::tanh(fbSample * drive);
                     // Single write using averaged delayed signal for feedback stability
                     delayData[writePos] = inSample + fbSat * fb;
-                    float out = inSample + delayedAvg * wet;
+                    const float duck = (params.duckingEnabled && !duckGains.empty() ? duckGains[(size_t)i] : 1.0f);
+                    float out = inSample + delayedAvg * (wet * duck);
                     tempBuffer.setSample(ch, i, out);
                 }
                 if (++delayWritePos >= delayBufferSize) delayWritePos = 0;
@@ -243,8 +265,12 @@ public:
         for (int ch = 0; ch < numChannels; ++ch)
         {
             auto* data = tempBuffer.getWritePointer(ch);
-            for (int i = 0; i < numSamples; ++i) data[i] *= dryGain;
-            tempBuffer.addFrom(ch, 0, wetBuffer, ch, 0, numSamples, wetGain);
+            for (int i = 0; i < numSamples; ++i)
+            {
+                data[i] *= dryGain;
+                const float duck = (params.duckingEnabled && !duckGains.empty() ? duckGains[(size_t)i] : 1.0f);
+                data[i] += wetBuffer.getSample(ch, i) * (wetGain * duck);
+            }
         }
     }
 
@@ -283,6 +309,9 @@ public:
         bool  delayPingPong = false;    // ping-pong cross feedback
         float delayFeedbackHighCutHz = 6000.0f; // high-cut inside feedback loop
         float delayFbDrive = 1.0f;      // feedback drive for saturation (1.0 = neutral)
+    bool  duckingEnabled = false;   // enable ducking for delay/reverb wet
+    float duckAmount = 0.5f;        // 0..1 amount of ducking
+    float duckReleaseMs = 250.0f;   // release time back to full wet
         float lowPassCutoff = 20000.0f;
         float highPassCutoff = 20.0f;
         float tremoloDepth = 0.0f;
@@ -431,6 +460,18 @@ private:
     float lastHighPassCutoff = -1.0f;
     float lastDelayHighCut = -1.0f;
     float tremoloPhase = 0.0f;
+    // Ducking envelope state
+    float duckEnv = 0.0f;
+    float duckAttackCoeff = 0.0f;
+    float duckReleaseCoeff = 0.0f;
+    void updateDuckingCoeffs(float releaseMs)
+    {
+        releaseMs = juce::jlimit(5.0f, 2000.0f, releaseMs);
+        const double fs = juce::jmax(1.0, lastSampleRate);
+        const double attackMs = 5.0; // fixed fast attack
+        duckAttackCoeff = (float)(1.0 - std::exp(-1.0 / (0.001 * attackMs * fs)));
+        duckReleaseCoeff = (float)(1.0 - std::exp(-1.0 / (0.001 * releaseMs * fs)));
+    }
     void updateLowPassCoeffs(float cutoff)
     {
         cutoff = juce::jlimit(20.0f, 20000.0f, cutoff);

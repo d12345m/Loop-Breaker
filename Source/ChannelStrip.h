@@ -356,9 +356,10 @@ public:
     {
         chain.reset();
         params = FxParams{};
-        reverbWetEnv = {};
-        reverbPreDelayEnv = {};
-        delayFeedbackEnv = {};
+    reverbWetEnv = {};
+    reverbPreDelayEnv = {};
+    delayWetEnv = {};
+    delayFeedbackEnv = {};
         lowPassCutoffEnv = {};
         highPassCutoffEnv = {};
         tremoloDepthEnv = {};
@@ -377,6 +378,11 @@ public:
         startMs = juce::jlimit(0.0f, 60.0f, startMs);
         targetMs = juce::jlimit(0.0f, 60.0f, targetMs);
         reverbPreDelayEnv = { startMs, targetMs, durationBars, 0.0f, EffectEnvelope::Curve::Linear };
+    }
+
+    void setDelayWetEnvelope(float start, float target, float durationBars)
+    {
+        delayWetEnv = { start, target, durationBars, 0.0f, EffectEnvelope::Curve::Linear };
     }
 
     void setDelayFeedbackEnvelope(float start, float target, float durationBars)
@@ -411,8 +417,11 @@ public:
         // Auto-disable reverb when wet reaches zero and no active envelope
         if (chain.reverbEnabled && !reverbWetEnv.isActive() && params.reverbWet <= 0.0001f)
             chain.reverbEnabled = false;
-        // Delay feedback
-        params.delayFeedback = delayFeedbackEnv.isActive() ? delayFeedbackEnv.current(params.delayFeedback) : params.delayFeedback;
+    // Delay wet
+    params.delayWet = delayWetEnv.isActive() ? delayWetEnv.current(params.delayWet) : params.delayWet;
+    if (delayWetEnv.isActive()) delayWetEnv.advance(barsDelta);
+    // Delay feedback
+    params.delayFeedback = delayFeedbackEnv.isActive() ? delayFeedbackEnv.current(params.delayFeedback) : params.delayFeedback;
         if (delayFeedbackEnv.isActive()) delayFeedbackEnv.advance(barsDelta);
         // If a dub burst is active, and the rise finished, start the fall envelope exactly once
         if (dubBurst.active && !dubBurst.fallingStarted && !delayFeedbackEnv.isActive())
@@ -447,6 +456,7 @@ private:
     FxParams params;
     EffectEnvelope reverbWetEnv;
     EffectEnvelope reverbPreDelayEnv;
+    EffectEnvelope delayWetEnv;
     EffectEnvelope delayFeedbackEnv;
     EffectEnvelope lowPassCutoffEnv;
     EffectEnvelope highPassCutoffEnv;

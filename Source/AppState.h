@@ -270,8 +270,8 @@ private:
                 }
                 else
                 {
-                    // Ramp feedback over fadeBars; set wet immediately
-                    strip.getMutableFxParams().delayWet = (float) juce::jlimit(0.0, 1.0, targetWet);
+                    // Ramp both wet and feedback over fadeBars
+                    strip.setDelayWetEnvelope(strip.getFxParams().delayWet, (float) juce::jlimit(0.0, 1.0, targetWet), (float) fadeBars);
                     strip.setDelayFeedbackEnvelope(strip.getFxParams().delayFeedback, (float) juce::jlimit(0.0, 0.95, targetFb), (float) fadeBars);
                 }
                 // Ensure enabled

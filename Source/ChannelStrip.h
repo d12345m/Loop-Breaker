@@ -242,9 +242,13 @@ public:
             preDelayBuffer = std::move(newBuf);
         }
 
-        // Prepare wet buffer (delayed input) size
-        juce::AudioBuffer<float> wetBuffer(numChannels, numSamples);
-        wetBuffer.clear();
+        // Prepare wet buffer (delayed input) size without per-block allocation
+        if (reverbWetBuffer.getNumChannels() != numChannels || reverbWetBuffer.getNumSamples() < numSamples)
+        {
+            // allocate only when channel count or block size grows; allow shrinking without realloc
+            reverbWetBuffer.setSize(numChannels, numSamples, false, false, true);
+        }
+        reverbWetBuffer.clear();
 
         // Compute desired pre-delay samples from params (circular buffer based, continuous across blocks)
         const int delaySamples = (int) juce::jlimit(0.0, (kMaxPreDelayMs / 1000.0) * lastSampleRate,
@@ -263,7 +267,7 @@ public:
                 const float inSample = tempBuffer.getSample(ch, i);
                 delayData[writePos] = inSample;
                 const float delayed = delaySamples > 0 ? delayData[readPos] : inSample;
-                wetBuffer.setSample(ch, i, delayed);
+                reverbWetBuffer.setSample(ch, i, delayed);
             }
             if (++preDelayWritePos >= bufferSize) preDelayWritePos = 0;
         }
@@ -277,7 +281,7 @@ public:
         rp.dryLevel = 0.0f;
         reverb.setParameters(rp);
 
-        juce::dsp::AudioBlock<float> wetBlock(wetBuffer);
+    juce::dsp::AudioBlock<float> wetBlock(reverbWetBuffer);
         juce::dsp::ProcessContextReplacing<float> wetCtx(wetBlock);
         reverb.process(wetCtx);
 
@@ -293,7 +297,7 @@ public:
             {
                 data[i] *= dryGain;
                 const float duck = (params.duckingEnabled && !duckGains.empty() ? duckGains[(size_t)i] : 1.0f);
-                data[i] += wetBuffer.getSample(ch, i) * (wetGain * duck);
+                data[i] += reverbWetBuffer.getSample(ch, i) * (wetGain * duck);
             }
         }
     }
@@ -478,6 +482,7 @@ private:
     int lastBlockSize = 0;
     // Circular pre-delay buffer
     juce::AudioBuffer<float> preDelayBuffer; // channels match current audio block
+    juce::AudioBuffer<float> reverbWetBuffer; // reused wet buffer to avoid per-block allocation
     int preDelayBufferSize = 0;
     int preDelayWritePos = 0;
     static constexpr double kMaxPreDelayMs = 60.0; // matches envelope clamp

@@ -439,9 +439,20 @@ public:
         // LPF cutoff
         params.lowPassCutoff = lowPassCutoffEnv.isActive() ? lowPassCutoffEnv.current(params.lowPassCutoff) : params.lowPassCutoff;
         if (lowPassCutoffEnv.isActive()) lowPassCutoffEnv.advance(barsDelta);
+        // If a temporary LPF action is active, schedule the return envelope once the rise completes
+        if (tempLpf.active && !tempLpf.fallingStarted && !lowPassCutoffEnv.isActive())
+        {
+            setLowPassCutoffEnvelope(params.lowPassCutoff, tempLpf.returnTarget, tempLpf.fallDurationBars);
+            tempLpf.fallingStarted = true;
+        }
         // HPF cutoff
         params.highPassCutoff = highPassCutoffEnv.isActive() ? highPassCutoffEnv.current(params.highPassCutoff) : params.highPassCutoff;
         if (highPassCutoffEnv.isActive()) highPassCutoffEnv.advance(barsDelta);
+        if (tempHpf.active && !tempHpf.fallingStarted && !highPassCutoffEnv.isActive())
+        {
+            setHighPassCutoffEnvelope(params.highPassCutoff, tempHpf.returnTarget, tempHpf.fallDurationBars);
+            tempHpf.fallingStarted = true;
+        }
         // Tremolo depth
         params.tremoloDepth = tremoloDepthEnv.isActive() ? tremoloDepthEnv.current(params.tremoloDepth) : params.tremoloDepth;
         if (tremoloDepthEnv.isActive()) tremoloDepthEnv.advance(barsDelta);
@@ -517,6 +528,29 @@ private:
         const double attackMs = 5.0; // fixed fast attack
         duckAttackCoeff = (float)(1.0 - std::exp(-1.0 / (0.001 * attackMs * fs)));
         duckReleaseCoeff = (float)(1.0 - std::exp(-1.0 / (0.001 * releaseMs * fs)));
+    }
+
+    // Temporary filter helpers (for master LPF/HPF ramp up then down)
+    struct TempFilterBurst { bool active = false; bool fallingStarted = false; float returnTarget = 0.0f; float fallDurationBars = 0.0f; };
+    TempFilterBurst tempLpf;
+    TempFilterBurst tempHpf;
+public:
+    void startTemporaryLowPass(float riseTarget, float riseDurationBars, float returnTarget, float returnDurationBars)
+    {
+        // Begin rise, then schedule fall via advanceEnvelopes when rise completes
+        setLowPassCutoffEnvelope(params.lowPassCutoff, riseTarget, juce::jmax(0.0f, riseDurationBars));
+        tempLpf.active = true;
+        tempLpf.fallingStarted = false;
+        tempLpf.returnTarget = returnTarget;
+        tempLpf.fallDurationBars = juce::jmax(0.0f, returnDurationBars);
+    }
+    void startTemporaryHighPass(float riseTarget, float riseDurationBars, float returnTarget, float returnDurationBars)
+    {
+        setHighPassCutoffEnvelope(params.highPassCutoff, riseTarget, juce::jmax(0.0f, riseDurationBars));
+        tempHpf.active = true;
+        tempHpf.fallingStarted = false;
+        tempHpf.returnTarget = returnTarget;
+        tempHpf.fallDurationBars = juce::jmax(0.0f, returnDurationBars);
     }
     void updateLowPassCoeffs(float cutoff)
     {

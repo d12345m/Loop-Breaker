@@ -342,6 +342,19 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
       if (wf) parts << " | WowFlutter";
         modified.description = base.description + " -> Delay " + parts;
     }
+    else if (base.type == ModifierType::MasterLowPassOn || base.type == ModifierType::MasterHighPassOn)
+    {
+        // Temporary global filters: durations {2,4,8,16} bars and either ramp-up+down or immediate jump then ramp down
+        static const double durations[] { 2.0, 4.0, 8.0, 16.0 };
+        const juce::SpinLock::ScopedLockType lock(rngLock);
+        double dur = durations[rng.nextInt((int)std::size(durations))];
+        bool jump = rng.nextBool();
+        modified.plannedFxFadeBars = dur;
+        modified.plannedImmediateJump = jump;
+        juce::String mode = jump ? "jump->decay" : "ramp up/down";
+        juce::String name = (base.type == ModifierType::MasterLowPassOn ? "Master LPF" : "Master HPF");
+        modified.description = base.description + " -> " + name + " " + juce::String((int)dur) + " bars" + " | " + mode;
+    }
     return modified;
 }
 

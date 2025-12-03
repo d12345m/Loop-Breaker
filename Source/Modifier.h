@@ -75,6 +75,8 @@ struct ModifierDescriptor
     // Future: dub burst durations could be parameterized; for now use defaults
     // Generic FX fade duration in bars (e.g., reverb ramp)
     std::optional<double> plannedFxFadeBars;     // e.g., 0 (instant), 1, 2
+    // For temporary global filters: choose whether to jump immediately to target, then ramp back
+    std::optional<bool> plannedImmediateJump;    // true: jump to target then ramp back; false: ramp up then ramp down
 };
 
 // Execution context passed to modifiers when ultimately applied.

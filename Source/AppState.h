@@ -86,18 +86,51 @@ struct AppState : public ModifierSchedulerListener
                 break;
             case ModifierType::MasterLowPassOn:
             {
-                // Apply LPF to all buffers
-                juce::Array<int> all;
-                for (int i = 0; i < channelStrips.size(); ++i) all.add(i);
-                applyBufferLowPassOn(all);
+                // Temporary global LPF applied per track: ramp up then down, or jump then decay
+                double bars = desc.plannedFxFadeBars.value_or(4.0);
+                bool jump = desc.plannedImmediateJump.value_or(false);
+                const float targetCut = 1200.0f; // low-pass to ~1.2kHz
+                for (int i = 0; i < channelStrips.size(); ++i)
+                {
+                    auto& strip = *channelStrips[i];
+                    strip.effects().lowPassEnabled = true;
+                    float startCut = strip.getFxParams().lowPassCutoff;
+                    if (jump)
+                    {
+                        // Jump to target immediately, then ramp back to start over full duration
+                        strip.getMutableFxParams().lowPassCutoff = targetCut;
+                        strip.setLowPassCutoffEnvelope(targetCut, startCut, (float)bars);
+                    }
+                    else
+                    {
+                        float half = (float)juce::jmax(0.0001, bars * 0.5);
+                        strip.startTemporaryLowPass(targetCut, half, startCut, half);
+                    }
+                }
                 break;
             }
             case ModifierType::MasterHighPassOn:
             {
-                // Apply HPF to all buffers
-                juce::Array<int> all;
-                for (int i = 0; i < channelStrips.size(); ++i) all.add(i);
-                applyBufferHighPassOn(all);
+                // Temporary global HPF applied per track
+                double bars = desc.plannedFxFadeBars.value_or(4.0);
+                bool jump = desc.plannedImmediateJump.value_or(false);
+                const float targetCut = 180.0f; // high-pass to ~180Hz
+                for (int i = 0; i < channelStrips.size(); ++i)
+                {
+                    auto& strip = *channelStrips[i];
+                    strip.effects().highPassEnabled = true;
+                    float startCut = strip.getFxParams().highPassCutoff;
+                    if (jump)
+                    {
+                        strip.getMutableFxParams().highPassCutoff = targetCut;
+                        strip.setHighPassCutoffEnvelope(targetCut, startCut, (float)bars);
+                    }
+                    else
+                    {
+                        float half = (float)juce::jmax(0.0001, bars * 0.5);
+                        strip.startTemporaryHighPass(targetCut, half, startCut, half);
+                    }
+                }
                 break;
             }
             case ModifierType::BufferTremolo:

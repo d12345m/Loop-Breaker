@@ -396,11 +396,16 @@ private:
                 strip.getMutableFxParams().wowFlutterEnabled = enabled;
                 if (enabled)
                 {
-                    // Musical defaults: subtle tape movement
-                    strip.getMutableFxParams().wowDepthMs = 3.0f;
-                    strip.getMutableFxParams().wowRateHz = 0.35f;
-                    strip.getMutableFxParams().flutterDepthMs = 0.8f;
-                    strip.getMutableFxParams().flutterRateHz = 6.0f;
+                    // Subtle, tempo-synced movement
+                    // Depths: lighter than before
+                    strip.getMutableFxParams().wowDepthMs = 1.5f;
+                    strip.getMutableFxParams().flutterDepthMs = 0.3f;
+                    // Rates: wow = one cycle per 4 bars; flutter = one cycle per 1 bar
+                    const double spbar = settings.getSecondsPerBar();
+                    const double wowHz = spbar > 0.0 ? (1.0 / (spbar * 4.0)) : 0.25; // 4-bar period
+                    const double flutterHz = spbar > 0.0 ? (1.0 / spbar) : 0.5;       // 1-bar period
+                    strip.getMutableFxParams().wowRateHz = (float) wowHz;
+                    strip.getMutableFxParams().flutterRateHz = (float) flutterHz;
                 }
             }
         }
@@ -586,6 +591,30 @@ private:
     }
 
 public:
+    // Recompute tempo-synced LFO rates (tremolo, wow/flutter) when BPM changes
+    void resyncTempoLFOs()
+    {
+        const double spb  = settings.getSecondsPerBeat();
+        const double spbar = settings.getSecondsPerBar();
+        for (int i = 0; i < channelStrips.size(); ++i)
+        {
+            auto& strip = *channelStrips[i];
+            // Tremolo: keep at 1/8-note
+            if (strip.effects().tremoloEnabled)
+            {
+                double rateHz = spb > 0.0 ? (2.0 / spb) : 4.0; // 1/8-note
+                strip.getMutableFxParams().tremoloRateHz = (float) rateHz;
+            }
+            // Wow/Flutter: wow=4 bars, flutter=1 bar
+            if (strip.getFxParams().wowFlutterEnabled)
+            {
+                const double wowHz = spbar > 0.0 ? (1.0 / (spbar * 4.0)) : 0.25;
+                const double flutterHz = spbar > 0.0 ? (1.0 / spbar) : 0.5;
+                strip.getMutableFxParams().wowRateHz = (float) wowHz;
+                strip.getMutableFxParams().flutterRateHz = (float) flutterHz;
+            }
+        }
+    }
     // Advance FX envelopes per audio block. Call with blockSeconds from audio thread owner.
     void advanceFxEnvelopes(double blockSeconds)
     {

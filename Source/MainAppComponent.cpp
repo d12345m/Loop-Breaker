@@ -483,6 +483,8 @@ void MainAppComponent::bpmChanged()
 {
     double newBpm = bpmSlider.getValue();
     app.settings.bpm = newBpm; // Direct mutation; scheduler will pick up new bar length for future scheduling
+    // Re-sync any tempo-linked LFOs (tremolo, wow/flutter)
+    app.resyncTempoLFOs();
     refreshStatus();
 }
 

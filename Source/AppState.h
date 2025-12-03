@@ -56,11 +56,13 @@ struct AppState : public ModifierSchedulerListener
             {
                 const int64_t dur = (int64_t) b->getDurationInSamples();
                 if (dur <= 0) continue;
-                const int64_t segment = juce::jmax<int64_t>(1, dur / numParts);
-                const int64_t startS = juce::jlimit<int64_t>(0, dur - 1, (int64_t) settings.parts.activePart * segment);
-                const int64_t endS   = juce::jlimit<int64_t>(0, dur, startS + segment);
-                b->setLoopWindow(startS, endS);
-                b->setPlayheadSamples(startS);
+                // Use proportional boundaries to avoid truncation issues on the last segment.
+                const int64_t startS = (int64_t) ((settings.parts.activePart    * dur) / numParts);
+                const int64_t endS   = (int64_t) (((settings.parts.activePart + 1) * dur) / numParts);
+                const int64_t startClamped = juce::jlimit<int64_t>(0, dur - 1, startS);
+                const int64_t endClamped   = juce::jlimit<int64_t>(startClamped + 1, dur, endS);
+                b->setLoopWindow(startClamped, endClamped);
+                b->setPlayheadSamples(startClamped);
             }
         }
     }

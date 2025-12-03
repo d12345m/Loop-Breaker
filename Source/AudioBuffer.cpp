@@ -123,14 +123,21 @@ void AudioBuffer::processWithRepitching(juce::AudioBuffer<float>& outputBuffer)
             if (speed >= 0.0)
             {
                 if (currentPos >= (double) end)
+                {
+                    // Smooth wrap: start a short boundary crossfade
+                    startBoundaryCrossfade((double) start);
                     currentPos = (double) start;
+                }
                 else if (currentPos < (double) start)
                     currentPos = (double) start;
             }
             else // reverse
             {
                 if (currentPos < (double) start)
+                {
+                    startBoundaryCrossfade((double) end);
                     currentPos = (double) end;
+                }
                 else if (currentPos > (double) end)
                     currentPos = (double) end;
             }
@@ -438,7 +445,7 @@ void AudioBuffer::startSliceCrossfade(int newSliceIndex, double newPlayheadPos)
 
 void AudioBuffer::applyCrossfadeToSliceTransition(juce::AudioBuffer<float>& outputBuffer, int startSample, int numSamples)
 {
-    if (!isInCrossfade || previousSliceIndex == -1)
+    if (!isInCrossfade)
         return;
         
     const int numChannels = juce::jmin(outputBuffer.getNumChannels(), audioFileBuffer.getNumChannels());
@@ -492,6 +499,16 @@ void AudioBuffer::applyCrossfadeToSliceTransition(juce::AudioBuffer<float>& outp
         crossfadePosition = 0;
         previousSliceIndex = -1;
     }
+}
+
+void AudioBuffer::startBoundaryCrossfade(double newPlayheadPos)
+{
+    // Use previous position for crossfade; mark previousSliceIndex as -1 (boundary), but allow crossfade to run.
+    previousSlicePlayheadPos = playheadPosition.load();
+    previousSliceIndex = -1;
+    isInCrossfade = true;
+    crossfadePosition = 0;
+    playheadPosition.store(newPlayheadPos);
 }
 
 void AudioBuffer::handleSlicePlayback(double& currentPos)

@@ -44,8 +44,6 @@ struct AppState : public ModifierSchedulerListener
     void setActivePart(int partIndex)
     {
         settings.parts.activePart = juce::jlimit(0, settings.parts.getNumParts() - 1, partIndex);
-        // Compute global start offset in samples and apply to buffer manager
-        const int startBar = settings.parts.getPartStartBar(settings.parts.activePart);
         // Compute per-buffer loop windows based on each buffer's own duration and the number of parts.
         auto loaded = bufferManager.getLoadedBufferIndices();
         int numParts = settings.parts.getNumParts();
@@ -65,6 +63,19 @@ struct AppState : public ModifierSchedulerListener
                 b->setPlayheadSamples(startClamped);
             }
         }
+    }
+    // Returns the start/end time in seconds for the active part for a given buffer index.
+    // If the buffer index is invalid or not loaded, returns {0, 0}.
+    std::pair<double,double> getActivePartSpanSecondsForBuffer(int bufferIndex) const
+    {
+        auto* b = bufferManager.getBuffer(bufferIndex);
+        if (!b) return {0.0, 0.0};
+        const double durSeconds = b->getDurationInSeconds();
+        const int numParts = juce::jmax(1, settings.parts.getNumParts());
+        const int active = juce::jlimit(0, numParts - 1, settings.parts.activePart);
+        const double startSec = (active    * durSeconds) / numParts;
+        const double endSec   = ((active + 1) * durSeconds) / numParts;
+        return { startSec, juce::jmin(endSec, durSeconds) };
     }
     int getActivePart() const { return settings.parts.activePart; }
     int getPartLengthBars() const { return settings.parts.partLengthBars; }

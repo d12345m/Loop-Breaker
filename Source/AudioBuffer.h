@@ -195,6 +195,7 @@ private:
     void handleSlicePlayback(double& currentPos);
     void applyCrossfadeToSliceTransition(juce::AudioBuffer<float>& outputBuffer, int startSample, int numSamples);
     void startSliceCrossfade(int newSliceIndex, double newPlayheadPos);
+    void startBoundaryCrossfade(double newPlayheadPos);
     double getSliceStartPosition(int sliceIndex) const;
     double getSliceEndPosition(int sliceIndex) const;
 

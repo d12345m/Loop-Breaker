@@ -328,7 +328,19 @@ void MainAppComponent::refreshStatus()
     static const char* partNames[] = { "A", "B", "C", "D" };
     int partIdx = app.getActivePart();
     juce::String partName = juce::String("Part ") + juce::String(partNames[juce::jlimit(0, 3, partIdx)]);
-    juce::String base = partName + " | Playing: " + juce::String(playing) + " | BPM " + juce::String(app.settings.bpm, 0);
+    // Show span for the first loaded buffer (represents segment timing). If none loaded, show 0–0.
+    double startSec = 0.0, endSec = 0.0;
+    {
+        auto loaded = app.bufferManager.getLoadedBufferIndices();
+        if (loaded.size() > 0)
+        {
+            auto span = app.getActivePartSpanSecondsForBuffer(loaded[0]);
+            startSec = span.first;
+            endSec = span.second;
+        }
+    }
+    juce::String spanStr = juce::String(startSec, 1) + "s–" + juce::String(endSec, 1) + "s";
+    juce::String base = partName + " [" + spanStr + "] | Playing: " + juce::String(playing) + " | BPM " + juce::String(app.settings.bpm, 0);
     if (app.scheduler.isRunning())
     {
         double secUntil = app.scheduler.getSecondsUntilNextTrigger();

@@ -153,6 +153,14 @@ void AudioBufferManager::playAll()
     {
         if (buffer->hasAudioLoaded())
         {
+            // Apply global start offset (if any) before starting playback
+            if (globalStartOffsetSamples > 0)
+            {
+                // Clamp within buffer duration
+                auto duration = (int64_t) buffer->getDurationInSamples();
+                auto start = juce::jmin(globalStartOffsetSamples, duration > 0 ? (duration - 1) : (int64_t)0);
+                buffer->setPlayheadSamples(start);
+            }
             buffer->play();
         }
     }
@@ -172,6 +180,11 @@ void AudioBufferManager::resetAllBuffers()
     {
         buffer->resetToDefaults();
     }
+}
+
+void AudioBufferManager::setStartOffsetSamples(int64_t startOffsetSamples)
+{
+    globalStartOffsetSamples = juce::jmax<int64_t>(0, startOffsetSamples);
 }
 
 //==============================================================================

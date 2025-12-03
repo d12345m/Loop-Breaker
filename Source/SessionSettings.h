@@ -26,7 +26,17 @@ struct SessionSettings
     // Project / playback configuration
     bool multiChannelRecording = false; // If true, render each buffer to its own output bus (future)
     int numBuffers = 8;                 // Always 8 for MPC-style grid (matches AudioBufferManager::MAX_BUFFERS)
-    int maxPartsPerBuffer = 4;          // A-D parts; currently unused
+  int maxPartsPerBuffer = 4;          // A-D parts
+  // Parts (Musical Sections A–D): equal-length boundaries
+  struct PartsConfig {
+    int activePart = 0;            // 0-based index
+    int partLengthBars = 4;        // equal length per design
+    int numParts = 4;              // configurable 1..4
+    // Derived helpers
+    int getNumParts() const { return juce::jlimit(1, 4, numParts); }
+    // Get start bar offset for a given part index (0..3)
+    int getPartStartBar(int partIndex) const { return juce::jlimit(0, getNumParts()-1, partIndex) * partLengthBars; }
+  } parts;
 
     // Visual / UX
     juce::String themeName { "Default" };

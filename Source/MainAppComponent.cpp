@@ -38,6 +38,7 @@ MainAppComponent::MainAppComponent()
     projectNameEditor.onReturnKey = [this]{ projectNameEdited(); };
     addAndMakeVisible(saveProjectButton); saveProjectButton.onClick = [this]{ saveProjectClicked(); };
     addAndMakeVisible(loadProjectButton); loadProjectButton.onClick = [this]{ loadProjectClicked(); };
+    // Parts UI buttons removed; use partsCountBox + status only.
 
     addAndMakeVisible(padSelectForLoad);
     for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
@@ -68,6 +69,20 @@ MainAppComponent::MainAppComponent()
     quantizeSubdivisionBox.setSelectedId(subdivisionToId(app.settings.quantizeSubdivision), juce::dontSendNotification);
     quantizeSubdivisionBox.onChange = [this]{ quantizeSubdivisionChanged(); };
     addAndMakeVisible(quantizeSubdivisionBox);
+
+    // Parts count selector (set before playback starts)
+    partsCountBox.addItem("1 part", 1);
+    partsCountBox.addItem("2 parts", 2);
+    partsCountBox.addItem("3 parts", 3);
+    partsCountBox.addItem("4 parts", 4);
+    partsCountBox.setTextWhenNothingSelected("Parts Count");
+    {
+        int initialParts = app.settings.parts.getNumParts();
+        if (initialParts < 1 || initialParts > 4) initialParts = 1;
+        partsCountBox.setSelectedId(initialParts, juce::dontSendNotification);
+    }
+    partsCountBox.onChange = [this]{ partsCountChanged(); };
+    addAndMakeVisible(partsCountBox);
 
     // BPM slider
     bpmSlider.setRange(40.0, 240.0, 1.0);
@@ -168,8 +183,10 @@ void MainAppComponent::resized()
     // Add a small horizontal gap before the toggle to visually separate
     rightRegion.removeFromRight(36);
     implementedOnlyToggle.setBounds(rightRegion.removeFromRight(150).reduced(2));
+    // Quantize controls only in right region
     quantizeSubdivisionBox.setBounds(rightRegion.removeFromRight(110).reduced(2));
     quantizeToggle.setBounds(rightRegion.removeFromRight(100).reduced(2));
+    // partsCountLabel attached to partsCountBox, no explicit bounds needed
     statusLabel.setBounds(rightRegion.reduced(2));
 
     // New second row for project actions (Save/Load) to free room for BPM slider
@@ -182,6 +199,10 @@ void MainAppComponent::resized()
     // Middle: Save/Load buttons
     saveProjectButton.setBounds(projArea.removeFromLeft(130).reduced(2));
     loadProjectButton.setBounds(projArea.removeFromLeft(130).reduced(2));
+    // Parts selector moved to second row for dev clarity
+    partsCountBox.setBounds(projArea.removeFromLeft(160).reduced(2));
+    // Label is attached to partsCountBox; no explicit bounds needed
+    // Parts buttons removed; reclaim space for other controls.
     // Right: Pad selector and Load File
     padSelectForLoad.setBounds(projArea.removeFromLeft(110).reduced(2));
     loadFileButton.setBounds(projArea.removeFromLeft(150).reduced(2));
@@ -207,6 +228,8 @@ void MainAppComponent::resized()
     fxStatusPanel.setBounds(rightPanel);
     modifierHistory.setBounds(bottomArea.reduced(2));
 }
+
+// Part buttons removed
 
 void MainAppComponent::upcomingModifierChanged(const ModifierDescriptor& desc)
 {
@@ -300,7 +323,10 @@ void MainAppComponent::refreshStatus()
 {
     // Could display playing buffer count
     int playing = app.bufferManager.getPlayingBufferIndices().size();
-    juce::String base = "Playing: " + juce::String(playing) + " | BPM " + juce::String(app.settings.bpm, 0);
+    static const char* partNames[] = { "A", "B", "C", "D" };
+    int partIdx = app.getActivePart();
+    juce::String partName = juce::String("Part ") + juce::String(partNames[juce::jlimit(0, 3, partIdx)]);
+    juce::String base = partName + " | Playing: " + juce::String(playing) + " | BPM " + juce::String(app.settings.bpm, 0);
     if (app.scheduler.isRunning())
     {
         double secUntil = app.scheduler.getSecondsUntilNextTrigger();
@@ -353,6 +379,15 @@ void MainAppComponent::quantizeSubdivisionChanged()
     int subdiv = mapQuantizeIdToSubdivision(id);
     app.settings.quantizeSubdivision = subdiv;
     app.scheduler.setQuantizationSubdivision(subdiv);
+}
+
+void MainAppComponent::partsCountChanged()
+{
+    int n = juce::jlimit(1, 4, partsCountBox.getSelectedId());
+    app.settings.parts.numParts = n;
+    // Clamp active part within new range
+    if (app.getActivePart() >= n)
+        app.setActivePart(n - 1);
 }
 
 void MainAppComponent::saveProjectClicked()

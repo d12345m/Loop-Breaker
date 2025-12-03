@@ -37,6 +37,10 @@ bool ProjectManager::loadProject(const juce::File& file)
     settings.barsBetweenModifiers= (int)getOr("barsBetweenModifiers", settings.barsBetweenModifiers);
     settings.quantizeEnabled     = (bool)getOr("quantizeEnabled", settings.quantizeEnabled);
     settings.quantizeSubdivision = (int)getOr("quantizeSubdivision", settings.quantizeSubdivision);
+    // Parts
+    settings.parts.activePart    = (int)getOr("activePart", settings.parts.activePart);
+    settings.parts.partLengthBars= (int)getOr("partLengthBars", settings.parts.partLengthBars);
+    settings.parts.numParts      = (int)getOr("numParts", settings.parts.numParts);
 
     // Pad file paths array
     if (obj->hasProperty("pads"))
@@ -73,6 +77,10 @@ bool ProjectManager::saveProject(const juce::File& directory, bool overwrite) co
     obj->setProperty("barsBetweenModifiers", settings.barsBetweenModifiers);
     obj->setProperty("quantizeEnabled", settings.quantizeEnabled);
     obj->setProperty("quantizeSubdivision", settings.quantizeSubdivision);
+    // Parts
+    obj->setProperty("activePart", settings.parts.activePart);
+    obj->setProperty("partLengthBars", settings.parts.partLengthBars);
+    obj->setProperty("numParts", settings.parts.numParts);
 
     // Serialize pad file paths as JSON array
     juce::Array<juce::var> padArray;

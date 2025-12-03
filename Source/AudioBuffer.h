@@ -138,6 +138,7 @@ public:
     // Utility
     int getBufferIndex() const { return bufferIndex; }
     juce::String getLoadedFileName() const { return loadedFileName; }
+    void setPlayheadSamples(int64_t samples) { playheadPosition.store((double) juce::jmax<int64_t>(0, samples)); }
     
 private:
     //==============================================================================

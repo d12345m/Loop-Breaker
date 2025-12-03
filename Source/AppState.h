@@ -40,6 +40,21 @@ struct AppState : public ModifierSchedulerListener
 
         scheduler.addListener(this);
     }
+    // Parts API
+    void setActivePart(int partIndex)
+    {
+        settings.parts.activePart = juce::jlimit(0, settings.parts.getNumParts() - 1, partIndex);
+        // Compute global start offset in samples and apply to buffer manager
+        const int startBar = settings.parts.getPartStartBar(settings.parts.activePart);
+        const double secondsPerBar = settings.getSecondsPerBar();
+        const double startSeconds = secondsPerBar * (double) startBar;
+    const int64_t startSamples = (int64_t) std::round(startSeconds * bufferManager.getHostSampleRate());
+        bufferManager.setStartOffsetSamples(startSamples);
+    }
+    int getActivePart() const { return settings.parts.activePart; }
+    int getPartLengthBars() const { return settings.parts.partLengthBars; }
+    int getPartStartBar(int partIndex) const { return settings.parts.getPartStartBar(partIndex); }
+
 
     ~AppState() override
     {

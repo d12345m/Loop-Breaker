@@ -64,6 +64,8 @@ private:
   juce::ComboBox quantizeSubdivisionBox; // values: 1,2,4,8,16
   juce::Slider bpmSlider; // horizontal BPM control
   juce::Label bpmLabel { {}, "BPM" };
+  // Parts count selector (1–4)
+  juce::ComboBox partsCountBox;
   // Dev controls
   juce::TextButton triggerNowButton { "Trigger Now" };
   juce::TextButton skipUpcomingButton { "Skip" };
@@ -88,6 +90,7 @@ private:
   void updatePlaybackModifierLink();
   void quantizeToggled();
   void quantizeSubdivisionChanged();
+  void partsCountChanged();
   void saveProjectClicked();
   void loadProjectClicked();
   void restorePadFilesFromSettings();

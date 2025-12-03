@@ -63,6 +63,8 @@ public:
     addToggle(ModifierType::BufferHighPassOff, "HPF Off");
     addToggle(ModifierType::BufferDelayPingPongOn, "Delay PingPong On");
     addToggle(ModifierType::BufferDelayPingPongOff, "Delay PingPong Off");
+    addToggle(ModifierType::BufferDelayWowFlutterOn, "Wow/Flutter On");
+    addToggle(ModifierType::BufferDelayWowFlutterOff, "Wow/Flutter Off");
     addToggle(ModifierType::BufferTremolo, "Tremolo On");
     addToggle(ModifierType::BufferTremoloOff, "Tremolo Off");
     addToggle(ModifierType::BufferDuckingOn, "Ducking On");

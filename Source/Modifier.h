@@ -51,6 +51,8 @@ enum class ModifierType
     BufferTremolo,
     BufferTremoloOff,
     BufferDelayDubBurst,
+    BufferDelayWowFlutterOn,
+    BufferDelayWowFlutterOff,
     BufferDuckingOn,
     BufferDuckingOff,
 

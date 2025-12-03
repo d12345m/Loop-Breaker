@@ -99,6 +99,12 @@ struct AppState : public ModifierSchedulerListener
             case ModifierType::BufferDelayPingPongOff:
                 applyBufferDelayPingPong(targets, false);
                 break;
+            case ModifierType::BufferDelayWowFlutterOn:
+                applyBufferDelayWowFlutter(targets, true);
+                break;
+            case ModifierType::BufferDelayWowFlutterOff:
+                applyBufferDelayWowFlutter(targets, false);
+                break;
             case ModifierType::BufferDelayDubBurst:
                 applyBufferDelayDubBurst(desc, targets);
                 break;
@@ -374,6 +380,28 @@ private:
                 auto& strip = *channelStrips[idx];
                 strip.effects().delayEnabled = true; // ensure on
                 strip.getMutableFxParams().delayPingPong = enabled;
+            }
+        }
+    }
+
+    void applyBufferDelayWowFlutter(const juce::Array<int>& targets, bool enabled)
+    {
+        if (targets.isEmpty()) return;
+        for (int idx : targets)
+        {
+            if (juce::isPositiveAndBelow(idx, channelStrips.size()))
+            {
+                auto& strip = *channelStrips[idx];
+                strip.effects().delayEnabled = true; // ensure delay active
+                strip.getMutableFxParams().wowFlutterEnabled = enabled;
+                if (enabled)
+                {
+                    // Musical defaults: subtle tape movement
+                    strip.getMutableFxParams().wowDepthMs = 3.0f;
+                    strip.getMutableFxParams().wowRateHz = 0.35f;
+                    strip.getMutableFxParams().flutterDepthMs = 0.8f;
+                    strip.getMutableFxParams().flutterRateHz = 6.0f;
+                }
             }
         }
     }

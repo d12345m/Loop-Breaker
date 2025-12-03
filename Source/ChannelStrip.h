@@ -133,9 +133,19 @@ public:
             int numTaps = tapSamples.size();
             if (numTaps < 1) numTaps = 1;
 
+            // Wow/Flutter precompute (in samples) and phase increments
+            const float wowDepthSamples = params.wowFlutterEnabled ? (params.wowDepthMs * (float) (lastSampleRate * 0.001)) : 0.0f;
+            const float flutterDepthSamples = params.wowFlutterEnabled ? (params.flutterDepthMs * (float) (lastSampleRate * 0.001)) : 0.0f;
+            const float wowInc = (float)(2.0 * juce::MathConstants<double>::pi * juce::jmax(0.0f, params.wowRateHz) / juce::jmax(1.0, lastSampleRate));
+            const float flutterInc = (float)(2.0 * juce::MathConstants<double>::pi * juce::jmax(0.0f, params.flutterRateHz) / juce::jmax(1.0, lastSampleRate));
+
             for (int i = 0; i < numSamples; ++i)
             {
                 int writePos = delayWritePos;
+                // Compute current modulation offset in samples (shared across channels)
+                float modSamples = 0.0f;
+                if (params.wowFlutterEnabled)
+                    modSamples = wowDepthSamples * std::sin(wowPhase) + flutterDepthSamples * std::sin(flutterPhase);
                 for (int ch = 0; ch < numChannels; ++ch)
                 {
                     auto* delayData = delayBuffer.getWritePointer(ch);
@@ -144,10 +154,16 @@ public:
                     float delayedSum = 0.0f;
                     for (int tapIdx = 0; tapIdx < tapSamples.size(); ++tapIdx)
                     {
-                        int readPosTap = writePos - tapSamples[tapIdx];
-                        if (readPosTap < 0) readPosTap += delayBufferSize;
-                        // For ping-pong, read from opposite channel buffer
-                        delayedSum += (params.delayPingPong && numChannels > 1 ? oppDelayData[readPosTap] : delayData[readPosTap]);
+                        // Fractional read position with wow/flutter modulation
+                        double readPosTap = (double) writePos - (double) tapSamples[tapIdx] - (double) modSamples;
+                        while (readPosTap < 0.0) readPosTap += (double) delayBufferSize;
+                        while (readPosTap >= (double) delayBufferSize) readPosTap -= (double) delayBufferSize;
+                        int idx0 = (int) readPosTap;
+                        int idx1 = idx0 + 1; if (idx1 >= delayBufferSize) idx1 = 0;
+                        float frac = (float) (readPosTap - (double) idx0);
+                        const float* src = (params.delayPingPong && numChannels > 1) ? oppDelayData : delayData;
+                        float s = src[idx0] * (1.0f - frac) + src[idx1] * frac;
+                        delayedSum += s;
                     }
                     float delayedAvg = delayedSum / (float) numTaps;
                     // High-cut only the feedback path to tame highs
@@ -161,6 +177,14 @@ public:
                     const float duck = (params.duckingEnabled && !duckGains.empty() ? duckGains[(size_t)i] : 1.0f);
                     float out = inSample + delayedAvg * (wet * duck);
                     tempBuffer.setSample(ch, i, out);
+                }
+                // Advance modulation phases once per sample
+                if (params.wowFlutterEnabled)
+                {
+                    wowPhase += wowInc;
+                    flutterPhase += flutterInc;
+                    if (wowPhase > juce::MathConstants<float>::twoPi) wowPhase -= juce::MathConstants<float>::twoPi;
+                    if (flutterPhase > juce::MathConstants<float>::twoPi) flutterPhase -= juce::MathConstants<float>::twoPi;
                 }
                 if (++delayWritePos >= delayBufferSize) delayWritePos = 0;
             }
@@ -312,6 +336,12 @@ public:
     bool  duckingEnabled = false;   // enable ducking for delay/reverb wet
     float duckAmount = 0.5f;        // 0..1 amount of ducking
     float duckReleaseMs = 250.0f;   // release time back to full wet
+        // Wow/Flutter (tape-like delay time modulation)
+        bool  wowFlutterEnabled = false;
+        float wowDepthMs = 3.0f;
+        float wowRateHz = 0.35f;
+        float flutterDepthMs = 0.8f;
+        float flutterRateHz = 6.0f;
         float lowPassCutoff = 20000.0f;
         float highPassCutoff = 20.0f;
         float tremoloDepth = 0.0f;
@@ -456,9 +486,11 @@ private:
     juce::dsp::IIR::Filter<float> lowPass[2];
     juce::dsp::IIR::Filter<float> highPass[2];
     juce::dsp::IIR::Filter<float> delayFbHighCut[2];
-    float lastLowPassCutoff = -1.0f;
-    float lastHighPassCutoff = -1.0f;
-    float lastDelayHighCut = -1.0f;
+    float lastLowPassCutoff = 0.0f;
+    float lastHighPassCutoff = 0.0f;
+    float lastDelayHighCut = 0.0f;
+    float wowPhase = 0.0f;
+    float flutterPhase = 0.0f;
     float tremoloPhase = 0.0f;
     // Ducking envelope state
     float duckEnv = 0.0f;

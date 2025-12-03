@@ -52,6 +52,13 @@ public:
                     if (parts.isNotEmpty()) parts << " | ";
                     parts << "FB " << (int)std::round(desc->plannedDelayFeedback.value() * 100.0) << "%";
                 }
+                if (desc->plannedFxFadeBars.has_value())
+                {
+                    auto bars = desc->plannedFxFadeBars.value();
+                    juce::String fadeLabel = bars <= 0.0 ? "instant" : (bars == 1.0 ? "1 bar" : juce::String((int)bars) + " bars");
+                    if (parts.isNotEmpty()) parts << " | ";
+                    parts << fadeLabel;
+                }
                 upcomingVariant = juce::String("Delay ") + parts;
             }
 

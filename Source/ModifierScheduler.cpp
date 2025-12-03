@@ -296,12 +296,30 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
     }
     else if (base.type == ModifierType::BufferDelayOn)
     {
-        static const juce::StringArray divs { "1/4", "1/8", "1/8D", "1/8T" };
+        static const juce::StringArray divs { "1/4", "1/8", "1/8D", "1/8T", "1/16" };
+        static const double wets[] { 0.25, 0.5, 0.75, 1.0 };
+        static const double fbs[]  { 0.25, 0.5, 0.75 };
+        static const double fades[] { 0.0, 1.0, 2.0 };
         const juce::SpinLock::ScopedLockType lock(rngLock);
-        int idx = rng.nextInt(divs.size());
-        juce::String label = divs[idx];
+        // Random division
+        juce::String label = divs[rng.nextInt(divs.size())];
         modified.plannedDelayDivision = label;
-        modified.description = base.description + " -> Delay " + label;
+        // Random wet & feedback
+        double wet = wets[rng.nextInt((int)std::size(wets))];
+        double fb  = fbs[rng.nextInt((int)std::size(fbs))];
+        modified.plannedDelayWet = wet;
+        modified.plannedDelayFeedback = fb;
+        // Optional fade (bars) used to ramp feedback
+        double fadeBars = fades[rng.nextInt((int)std::size(fades))];
+        modified.plannedFxFadeBars = fadeBars;
+        juce::String fadeLabel = fadeBars <= 0.0 ? "instant" : (fadeBars == 1.0 ? "1 bar" : juce::String((int)fadeBars) + " bars");
+        // Description: include division, wet, feedback, fade
+        juce::String parts;
+        parts << label << " | "
+              << (int)std::round(wet * 100.0) << "%" << " | "
+              << "FB " << (int)std::round(fb * 100.0) << "%" << " | "
+              << fadeLabel;
+        modified.description = base.description + " -> Delay " + parts;
     }
     return modified;
 }

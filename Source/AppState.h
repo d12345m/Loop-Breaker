@@ -258,69 +258,24 @@ private:
             {
                 auto& strip = *channelStrips[idx];
                 strip.effects().delayEnabled = true;
-                // Set delay time to one beat length from settings
-                double beatMs = settings.getSecondsPerBeat() * 1000.0;
-                // Clamp to max defined in ChannelStrip
-                strip.getFxParams(); // ensure params accessed (unused result suppressed by ignore)
-                // Direct param assignment (no envelope for time yet)
-                // Provide simple scaling: if BPM fast (<90) extend to 1.5 beats for more space
-                double bpm = settings.bpm;
-                double targetMs = (bpm < 90.0 ? beatMs * 1.5 : beatMs);
-                juce::Array<float> tapTimesMs;
-                auto mapDivisionToMult = [](const juce::String& label)->double{
-                    if (label == "1/4")  return 1.0;
-                    if (label == "1/8")  return 0.5;
-                    if (label == "1/8D") return 0.75;
-                    if (label == "1/8T") return 1.0/3.0;
-                    if (label == "1/16") return 0.25;
-                    if (label == "1/32") return 0.125;
-                    return 1.0;
-                };
-                if (!desc.plannedDelayDivisions.isEmpty())
+                // Division handling kept as before
+                // Wet/feedback targets
+                double targetWet = desc.plannedDelayWet.value_or(strip.getFxParams().delayWet);
+                double targetFb  = desc.plannedDelayFeedback.value_or(strip.getFxParams().delayFeedback);
+                double fadeBars  = desc.plannedFxFadeBars.value_or(0.0);
+                if (fadeBars <= 0.0)
                 {
-                    for (auto d : desc.plannedDelayDivisions)
-                    {
-                        double mult = mapDivisionToMult(d);
-                        tapTimesMs.add((float) juce::jlimit(1.0, 2000.0, beatMs * mult));
-                    }
-                    // Fallback: first division defines primary param for single-tap compatibility
-                    if (tapTimesMs.size() > 0)
-                        targetMs = tapTimesMs[0];
-                    strip.setDelayTapTimesMs(tapTimesMs);
-                }
-                else if (desc.plannedDelayDivision.isNotEmpty())
-                {
-                    double mult = mapDivisionToMult(desc.plannedDelayDivision);
-                    targetMs = beatMs * mult;
-                    tapTimesMs.add((float) juce::jlimit(1.0, 2000.0, targetMs));
-                    strip.setDelayTapTimesMs(tapTimesMs);
+                    strip.getMutableFxParams().delayWet = (float) juce::jlimit(0.0, 1.0, targetWet);
+                    strip.getMutableFxParams().delayFeedback = (float) juce::jlimit(0.0, 0.95, targetFb);
                 }
                 else
                 {
-                    // No divisions specified; ensure previous multi-tap cleared
-                    strip.setDelayTapTimesMs(juce::Array<float>());
+                    // Ramp feedback over fadeBars; set wet immediately
+                    strip.getMutableFxParams().delayWet = (float) juce::jlimit(0.0, 1.0, targetWet);
+                    strip.setDelayFeedbackEnvelope(strip.getFxParams().delayFeedback, (float) juce::jlimit(0.0, 0.95, targetFb), (float) fadeBars);
                 }
-                // Delay wet override if provided
-                if (desc.plannedDelayWet.has_value())
-                {
-                    strip.getMutableFxParams().delayWet = (float) juce::jlimit(0.0, 1.0, desc.plannedDelayWet.value());
-                }
-                if (desc.plannedDelayFeedback.has_value())
-                {
-                    // Immediate set rather than envelope if explicit feedback variant provided
-                    strip.getMutableFxParams().delayFeedback = (float) juce::jlimit(0.0, 0.95, desc.plannedDelayFeedback.value());
-                }
-                // Update params directly
-                // (Would add setter if encapsulation demanded)
-                strip.advanceEnvelopes(0.0f); // noop ensuring structure
+                // Ensure enabled
                 strip.effects().delayEnabled = true;
-                // Ramp feedback to 0.35 over 2 bars for audible repeats
-                if (!desc.plannedDelayFeedback.has_value())
-                    strip.setDelayFeedbackEnvelope(strip.getFxParams().delayFeedback, 0.35f, 2.0f);
-                // If no explicit wet variant, use default baseline
-                if (!desc.plannedDelayWet.has_value())
-                    strip.getMutableFxParams().delayWet = 0.40f; // baseline
-                strip.getMutableFxParams().delayTimeMs = (float) juce::jlimit(1.0, 2000.0, targetMs);
             }
         }
     }

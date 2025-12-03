@@ -44,14 +44,8 @@ public:
     addToggle(ModifierType::BufferTremolo, "Tremolo On");
     addToggle(ModifierType::BufferDuckingOn, "Ducking On");
     // Speed variants removed; Speed is randomized at runtime.
-        addToggle(ModifierType::ResetAll, "Reset");
-        addToggle(ModifierType::BeatSliceRandom, "Slice (rand)");
-        addVariantToggle(ModifierType::BeatSliceRandom, "Slice 1/4", "1/4");
-        addVariantToggle(ModifierType::BeatSliceRandom, "Slice 1/8", "1/8");
-        addVariantToggle(ModifierType::BeatSliceRandom, "Slice 1/8T", "1/8T");
-        addVariantToggle(ModifierType::BeatSliceRandom, "Slice 1/16", "1/16");
-        addVariantToggle(ModifierType::BeatSliceRandom, "Slice 1/32", "1/32");
-        addVariantToggle(ModifierType::BeatSliceRandom, "Slice 1/64", "1/64");
+    addToggle(ModifierType::ResetAll, "Reset");
+    addToggle(ModifierType::BeatSliceRandom, "Slice (rand)");
     }
 
     void resized() override

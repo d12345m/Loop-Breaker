@@ -286,13 +286,14 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
     }
     else if (base.type == ModifierType::BeatSliceRandom)
     {
-        // Choose division label
-        static const juce::StringArray sliceOptions { "1/4", "1/8", "1/8T", "1/16", "1/32", "1/64" };
+        // Choose number of slices directly from set {4,8,16,32,64}
+        static const int sliceCounts[] { 4, 8, 16, 32, 64 };
         const juce::SpinLock::ScopedLockType lock(rngLock);
-        int idx = rng.nextInt(sliceOptions.size());
-        juce::String label = sliceOptions[idx];
-        modified.plannedSliceDivision = label;
-        modified.description = base.description + " -> " + label;
+        int idx = rng.nextInt((int)std::size(sliceCounts));
+        int chosen = sliceCounts[idx];
+        // Store as a simple numeric label for reuse in apply
+        modified.plannedSliceDivision = juce::String(chosen);
+        modified.description = base.description + " -> " + juce::String(chosen) + " slices";
     }
     else if (base.type == ModifierType::BufferReverbOn)
     {

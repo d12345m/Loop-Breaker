@@ -153,29 +153,32 @@ private:
     void applyBeatSliceRandom(const ModifierDescriptor& desc, const juce::Array<int>& targets)
     {
         if (targets.isEmpty()) return;
-        struct Division { juce::String name; double factorPerBeat; };
-        static const Division divisions[] {
-            {"1/4", 1.0}, {"1/8", 2.0}, {"1/8T", 3.0}, {"1/16", 4.0}, {"1/32", 8.0}, {"1/64", 16.0 }
-        };
-        Division chosen {"1/8", 2.0};
-        juce::String label = desc.plannedSliceDivision;
-        if (label.isNotEmpty())
+        // If plannedSliceDivision contains a numeric value, interpret it as direct slice count.
+        int plannedSlices = 0;
+        if (desc.plannedSliceDivision.isNotEmpty())
         {
-            for (auto& d : divisions)
-                if (label == d.name) { chosen = d; break; }
+            // Accept pure numeric strings like "16"; ignore non-numeric labels.
+            if (desc.plannedSliceDivision.containsOnly("0123456789"))
+                plannedSlices = desc.plannedSliceDivision.getIntValue();
         }
-        double beatsPerBar = settings.getBeatsPerBar();
         double secondsPerBar = settings.getSecondsPerBar();
         for (int idx : targets)
         {
             if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
             {
-                double durSeconds = b->getDurationInSeconds();
-                if (durSeconds <= 0.0) continue;
-                double approxBars = durSeconds / secondsPerBar;
-                double barsFactor = juce::jmax(1.0, approxBars);
-                double slicesD = beatsPerBar * chosen.factorPerBeat * barsFactor;
-                int slices = juce::jlimit(1, 64, (int)std::round(slicesD));
+                int slices = plannedSlices;
+                if (slices <= 0)
+                {
+                    // Fallback: compute a reasonable slice count based on duration and 1/8 division
+                    double durSeconds = b->getDurationInSeconds();
+                    if (durSeconds <= 0.0) continue;
+                    double approxBars = durSeconds / secondsPerBar;
+                    double barsFactor = juce::jmax(1.0, approxBars);
+                    double slicesD = 2.0 * settings.getBeatsPerBar() * barsFactor; // 1/8 default
+                    slices = juce::jlimit(4, 64, (int)std::round(slicesD));
+                }
+                // Clamp to supported counts
+                slices = juce::jlimit(4, 64, slices);
                 if (slices < 2) continue;
                 b->setNumSlices(slices);
                 b->startContinuousRandomSlicing();

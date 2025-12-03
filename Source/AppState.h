@@ -409,14 +409,21 @@ private:
                     tapTimesMs.add((float) juce::jlimit(1.0, 2000.0, beatMs * 0.5));
                 }
                 strip.setDelayTapTimesMs(tapTimesMs);
-                // Wet baseline a bit higher for dub
-                strip.getMutableFxParams().delayWet = (float) juce::jlimit(0.0, 1.0, desc.plannedDelayWet.value_or(0.60));
-                // Start rising feedback envelope (fast: 1 bar)
+                // Push it into dubby territory
+                // - Higher wet
+                // - Darker repeats via lower high-cut
+                // - Ping-pong on for width
+                // - Add drive to feedback loop for saturation
+                strip.getMutableFxParams().delayWet = (float) juce::jlimit(0.0, 1.0, desc.plannedDelayWet.value_or(0.80));
+                strip.getMutableFxParams().delayFeedbackHighCutHz = 3500.0f;
+                strip.getMutableFxParams().delayPingPong = true;
+                strip.getMutableFxParams().delayFbDrive = 2.5f;
+                // Start rising feedback envelope (faster rise, higher target)
                 float startFb = strip.getFxParams().delayFeedback;
-                float riseTarget = (float) juce::jlimit(0.0, 0.95, desc.plannedDelayFeedback.value_or(0.85));
-                strip.setDelayFeedbackEnvelope(startFb, riseTarget, 1.0f);
-                // Mark dub burst fall parameters inside strip
-                strip.startDubDelayBurst(riseTarget, 1.0f, 0.0f, 2.0f);
+                float riseTarget = (float) juce::jlimit(0.0, 0.95, desc.plannedDelayFeedback.value_or(0.93));
+                strip.setDelayFeedbackEnvelope(startFb, riseTarget, 0.5f);
+                // Mark dub burst fall parameters inside strip (longer decay)
+                strip.startDubDelayBurst(riseTarget, 0.5f, 0.0f, 4.0f);
             }
         }
     }

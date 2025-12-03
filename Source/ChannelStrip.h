@@ -87,6 +87,9 @@ public:
                 delayWritePos = 0;
             }
 
+            // Update delay feedback high cut if changed (cheap no-op when unchanged)
+            updateDelayHighCutCoeffs(params.delayFeedbackHighCutHz);
+
             // Compute delay samples from params (clamped)
             juce::Array<int> tapSamples;
             if (delayTapTimesMs.isEmpty())
@@ -129,8 +132,11 @@ public:
                     // High-cut only the feedback path to tame highs
                     float fbSample = delayedAvg;
                     fbSample = delayFbHighCut[ch].processSample(fbSample);
+                    // Apply saturation/drive to feedback path for dub character
+                    const float drive = juce::jmax(1.0f, params.delayFbDrive);
+                    const float fbSat = std::tanh(fbSample * drive);
                     // Single write using averaged delayed signal for feedback stability
-                    delayData[writePos] = inSample + fbSample * fb;
+                    delayData[writePos] = inSample + fbSat * fb;
                     float out = inSample + delayedAvg * wet;
                     tempBuffer.setSample(ch, i, out);
                 }
@@ -276,6 +282,7 @@ public:
         float delayWet = 0.35f;         // mix level for delay repeats
         bool  delayPingPong = false;    // ping-pong cross feedback
         float delayFeedbackHighCutHz = 6000.0f; // high-cut inside feedback loop
+        float delayFbDrive = 1.0f;      // feedback drive for saturation (1.0 = neutral)
         float lowPassCutoff = 20000.0f;
         float highPassCutoff = 20.0f;
         float tremoloDepth = 0.0f;

@@ -115,7 +115,27 @@ void AudioBuffer::processWithRepitching(juce::AudioBuffer<float>& outputBuffer)
             break;
         }
         
-        // Ensure position is within bounds
+        // Ensure position is within bounds (and loop within custom window if enabled)
+        if (loopWindowEnabled.load())
+        {
+            const int64_t start = loopStartSamples.load();
+            const int64_t end   = loopEndSamples.load();
+            if (speed >= 0.0)
+            {
+                if (currentPos >= (double) end)
+                    currentPos = (double) start;
+                else if (currentPos < (double) start)
+                    currentPos = (double) start;
+            }
+            else // reverse
+            {
+                if (currentPos < (double) start)
+                    currentPos = (double) end;
+                else if (currentPos > (double) end)
+                    currentPos = (double) end;
+            }
+        }
+        // Clamp to file bounds as a safety
         currentPos = juce::jlimit(0.0, static_cast<double>(fileLengthSamples - 1), currentPos);
         
         // High-quality interpolation
@@ -142,6 +162,28 @@ void AudioBuffer::processWithRepitching(juce::AudioBuffer<float>& outputBuffer)
         currentPos += speed * (fileSampleRate / hostSampleRate);
         playheadPosition.store(currentPos);
     }
+}
+
+//==============================================================================
+// Loop window controls
+//==============================================================================
+void AudioBuffer::setLoopWindow(int64_t startSamples, int64_t endSamples)
+{
+    if (endSamples <= startSamples)
+    {
+        loopWindowEnabled.store(false);
+        loopStartSamples.store(0);
+        loopEndSamples.store(0);
+        return;
+    }
+    loopWindowEnabled.store(true);
+    loopStartSamples.store(juce::jmax<int64_t>(0, startSamples));
+    loopEndSamples.store(juce::jmax<int64_t>(0, endSamples));
+}
+
+void AudioBuffer::clearLoopWindow()
+{
+    loopWindowEnabled.store(false);
 }
 
 bool AudioBuffer::loadAudioFile(const juce::File& file, juce::AudioFormatManager& formatManager)

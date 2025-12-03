@@ -69,6 +69,8 @@ void AudioBufferManager::processBlock(juce::AudioBuffer<float>& outputBuffer)
             {
                 outputBuffer.addFrom(channel, 0, tempBuffer, channel, 0, numSamples);
             }
+
+            // Per-buffer loop windows are enforced inside AudioBuffer; no global enforcement needed here.
         }
     }
     
@@ -185,6 +187,11 @@ void AudioBufferManager::resetAllBuffers()
 void AudioBufferManager::setStartOffsetSamples(int64_t startOffsetSamples)
 {
     globalStartOffsetSamples = juce::jmax<int64_t>(0, startOffsetSamples);
+}
+
+void AudioBufferManager::setEndOffsetSamples(int64_t endOffsetSamples)
+{
+    globalEndOffsetSamples = juce::jmax<int64_t>(0, endOffsetSamples);
 }
 
 //==============================================================================

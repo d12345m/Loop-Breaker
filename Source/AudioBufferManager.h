@@ -65,6 +65,8 @@ public:
     void resetAllBuffers();
   // Parts: set playback start offset for all buffers (in samples)
   void setStartOffsetSamples(int64_t startOffsetSamples);
+  // Parts: set end offset (absolute samples from start of file); 0 disables
+  void setEndOffsetSamples(int64_t endOffsetSamples);
     void setMasterVolume(float volume) { masterVolume.store(volume); }
     float getMasterVolume() const { return masterVolume.load(); }
   double getHostSampleRate() const { return hostSampleRate; }
@@ -101,6 +103,7 @@ private:
     juce::AudioBuffer<float> tempBuffer;
   double hostSampleRate = 44100.0;
   int64_t globalStartOffsetSamples = 0; // applied at play() time
+  int64_t globalEndOffsetSamples = 0;   // enforced during processing; 0 = disabled
     
     // Listeners
     juce::Array<AudioBufferListener*> listeners;

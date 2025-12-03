@@ -434,6 +434,14 @@ void MainAppComponent::loadProjectClicked()
             // Restore pad files
             restorePadFilesFromSettings();
 
+            // Sync parts UI to loaded settings and clamp active part if needed
+            {
+                int loadedNumParts = juce::jlimit(1, 4, app.settings.parts.numParts);
+                partsCountBox.setSelectedId(loadedNumParts, juce::dontSendNotification);
+                if (app.getActivePart() >= loadedNumParts)
+                    app.setActivePart(loadedNumParts - 1);
+            }
+
             // Update project name UI
             projectNameEditor.setText(app.settings.projectName, juce::dontSendNotification);
 

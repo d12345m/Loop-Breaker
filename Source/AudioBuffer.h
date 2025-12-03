@@ -139,6 +139,9 @@ public:
     int getBufferIndex() const { return bufferIndex; }
     juce::String getLoadedFileName() const { return loadedFileName; }
     void setPlayheadSamples(int64_t samples) { playheadPosition.store((double) juce::jmax<int64_t>(0, samples)); }
+    // Loop window controls
+    void setLoopWindow(int64_t startSamples, int64_t endSamples);
+    void clearLoopWindow();
     
 private:
     //==============================================================================
@@ -194,6 +197,11 @@ private:
     void startSliceCrossfade(int newSliceIndex, double newPlayheadPos);
     double getSliceStartPosition(int sliceIndex) const;
     double getSliceEndPosition(int sliceIndex) const;
+
+    // Optional per-buffer loop window in absolute samples (file rate). When enabled, playback wraps within [loopStart, loopEnd).
+    std::atomic<bool> loopWindowEnabled { false };
+    std::atomic<int64_t> loopStartSamples { 0 };
+    std::atomic<int64_t> loopEndSamples { 0 };
     
     // Notification helpers
     void notifyPlaybackStateChanged();

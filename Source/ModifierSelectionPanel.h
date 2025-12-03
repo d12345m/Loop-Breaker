@@ -36,22 +36,14 @@ public:
         addToggle(ModifierType::Speed, "Speed (rand)");
     // Buffer FX (placeholders)
     addToggle(ModifierType::BufferReverbOn, "Reverb On");
-    addToggle(ModifierType::BufferReverbOff, "Reverb Off");
-        addToggle(ModifierType::BufferDelayOn, "Delay On");
-        addToggle(ModifierType::BufferDelayOff, "Delay Off");
+    addToggle(ModifierType::BufferDelayOn, "Delay On");
         // Removed granular delay division/wet/feedback toggles to simplify GUI; runtime randomization will choose values.
     addToggle(ModifierType::BufferLowPassOn, "LPF On");
-    addToggle(ModifierType::BufferLowPassOff, "LPF Off");
     addToggle(ModifierType::BufferHighPassOn, "HPF On");
-    addToggle(ModifierType::BufferHighPassOff, "HPF Off");
     addToggle(ModifierType::BufferDelayPingPongOn, "Delay PingPong On");
-    addToggle(ModifierType::BufferDelayPingPongOff, "Delay PingPong Off");
     addToggle(ModifierType::BufferDelayWowFlutterOn, "Wow/Flutter On");
-    addToggle(ModifierType::BufferDelayWowFlutterOff, "Wow/Flutter Off");
     addToggle(ModifierType::BufferTremolo, "Tremolo On");
-    addToggle(ModifierType::BufferTremoloOff, "Tremolo Off");
     addToggle(ModifierType::BufferDuckingOn, "Ducking On");
-    addToggle(ModifierType::BufferDuckingOff, "Ducking Off");
         // Speed variants
         addVariantToggle(ModifierType::Speed, "Speed 0.25x", "0.25");
         addVariantToggle(ModifierType::Speed, "Speed 0.50x", "0.5");

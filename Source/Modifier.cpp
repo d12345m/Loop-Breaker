@@ -83,6 +83,9 @@ juce::OwnedArray<IModifier> ModifierFactory::createAllPrototypes()
     // Reset (pad-targeted: previously global, now treated as buffer transform)
     add(ModifierType::ResetAll, ModifierCategory::BufferTransform, "Reset", "Reset selected buffers / FX state");
 
+    // Navigation
+    add(ModifierType::SwitchPart, ModifierCategory::GlobalUtility, "Switch Part", "Switch to a different part");
+
     return list;
 }
 

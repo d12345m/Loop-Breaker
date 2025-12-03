@@ -46,6 +46,9 @@ enum class ModifierType
     MasterHighPassOn,
     MasterLowPassOn,
 
+    // Navigation modifiers
+    SwitchPart,
+
     // Global
     ResetAll,
 

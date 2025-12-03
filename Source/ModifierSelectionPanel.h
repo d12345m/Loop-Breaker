@@ -50,6 +50,7 @@ public:
     // Speed variants removed; Speed is randomized at runtime.
     addToggle(ModifierType::ResetAll, "Reset");
     addToggle(ModifierType::BeatSliceRandom, "Slice (rand)");
+    addToggle(ModifierType::SwitchPart, "Switch Part");
     }
 
     void resized() override

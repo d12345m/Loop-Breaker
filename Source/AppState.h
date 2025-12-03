@@ -151,6 +151,32 @@ struct AppState : public ModifierSchedulerListener
             case ModifierType::BufferTremolo:
                 applyBufferTremoloOn(targets);
                 break;
+            case ModifierType::SwitchPart:
+            {
+                // Choose a different part than current and switch immediately
+                int num = settings.parts.getNumParts();
+                if (num >= 1)
+                {
+                    int current = settings.parts.activePart;
+                    int target = current;
+                    if (num == 1)
+                        target = 0; // only one part -> A
+                    else
+                    {
+                        // Pick a different index
+                        juce::Random r;
+                        for (int attempt = 0; attempt < 8; ++attempt)
+                        {
+                            int cand = r.nextInt(num);
+                            if (cand != current) { target = cand; break; }
+                        }
+                        if (target == current)
+                            target = (current + 1) % num; // deterministic fallback
+                    }
+                    setActivePart(target);
+                }
+                break;
+            }
             // Ducking is enabled by default; no explicit modifier trigger.
             default:
                 break; // Unimplemented modifiers ignored for now

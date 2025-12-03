@@ -259,7 +259,8 @@ ModifierDescriptor ModifierScheduler::pickRandomDescriptor() const
                 || t == ModifierType::BufferHighPassOn
                 || t == ModifierType::MasterLowPassOn
                 || t == ModifierType::MasterHighPassOn
-                || t == ModifierType::BufferTremolo)
+                || t == ModifierType::BufferTremolo
+                || t == ModifierType::SwitchPart)
             {
                 candidateIndices.add(i);
             }
@@ -273,7 +274,6 @@ ModifierDescriptor ModifierScheduler::pickRandomDescriptor() const
     int choice = rng.nextInt(candidateIndices.size());
     return prototypeCache[candidateIndices[choice]]->getDescriptor();
 }
-
 ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDescriptor& base) const
 {
     ModifierDescriptor modified = base;
@@ -341,6 +341,11 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
       if (pp) parts << " | PP";
       if (wf) parts << " | WowFlutter";
         modified.description = base.description + " -> Delay " + parts;
+    }
+    else if (base.type == ModifierType::SwitchPart)
+    {
+        // Planned field: none; App will choose target part != current at trigger time
+        modified.description = base.description + " -> Switch Part";
     }
     else if (base.type == ModifierType::MasterLowPassOn || base.type == ModifierType::MasterHighPassOn)
     {

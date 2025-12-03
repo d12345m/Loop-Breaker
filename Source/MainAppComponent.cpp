@@ -272,6 +272,8 @@ void MainAppComponent::timerCallback()
 
 void MainAppComponent::playAllClicked()
 {
+    // Ensure playback starts at Part A before playing
+    app.setActivePart(0);
     app.bufferManager.playAll();
     updatePlaybackModifierLink();
 }

@@ -284,10 +284,12 @@ private:
                 double targetMs = (bpm < 90.0 ? beatMs * 1.5 : beatMs);
                 juce::Array<float> tapTimesMs;
                 auto mapDivisionToMult = [](const juce::String& label)->double{
-                    if (label == "1/4") return 1.0;
-                    if (label == "1/8") return 0.5;
+                    if (label == "1/4")  return 1.0;
+                    if (label == "1/8")  return 0.5;
                     if (label == "1/8D") return 0.75;
                     if (label == "1/8T") return 1.0/3.0;
+                    if (label == "1/16") return 0.25;
+                    if (label == "1/32") return 0.125;
                     return 1.0;
                 };
                 if (!desc.plannedDelayDivisions.isEmpty())
@@ -405,8 +407,8 @@ private:
                 }
                 else
                 {
-                    // Default to 1/8 burst if unspecified
-                    tapTimesMs.add((float) juce::jlimit(1.0, 2000.0, beatMs * 0.5));
+                    // Default to dotted 1/8-note burst if unspecified
+                    tapTimesMs.add((float) juce::jlimit(1.0, 2000.0, beatMs * 0.75));
                 }
                 strip.setDelayTapTimesMs(tapTimesMs);
                 // Push it into dubby territory
@@ -417,10 +419,10 @@ private:
                 strip.getMutableFxParams().delayWet = (float) juce::jlimit(0.0, 1.0, desc.plannedDelayWet.value_or(0.80));
                 strip.getMutableFxParams().delayFeedbackHighCutHz = 3500.0f;
                 strip.getMutableFxParams().delayPingPong = true;
-                strip.getMutableFxParams().delayFbDrive = 2.5f;
+                strip.getMutableFxParams().delayFbDrive = 1.8f;
                 // Start rising feedback envelope (faster rise, higher target)
                 float startFb = strip.getFxParams().delayFeedback;
-                float riseTarget = (float) juce::jlimit(0.0, 0.95, desc.plannedDelayFeedback.value_or(0.93));
+                float riseTarget = (float) juce::jlimit(0.0, 0.95, desc.plannedDelayFeedback.value_or(0.88));
                 strip.setDelayFeedbackEnvelope(startFb, riseTarget, 0.5f);
                 // Mark dub burst fall parameters inside strip (longer decay)
                 strip.startDubDelayBurst(riseTarget, 0.5f, 0.0f, 4.0f);

@@ -20,26 +20,29 @@ public:
 
         addAndMakeVisible(modifierDisplay);
         addAndMakeVisible(padGrid);
-        addAndMakeVisible(playAllButton);
-        addAndMakeVisible(stopAllButton);
+    addAndMakeVisible(playAllButton);
+    addAndMakeVisible(stopAllButton);
+    addAndMakeVisible(loadButton);
         addAndMakeVisible(modifiersToggle);
         addAndMakeVisible(statusLabel);
         statusLabel.setJustificationType(juce::Justification::centredLeft);
 
         playAllButton.setButtonText("Play");
         stopAllButton.setButtonText("Stop");
+    loadButton.setButtonText("Load");
         modifiersToggle.setButtonText("Modifiers");
         modifiersToggle.setToggleState(true, juce::dontSendNotification);
 
         playAllButton.onClick = [this]{ playAllClicked(); };
         stopAllButton.onClick = [this]{ stopAllClicked(); };
+    loadButton.onClick = [this]{ loadClicked(); };
         modifiersToggle.onClick = [this]{ updatePlaybackModifierLink(); };
 
         padGrid.setAudioFormatManager(&formatManager);
 
         app.scheduler.addListener(this);
         setAudioChannels(0, 2);
-        setSize(400, 700);
+    setSize(420, 800);
         startTimerHz(30);
 
         // Apply initial scheduler settings
@@ -90,18 +93,24 @@ public:
 
     void resized() override
     {
-        auto area = getLocalBounds().reduced(6);
-        auto top = area.removeFromTop(70);
-        modifierDisplay.setBounds(top);
+    auto area = getLocalBounds().reduced(8);
+    // Top banner: upcoming modifier countdown
+    auto banner = area.removeFromTop(80);
+    modifierDisplay.setBounds(banner);
 
-        auto controls = area.removeFromTop(44).reduced(2);
-        playAllButton.setBounds(controls.removeFromLeft(90));
-        stopAllButton.setBounds(controls.removeFromLeft(90));
-        modifiersToggle.setBounds(controls.removeFromLeft(120));
-        statusLabel.setBounds(controls);
+    // Main pad grid occupies most of the view
+    auto bottomControlsArea = area.removeFromBottom(88).reduced(2);
+    padGrid.setBounds(area.reduced(0, 6));
 
-        area.removeFromTop(6);
-        padGrid.setBounds(area);
+    // Bottom controls: large touch targets (one-handed friendly)
+    auto row1 = bottomControlsArea.removeFromTop(44);
+    loadButton.setBounds(row1.removeFromLeft(100).reduced(2));
+    playAllButton.setBounds(row1.removeFromLeft(100).reduced(2));
+    stopAllButton.setBounds(row1.removeFromLeft(100).reduced(2));
+    modifiersToggle.setBounds(row1.reduced(2));
+
+    auto row2 = bottomControlsArea;
+    statusLabel.setBounds(row2);
     }
 
     // Scheduler listener
@@ -138,6 +147,7 @@ private:
     PadGridComponent padGrid;
     juce::TextButton playAllButton;
     juce::TextButton stopAllButton;
+    juce::TextButton loadButton;
     juce::ToggleButton modifiersToggle;
     juce::Label statusLabel { {}, "Status" };
 
@@ -184,6 +194,53 @@ private:
         updatePlaybackModifierLink();
     }
 
+    void loadClicked()
+    {
+        // Native iOS Document Picker via JUCE FileChooser
+        auto flags = juce::FileBrowserComponent::openMode
+                   | juce::FileBrowserComponent::canSelectFiles;
+        // Audio file patterns supported
+        juce::String patterns = "*.wav;*.mp3;*.aif;*.aiff;*.flac";
+        auto safeThis = juce::Component::SafePointer<IOSAppComponent>(this);
+        fileChooser = std::make_unique<juce::FileChooser>(
+            "Select audio file...",
+            juce::File(), patterns);
+        fileChooser->launchAsync(flags, [safeThis](const juce::FileChooser& fc){
+            if (auto* self = safeThis.getComponent())
+            {
+                auto f = fc.getResult();
+                if (f.existsAsFile())
+                {
+                    // Load into the first available empty pad, else pad 0
+                    int targetPad = 0;
+                    auto loaded = self->app.bufferManager.getLoadedBufferIndices();
+                    if (loaded.size() < AudioBufferManager::MAX_BUFFERS)
+                    {
+                        // find first empty pad
+                        juce::Array<int> used = loaded;
+                        for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
+                        {
+                            if (! used.contains(i)) { targetPad = i; break; }
+                        }
+                    }
+                    if (self->app.bufferManager.loadAudioFile(targetPad, f, self->formatManager))
+                    {
+                        self->statusLabel.setText("Loaded to Pad " + juce::String(targetPad+1) + ": " + f.getFileName(), juce::dontSendNotification);
+                        self->padGrid.setPadFileName(targetPad, f.getFileNameWithoutExtension());
+                        while (self->app.settings.padFilePaths.size() < AudioBufferManager::MAX_BUFFERS)
+                            self->app.settings.padFilePaths.add(juce::String());
+                        self->app.settings.padFilePaths.set(targetPad, f.getFullPathName());
+                        self->padGrid.setPadFilePath(targetPad, f.getFullPathName());
+                    }
+                    else
+                    {
+                        juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Load Failed", "Could not load file.");
+                    }
+                }
+            }
+        });
+    }
+
     void refreshStatus()
     {
         int playing = app.bufferManager.getPlayingBufferIndices().size();
@@ -210,6 +267,8 @@ private:
         }
         refreshStatus();
     }
+
+    std::unique_ptr<juce::FileChooser> fileChooser;
 };
 
 #endif // JUCE_IOS

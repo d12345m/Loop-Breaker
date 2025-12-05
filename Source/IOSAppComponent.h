@@ -109,7 +109,16 @@ public:
 
     void resized() override
     {
-        tabs.setBounds(getLocalBounds());
+        // Respect iOS safe area (Dynamic Island / notch)
+        auto bounds = getLocalBounds();
+        int safeTop = 0;
+        if (auto* peer = getPeer())
+        {
+            auto display = juce::Desktop::getInstance().getDisplays().getDisplayForRect(getScreenBounds());
+            if (display != nullptr)
+                safeTop = display->safeAreaInsets.getTop();
+        }
+        tabs.setBounds(bounds.withTrimmedTop(safeTop));
         // Layout playback screen
         auto area = playbackContainer.getLocalBounds().reduced(8);
         auto banner = area.removeFromTop(80);

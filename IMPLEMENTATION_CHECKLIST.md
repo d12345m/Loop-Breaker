@@ -134,10 +134,10 @@ Legend:
 
 ## 9. Parts (Musical Sections A–D)
 
-- [ ] Allow user to define part boundaries (equal length constraint as per design)
-- [ ] UI to switch active part (affects playback start offsets?)
-- [ ] Potential modifier: switch part randomly (future)
-- [ ] Persistence of part definitions
+- [x] Allow user to define part boundaries (equal length constraint as per design)
+- [x] UI to switch active part (affects playback start offsets?)
+- [x] Potential modifier: switch part randomly (future)
+- [x] Persistence of part definitions
 
 ---
 

@@ -142,6 +142,10 @@ public:
     // Loop window controls
     void setLoopWindow(int64_t startSamples, int64_t endSamples);
     void clearLoopWindow();
+    // Loop window queries
+    bool isLoopWindowEnabled() const { return loopWindowEnabled.load(); }
+    int64_t getLoopStartSamples() const { return loopStartSamples.load(); }
+    int64_t getLoopEndSamples() const { return loopEndSamples.load(); }
     
 private:
     //==============================================================================

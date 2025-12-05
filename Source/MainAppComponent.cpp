@@ -96,6 +96,9 @@ MainAppComponent::MainAppComponent()
 
     attachPadCallbacks();
 
+    // Provide AudioFormatManager to padGrid so thumbnails can read files
+    padGrid.setAudioFormatManager(&formatManager);
+
     modifierSelectionPanel.setForceSelectionCallback([this](ModifierType type){
         app.scheduler.forceUpcomingModifier(type);
     });
@@ -109,7 +112,7 @@ MainAppComponent::MainAppComponent()
     setAudioChannels(0, 2);
     setSize(920, 600);
 
-    startTimerHz(10); // 100ms UI refresh (status only now; selection via callbacks)
+    startTimerHz(30); // 33ms UI refresh for smoother playhead motion
 
     // Apply initial scheduler settings from SessionSettings
     app.scheduler.setQuantizationEnabled(app.settings.quantizeEnabled);
@@ -117,6 +120,12 @@ MainAppComponent::MainAppComponent()
 
     // Initialize status text immediately
     refreshStatus();
+
+    // If there are existing pad file paths in settings (e.g., from a previous run), prime thumbnails
+    if (app.settings.padFilePaths.size() > 0)
+        padGrid.setPadFilePaths(app.settings.padFilePaths);
+
+    // Removed hardcoded test auto-load; rely solely on SessionSettings restore and user loads
 }
 
 MainAppComponent::~MainAppComponent()
@@ -266,6 +275,21 @@ void MainAppComponent::timerCallback()
 {
     refreshStatus();
     padGrid.setPlayingStates(app.bufferManager.getPlayingBufferIndices());
+    // Update per-pad playheads and loop windows for waveform overlays
+    for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
+    {
+        if (auto* buf = app.bufferManager.getBuffer(i))
+        {
+            padGrid.setPlayheadForPad(i, (double) buf->getPlayheadPositionInSamples());
+            padGrid.setTotalSamplesForPad(i, (double) buf->getDurationInSamples());
+            padGrid.setLoopWindowForPad(i,
+                                        buf->isLoopWindowEnabled(),
+                                        (double) buf->getLoopStartSamples(),
+                                        (double) buf->getLoopEndSamples());
+        }
+    }
+    // Ensure the pad grid repaints so the playhead line moves continuously
+    padGrid.repaint();
     if (app.scheduler.isRunning())
     {
         modifierDisplay.setCountdown(app.scheduler.getSecondsUntilNextTrigger(),
@@ -315,6 +339,8 @@ void MainAppComponent::loadFileClicked()
             while (self.app.settings.padFilePaths.size() < AudioBufferManager::MAX_BUFFERS)
                 self.app.settings.padFilePaths.add(juce::String());
             self.app.settings.padFilePaths.set(padIndex, f.getFullPathName());
+            // Update thumbnail on this pad
+            self.padGrid.setPadFilePath(padIndex, f.getFullPathName());
         } else {
             juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Load Failed", "Could not load file.");
         }
@@ -467,6 +493,9 @@ void MainAppComponent::loadProjectClicked()
 
             // Restore pad files
             restorePadFilesFromSettings();
+            // Push file paths to padGrid thumbnails
+            if (app.settings.padFilePaths.size() > 0)
+                padGrid.setPadFilePaths(app.settings.padFilePaths);
 
             // Sync parts UI to loaded settings and clamp active part if needed
             {
@@ -537,25 +566,23 @@ void MainAppComponent::restorePadFilesFromSettings()
         if (path.isEmpty())
         {
             padGrid.setPadFileName(i, juce::String());
+            // Clear thumbnail as well
+            padGrid.setPadFilePath(i, juce::String());
             continue;
         }
         juce::File f(path);
         if (f.existsAsFile())
         {
-            if (app.bufferManager.loadAudioFile(i, f, formatManager))
-            {
-                padGrid.setPadFileName(i, f.getFileNameWithoutExtension());
-            }
-            else
-            {
-                // Loading failed despite file existing; show minimal feedback
-                padGrid.setPadFileName(i, "[missing]");
-            }
+            // Always set the thumbnail to the file path; even if audio load fails, user can spot the file visually
+            padGrid.setPadFilePath(i, f.getFullPathName());
+            bool ok = app.bufferManager.loadAudioFile(i, f, formatManager);
+            padGrid.setPadFileName(i, ok ? f.getFileNameWithoutExtension() : f.getFileNameWithoutExtension());
         }
         else
         {
             // Missing file; keep path in settings but indicate missing in UI
             padGrid.setPadFileName(i, "[missing]");
+            padGrid.setPadFilePath(i, juce::String());
         }
     }
 }

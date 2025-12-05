@@ -13,11 +13,15 @@
 
 // Simple 2x4 pad grid showing selectable pads and (new) filename indicators.
 class PadGridComponent : public juce::Component,
-                         private juce::Timer
+                         private juce::Timer,
+                         private juce::ChangeListener
 {
 public:
     PadGridComponent()
     {
+        // Ensure the local AudioFormatManager knows basic formats so thumbnails can read files
+        if (formatManager.getNumKnownFormats() == 0)
+            formatManager.registerBasicFormats();
         for (int i = 0; i < numPads; ++i)
         {
             auto* btn = padButtons.add(new juce::ToggleButton("Pad " + juce::String(i + 1)));
@@ -32,6 +36,16 @@ public:
             label->setColour(juce::Label::textColourId, juce::Colours::lightgrey);
             addAndMakeVisible(label);
             label->setText("", juce::dontSendNotification);
+
+            // Initialize per-pad waveform state
+            auto* thumb = new juce::AudioThumbnail(512, formatManager, thumbnailCache);
+            thumbnails.add(thumb);
+            thumb->addChangeListener(this);
+            // no per-pad owned FileInputSource; AudioThumbnail manages its own InputSource lifetime
+            playheadSamples[(size_t)i] = 0.0;
+            loopEnabled[(size_t)i] = false;
+            loopStartSamples[(size_t)i] = 0.0;
+            loopEndSamples[(size_t)i] = 0.0;
         }
 
         startTimerHz(30); // for transient flash highlight decay
@@ -45,6 +59,80 @@ public:
             if (padButtons[i]->getToggleState())
                 indices.add(i);
         return indices;
+    }
+
+    // Provide an AudioFormatManager to use for reading files (prepared by the app)
+    void setAudioFormatManager(juce::AudioFormatManager* afm)
+    {
+        formatManagerPtr = afm;
+        // Register formats on the provided manager
+        if (formatManagerPtr != nullptr && formatManagerPtr->getNumKnownFormats() == 0)
+            formatManagerPtr->registerBasicFormats();
+        // Recreate thumbnails to use the provided manager reference (AudioThumbnail captures by reference in ctor)
+        thumbnails.clear(true);
+        for (int i = 0; i < numPads; ++i)
+        {
+            juce::AudioFormatManager& mgr = (formatManagerPtr != nullptr ? *formatManagerPtr : formatManager);
+            auto* thumb = new juce::AudioThumbnail(512, mgr, thumbnailCache);
+            thumbnails.add(thumb);
+            thumb->addChangeListener(this);
+        }
+        // Reapply any existing file paths to rebuild sources on the new thumbnails
+        for (int i = 0; i < numPads; ++i)
+        {
+            if (i < padFileNames.size())
+                setPadFilePath(i, padFileNames[i]);
+        }
+        repaint();
+    }
+
+    // Rebuild thumbnails from file paths
+    void setPadFilePaths(const juce::StringArray& filePaths)
+    {
+        const int n = juce::jmin(numPads, filePaths.size());
+        for (int i = 0; i < n; ++i)
+            setPadFilePath(i, filePaths[i]);
+        repaint();
+    }
+
+    void setPadFilePath(int padIndex, const juce::String& filePath)
+    {
+        if (!juce::isPositiveAndBelow(padIndex, numPads)) return;
+        padFileNames.set(padIndex, filePath);
+        updatePadLabel(padIndex);
+
+        auto* thumb = thumbnails[padIndex];
+        thumb->clear();
+        if (filePath.isNotEmpty() && juce::File(filePath).existsAsFile())
+        {
+            auto& afm = (formatManagerPtr != nullptr ? *formatManagerPtr : formatManager);
+            if (afm.getNumKnownFormats() == 0)
+                afm.registerBasicFormats();
+
+            // AudioThumbnail takes ownership of the InputSource pointer; do NOT keep our own copy.
+            thumb->setSource(new juce::FileInputSource(juce::File(filePath)));
+            // The thumbnail will load asynchronously and notify via change listener.
+        }
+        else
+        {
+            // No file: leave thumbnail cleared
+        }
+        repaint();
+    }
+
+    // Update playhead and loop info for drawing
+    void setPlayheadForPad(int padIndex, double samples)
+    {
+        if (!juce::isPositiveAndBelow(padIndex, numPads)) return;
+        playheadSamples[(size_t)padIndex] = samples;
+    }
+
+    void setLoopWindowForPad(int padIndex, bool enabled, double startSamples, double endSamples)
+    {
+        if (!juce::isPositiveAndBelow(padIndex, numPads)) return;
+        loopEnabled[(size_t)padIndex] = enabled;
+        loopStartSamples[(size_t)padIndex] = startSamples;
+        loopEndSamples[(size_t)padIndex] = endSamples;
     }
 
     void clearSelections()
@@ -99,11 +187,30 @@ private:
     std::array<int, numPads> flashCounters { {0,0,0,0,0,0,0,0} };
     std::array<bool, numPads> playingStates { {false,false,false,false,false,false,false,false} };
 
+    // Waveform state
+    juce::AudioFormatManager formatManager;
+    juce::AudioFormatManager* formatManagerPtr { nullptr };
+    juce::AudioThumbnailCache thumbnailCache { 64 };
+    juce::OwnedArray<juce::AudioThumbnail> thumbnails;
+    std::array<double, numPads> playheadSamples { {0,0,0,0,0,0,0,0} };
+    std::array<bool,   numPads> loopEnabled     { {false,false,false,false,false,false,false,false} };
+    std::array<double, numPads> loopStartSamples{ {0,0,0,0,0,0,0,0} };
+    std::array<double, numPads> loopEndSamples  { {0,0,0,0,0,0,0,0} };
+    // Total file length in samples for each pad (used to map loop/playhead across full waveform)
+    std::array<double, numPads> totalFileSamples { {0,0,0,0,0,0,0,0} };
+
 public:
     // Callback for external listeners when any pad selection toggles.
     std::function<void()> selectionChanged;
 
     void setSelectionChangedCallback(std::function<void()> cb) { selectionChanged = std::move(cb); }
+
+    // Set total sample length for a pad (for full-file visualization mapping)
+    void setTotalSamplesForPad(int padIndex, double totalSamples)
+    {
+        if (!juce::isPositiveAndBelow(padIndex, numPads)) return;
+        totalFileSamples[(size_t)padIndex] = totalSamples;
+    }
 
     // Trigger a short flash on given pad indices (or all if list empty and global event)
     void flashPads(const juce::Array<int>& padIndices)
@@ -160,28 +267,74 @@ private:
 
     void paintOverChildren(juce::Graphics& g) override
     {
-        // Draw playing state (green outline) then flash (yellow fill) so flash is prominent.
+        // Draw waveform, overlays, then state/flash
         for (int i = 0; i < numPads; ++i)
         {
             if (auto* btn = padButtons[i])
             {
-                auto r = btn->getBounds().toFloat().expanded(2.f);
+                auto r = btn->getBounds().toFloat();
+
+                // Background
+                g.setColour(juce::Colours::black.withAlpha(0.85f));
+                g.fillRoundedRectangle(r, 6.f);
+
+                // Waveform rendering region
+                auto inner = r.reduced(6.f, 6.f);
+                if (auto* thumb = thumbnails[i])
+                {
+                    const bool hasWave = thumb->getTotalLength() > 0.0;
+                    g.setColour(hasWave ? juce::Colours::darkgrey : juce::Colours::dimgrey);
+                    g.drawRoundedRectangle(r, 6.f, 1.0f);
+
+                    if (hasWave)
+                    {
+                        g.setColour(juce::Colours::lightsteelblue);
+                        thumb->drawChannels(g, inner.toNearestInt(), 0.0, thumb->getTotalLength(), 1.0f);
+
+                        // Loop overlay (proportional across full file waveform)
+                        if (loopEnabled[(size_t)i])
+                        {
+                            const double denom = juce::jmax(1.0, totalFileSamples[(size_t)i]);
+                            const double startProp = juce::jlimit(0.0, 1.0, loopStartSamples[(size_t)i] / denom);
+                            const double endProp   = juce::jlimit(0.0, 1.0, loopEndSamples[(size_t)i]   / denom);
+                            const float x1 = inner.getX() + (float)(inner.getWidth() * startProp);
+                            const float x2 = inner.getX() + (float)(inner.getWidth() * endProp);
+                            juce::Rectangle<float> loopRect(x1, inner.getY(), juce::jmax(1.0f, x2 - x1), inner.getHeight());
+                            g.setColour(juce::Colours::orange.withAlpha(0.18f));
+                            g.fillRect(loopRect);
+                            g.setColour(juce::Colours::orange.withAlpha(0.8f));
+                            g.drawLine(x1, inner.getY(), x1, inner.getBottom(), 1.5f);
+                            g.drawLine(x2, inner.getY(), x2, inner.getBottom(), 1.5f);
+                        }
+
+                        // Playhead line (proportional across full file waveform)
+                        const double phDenom = juce::jmax(1.0, totalFileSamples[(size_t)i]);
+                        const double phProp  = juce::jlimit(0.0, 1.0, playheadSamples[(size_t)i] / phDenom);
+                        const float phx = inner.getX() + (float)(inner.getWidth() * phProp);
+                        g.setColour(juce::Colours::aqua);
+                        g.drawLine(phx, inner.getY(), phx, inner.getBottom(), 2.0f);
+                    }
+                    else
+                    {
+                        // Empty pad visual
+                        g.setColour(juce::Colours::darkred.withAlpha(0.35f));
+                        g.fillRect(inner);
+                        g.setColour(juce::Colours::grey);
+                        g.drawText("(empty)", inner.toNearestInt(), juce::Justification::centred);
+                    }
+                }
+
+                // Playing state outline
                 if (playingStates[(size_t)i])
                 {
                     g.setColour(juce::Colours::lime.withAlpha(0.9f));
-                    g.drawRoundedRectangle(r, 6.f, 2.2f);
+                    g.drawRoundedRectangle(r.expanded(2.f), 6.f, 2.2f);
                 }
-            }
-        }
 
-        g.setColour(juce::Colours::yellow.withAlpha(0.35f));
-        for (int i = 0; i < numPads; ++i)
-        {
-            if (flashCounters[(size_t)i] > 0)
-            {
-                if (auto* btn = padButtons[i])
+                // Flash overlay
+                if (flashCounters[(size_t)i] > 0)
                 {
-                    auto r = btn->getBounds().toFloat();
+                    g.setColour(juce::Colours::yellow.withAlpha(0.35f));
                     g.fillRoundedRectangle(r.expanded(2.f), 6.f);
                 }
             }
@@ -197,5 +350,18 @@ private:
         }
         if (any)
             repaint();
+    }
+
+    // Listen for thumbnail content changes (async load complete) and repaint
+    void changeListenerCallback(juce::ChangeBroadcaster* source) override
+    {
+        for (int i = 0; i < thumbnails.size(); ++i)
+        {
+            if (source == thumbnails[i])
+            {
+                repaint();
+                break;
+            }
+        }
     }
 };

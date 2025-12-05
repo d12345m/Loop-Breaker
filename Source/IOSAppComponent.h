@@ -18,31 +18,47 @@ public:
     {
         formatManager.registerBasicFormats();
 
-        addAndMakeVisible(modifierDisplay);
-        addAndMakeVisible(padGrid);
-    addAndMakeVisible(playAllButton);
-    addAndMakeVisible(stopAllButton);
-    addAndMakeVisible(loadButton);
-        addAndMakeVisible(modifiersToggle);
-        addAndMakeVisible(statusLabel);
+        // Build tabbed UI
+        addAndMakeVisible(tabs);
+        tabs.setTabBarDepth(40);
+        tabs.addTab("Playback", juce::Colours::darkgrey, &playbackContainer, false);
+        tabs.addTab("Settings", juce::Colours::darkgrey, &settingsContainer, false);
+        tabs.addTab("Logs", juce::Colours::darkgrey, &logsContainer, false);
+
+        // Playback screen contents
+        playbackContainer.addAndMakeVisible(modifierDisplay);
+        playbackContainer.addAndMakeVisible(padGrid);
+        playbackContainer.addAndMakeVisible(playAllButton);
+        playbackContainer.addAndMakeVisible(stopAllButton);
+        playbackContainer.addAndMakeVisible(loadButton);
+        playbackContainer.addAndMakeVisible(statusLabel);
         statusLabel.setJustificationType(juce::Justification::centredLeft);
 
         playAllButton.setButtonText("Play");
         stopAllButton.setButtonText("Stop");
-    loadButton.setButtonText("Load");
-        modifiersToggle.setButtonText("Modifiers");
-        modifiersToggle.setToggleState(true, juce::dontSendNotification);
-
+        loadButton.setButtonText("Load");
         playAllButton.onClick = [this]{ playAllClicked(); };
         stopAllButton.onClick = [this]{ stopAllClicked(); };
-    loadButton.onClick = [this]{ loadClicked(); };
+        loadButton.onClick = [this]{ loadClicked(); };
+
+        // Settings screen contents (minimal for now)
+        settingsContainer.addAndMakeVisible(modifiersToggle);
+        modifiersToggle.setButtonText("Modifiers");
+        modifiersToggle.setToggleState(true, juce::dontSendNotification);
         modifiersToggle.onClick = [this]{ updatePlaybackModifierLink(); };
+
+        // Logs screen
+        logsContainer.addAndMakeVisible(logEditor);
+        logEditor.setReadOnly(true);
+        logEditor.setAlwaysOnTop(true);
+        logEditor.setColour(juce::TextEditor::backgroundColourId, juce::Colours::black);
+        logEditor.setColour(juce::TextEditor::textColourId, juce::Colours::lightgrey);
 
         padGrid.setAudioFormatManager(&formatManager);
 
         app.scheduler.addListener(this);
         setAudioChannels(0, 2);
-    setSize(420, 800);
+        setSize(420, 800);
         startTimerHz(30);
 
         // Apply initial scheduler settings
@@ -93,24 +109,25 @@ public:
 
     void resized() override
     {
-    auto area = getLocalBounds().reduced(8);
-    // Top banner: upcoming modifier countdown
-    auto banner = area.removeFromTop(80);
-    modifierDisplay.setBounds(banner);
+        tabs.setBounds(getLocalBounds());
+        // Layout playback screen
+        auto area = playbackContainer.getLocalBounds().reduced(8);
+        auto banner = area.removeFromTop(80);
+        modifierDisplay.setBounds(banner);
+        auto bottomControlsArea = area.removeFromBottom(88).reduced(2);
+        padGrid.setBounds(area.reduced(0, 6));
+        auto row1 = bottomControlsArea.removeFromTop(44);
+        loadButton.setBounds(row1.removeFromLeft(100).reduced(2));
+        playAllButton.setBounds(row1.removeFromLeft(100).reduced(2));
+        stopAllButton.setBounds(row1.removeFromLeft(100).reduced(2));
+        statusLabel.setBounds(bottomControlsArea);
 
-    // Main pad grid occupies most of the view
-    auto bottomControlsArea = area.removeFromBottom(88).reduced(2);
-    padGrid.setBounds(area.reduced(0, 6));
+        // Layout settings screen (simple toggle centered)
+        auto sArea = settingsContainer.getLocalBounds().reduced(16);
+        modifiersToggle.setBounds(sArea.removeFromTop(44));
 
-    // Bottom controls: large touch targets (one-handed friendly)
-    auto row1 = bottomControlsArea.removeFromTop(44);
-    loadButton.setBounds(row1.removeFromLeft(100).reduced(2));
-    playAllButton.setBounds(row1.removeFromLeft(100).reduced(2));
-    stopAllButton.setBounds(row1.removeFromLeft(100).reduced(2));
-    modifiersToggle.setBounds(row1.reduced(2));
-
-    auto row2 = bottomControlsArea;
-    statusLabel.setBounds(row2);
+        // Layout logs screen
+        logEditor.setBounds(logsContainer.getLocalBounds().reduced(8));
     }
 
     // Scheduler listener
@@ -133,7 +150,9 @@ public:
                 for (int i = 0; i < t.size(); ++i) targetStr << (i?",":"") << (t[i]+1);
             }
             juce::String details = d.description.isNotEmpty() ? (" | " + d.description) : juce::String();
-            statusLabel.setText("Triggered: " + d.shortName + " -> " + targetStr + details, juce::dontSendNotification);
+            auto msg = "Triggered: " + d.shortName + " -> " + targetStr + details;
+            statusLabel.setText(msg, juce::dontSendNotification);
+            appendLog(msg);
             padGrid.flashPads(t);
             if (!t.isEmpty()) padGrid.clearSelections();
         };
@@ -259,7 +278,9 @@ private:
         int partIdx = app.getActivePart();
         juce::String partName = juce::String("Part ") + juce::String(partNames[juce::jlimit(0, 3, partIdx)]);
         juce::String base = partName + " | Playing: " + juce::String(playing) + " | BPM " + juce::String(app.settings.bpm, 0);
-        statusLabel.setText(app.scheduler.isRunning() ? ("Modifiers ON | " + base) : ("Modifiers OFF | " + base), juce::dontSendNotification);
+        auto msg = app.scheduler.isRunning() ? ("Modifiers ON | " + base) : ("Modifiers OFF | " + base);
+        statusLabel.setText(msg, juce::dontSendNotification);
+        appendLog(msg);
     }
 
     void updatePlaybackModifierLink()
@@ -279,7 +300,20 @@ private:
         refreshStatus();
     }
 
+    // UI containers
+    juce::TabbedComponent tabs { juce::TabbedButtonBar::TabsAtTop };
+    juce::Component playbackContainer;
+    juce::Component settingsContainer;
+    juce::Component logsContainer;
+
     std::unique_ptr<juce::FileChooser> fileChooser;
+    juce::TextEditor logEditor;
+
+    void appendLog(const juce::String& msg)
+    {
+        logEditor.moveCaretToEnd();
+        logEditor.insertTextAtCaret(msg + "\n");
+    }
 };
 
 #endif // JUCE_IOS

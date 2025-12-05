@@ -205,10 +205,21 @@ private:
         fileChooser = std::make_unique<juce::FileChooser>(
             "Select audio file...",
             juce::File(), patterns);
+        // Use a simple lambda with minimal captures; release chooser once we have results.
         fileChooser->launchAsync(flags, [safeThis](const juce::FileChooser& fc){
             if (auto* self = safeThis.getComponent())
             {
-                auto f = fc.getResult();
+                // Proactively clear the member to avoid any lingering references
+                self->fileChooser.reset();
+
+                // Prefer URL results on iOS, then fall back to File
+                auto urls = fc.getURLResults();
+                juce::File f;
+                if (urls.size() > 0)
+                    f = urls[0].getLocalFile();
+                else
+                    f = fc.getResult();
+
                 if (f.existsAsFile())
                 {
                     // Load into the first available empty pad, else pad 0

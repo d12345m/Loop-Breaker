@@ -61,6 +61,13 @@ struct AppState : public ModifierSchedulerListener
                 const int64_t endClamped   = juce::jlimit<int64_t>(startClamped + 1, dur, endS);
                 b->setLoopWindow(startClamped, endClamped);
                 b->setPlayheadSamples(startClamped);
+                // If slicing is active, immediately re-trigger a slice inside the new part
+                // to avoid a lull while waiting to hit the next slice boundary.
+                if (b->isInSlicingMode() || b->isInContinuousRandomMode())
+                {
+                    b->triggerRandomSlice();
+                    if (!b->isPlaying()) b->play();
+                }
             }
         }
     }

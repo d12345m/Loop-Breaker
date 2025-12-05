@@ -114,6 +114,9 @@ MainAppComponent::MainAppComponent()
     // Apply initial scheduler settings from SessionSettings
     app.scheduler.setQuantizationEnabled(app.settings.quantizeEnabled);
     app.scheduler.setQuantizationSubdivision(app.settings.quantizeSubdivision);
+
+    // Initialize status text immediately
+    refreshStatus();
 }
 
 MainAppComponent::~MainAppComponent()
@@ -187,7 +190,7 @@ void MainAppComponent::resized()
     quantizeSubdivisionBox.setBounds(rightRegion.removeFromRight(110).reduced(2));
     quantizeToggle.setBounds(rightRegion.removeFromRight(100).reduced(2));
     // partsCountLabel attached to partsCountBox, no explicit bounds needed
-    statusLabel.setBounds(rightRegion.reduced(2));
+    // Moved status label to the second row to avoid overlap and ensure visibility
 
     // New second row for project actions (Save/Load) to free room for BPM slider
     auto projectBar = area.removeFromTop(28);
@@ -206,6 +209,8 @@ void MainAppComponent::resized()
     // Right: Pad selector and Load File
     padSelectForLoad.setBounds(projArea.removeFromLeft(110).reduced(2));
     loadFileButton.setBounds(projArea.removeFromLeft(150).reduced(2));
+    // Status label occupies the remaining right-side space on this row
+    statusLabel.setBounds(projArea.reduced(2));
     area.removeFromTop(6);
     auto gridHeight = 220; // reduced pad grid height for more dev control space
     padGrid.setBounds(area.removeFromTop(gridHeight));
@@ -276,6 +281,7 @@ void MainAppComponent::playAllClicked()
     app.setActivePart(0);
     app.bufferManager.playAll();
     updatePlaybackModifierLink();
+    refreshStatus();
 }
 
 void MainAppComponent::stopAllClicked()
@@ -328,18 +334,25 @@ void MainAppComponent::refreshStatus()
     static const char* partNames[] = { "A", "B", "C", "D" };
     int partIdx = app.getActivePart();
     juce::String partName = juce::String("Part ") + juce::String(partNames[juce::jlimit(0, 3, partIdx)]);
-    // Show span for the first loaded buffer (represents segment timing). If none loaded, show 0–0.
-    double startSec = 0.0, endSec = 0.0;
+    // Show span in bars. Prefer a currently playing buffer; fall back to first loaded.
+    double startBars = 0.0, endBars = 0.0;
+    int bufferForSpan = -1;
+    auto playingIdxs = app.bufferManager.getPlayingBufferIndices();
+    if (playingIdxs.size() > 0)
+        bufferForSpan = playingIdxs[0];
+    else
     {
         auto loaded = app.bufferManager.getLoadedBufferIndices();
         if (loaded.size() > 0)
-        {
-            auto span = app.getActivePartSpanSecondsForBuffer(loaded[0]);
-            startSec = span.first;
-            endSec = span.second;
-        }
+            bufferForSpan = loaded[0];
     }
-    juce::String spanStr = juce::String(startSec, 1) + "s–" + juce::String(endSec, 1) + "s";
+    if (bufferForSpan >= 0)
+    {
+        auto spanBars = app.getActivePartSpanBarsForBuffer(bufferForSpan);
+        startBars = spanBars.first;
+        endBars = spanBars.second;
+    }
+    juce::String spanStr = juce::String(startBars, 2) + " bars–" + juce::String(endBars, 2) + " bars";
     juce::String base = partName + " [" + spanStr + "] | Playing: " + juce::String(playing) + " | BPM " + juce::String(app.settings.bpm, 0);
     if (app.scheduler.isRunning())
     {

@@ -77,6 +77,26 @@ struct AppState : public ModifierSchedulerListener
         const double endSec   = ((active + 1) * durSeconds) / numParts;
         return { startSec, juce::jmin(endSec, durSeconds) };
     }
+
+    // Returns the start/end in musical bars for the active part for a given buffer.
+    // Uses buffer's sample rate and SessionSettings BPM with 4/4 assumption (4 beats per bar).
+    std::pair<double,double> getActivePartSpanBarsForBuffer(int bufferIndex) const
+    {
+        auto* b = bufferManager.getBuffer(bufferIndex);
+        if (!b) return {0.0, 0.0};
+    const double sr = b->getFileSampleRate();
+        const double durSamples = (double) b->getDurationInSamples();
+        if (sr <= 0.0 || durSamples <= 0.0) return {0.0, 0.0};
+        const double durSeconds = durSamples / sr;
+        const int numParts = juce::jmax(1, settings.parts.getNumParts());
+        const int active = juce::jlimit(0, numParts - 1, settings.parts.activePart);
+        const double startSec = (active    * durSeconds) / numParts;
+        const double endSec   = ((active + 1) * durSeconds) / numParts;
+        const double bpm = juce::jmax(1.0, settings.bpm);
+        const double beatsPerSecond = bpm / 60.0;
+        const double barsPerSecond = beatsPerSecond / 4.0; // 4/4 time
+        return { startSec * barsPerSecond, endSec * barsPerSecond };
+    }
     int getActivePart() const { return settings.parts.activePart; }
     int getPartLengthBars() const { return settings.parts.partLengthBars; }
     int getPartStartBar(int partIndex) const { return settings.parts.getPartStartBar(partIndex); }

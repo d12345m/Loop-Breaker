@@ -137,8 +137,8 @@ public:
             padGrid.flashPads(t);
             if (!t.isEmpty()) padGrid.clearSelections();
         };
-        if (juce::MessageManager::getInstance()->isThisTheMessageThread()) doUi(desc, targets);
-        else { auto d=desc; auto t=targets; juce::MessageManager::callAsync([this, d, t]{ doUi(d, t); }); }
+    if (juce::MessageManager::getInstance()->isThisTheMessageThread()) doUi(desc, targets);
+    else { auto d=desc; auto t=targets; juce::MessageManager::callAsync([this, d, t, doUi]{ doUi(d, t); }); }
     }
 
 private:

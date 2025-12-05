@@ -1,13 +1,48 @@
 {
-  "version": "2.0.0",
-  "tasks": [
-    {
-      "label": "Build and Run BufferTest",
-      "type": "shell",
-      "command": "cd Builds/MacOSX && xcodebuild -project BufferTest.xcodeproj -configuration Debug && open build/Debug/BufferTest.app",
-      "group": "build",
-      "problemMatcher": ["$gcc"],
-      "isBackground": false
-    }
-  ]
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build and Run BufferTest",
+			"type": "shell",
+			"command": "cd Builds/MacOSX && xcodebuild -project BufferTest.xcodeproj -configuration Debug && open build/Debug/BufferTest.app",
+			"group": "build",
+			"problemMatcher": [
+				"$gcc"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "Build and Run iOS Simulator",
+			"type": "shell",
+			"command": "cd Builds/iOS && xcodebuild -project BufferTest.xcodeproj -configuration Debug -sdk iphonesimulator build && DEVICE=\"iPhone 15\" && xcrun simctl boot \"$DEVICE\" || true && xcrun simctl install \"$DEVICE\" build/Debug/BufferTest.app && xcrun simctl launch \"$DEVICE\" com.yourcompany.BufferTest",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [
+				"$xcodebuild"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Build and Run iOS Simulator",
+			"type": "shell",
+			"command": "cd Builds/iOS && xcodebuild -project BufferTest.xcodeproj -configuration Debug -sdk iphonesimulator build && open -a Simulator && xcrun simctl bootstatus -b || true && xcrun simctl install booted build/Debug/BufferTest.app && xcrun simctl launch booted com.yourcompany.BufferTest",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [
+				"$xcodebuild"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Clean and Build iOS Simulator",
+			"type": "shell",
+			"command": "cd Builds/iOS && xcodebuild -project BufferTest.xcodeproj -configuration Debug -sdk iphonesimulator clean build",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [
+				"$xcodebuild"
+			],
+			"group": "build"
+		}
+	]
 }

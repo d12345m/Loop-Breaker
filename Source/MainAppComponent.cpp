@@ -247,27 +247,53 @@ void MainAppComponent::resized()
 
 void MainAppComponent::upcomingModifierChanged(const ModifierDescriptor& desc)
 {
-    modifierDisplay.setUpcoming(desc);
+    // Ensure UI update happens on the message thread
+    if (juce::MessageManager::getInstanceWithoutCreating() != nullptr
+        && juce::MessageManager::getInstance()->isThisTheMessageThread())
+    {
+        modifierDisplay.setUpcoming(desc);
+    }
+    else
+    {
+        auto descCopy = desc; // copy for async lambda capture
+        juce::MessageManager::callAsync([this, descCopy]
+        {
+            modifierDisplay.setUpcoming(descCopy);
+        });
+    }
 }
 
 void MainAppComponent::modifierTriggered(const ModifierDescriptor& desc, const juce::Array<int>& targets)
 {
-    // Simple status update; later we'll add visual pad flashes
-    juce::String targetStr;
-    if (targets.isEmpty()) targetStr = "(master/global)"; else {
-        for (int i = 0; i < targets.size(); ++i) targetStr << (i?",":"") << (targets[i]+1);
-    }
-    // Show detailed descriptor info (including randomized parameters) in status
-    juce::String details = desc.description.isNotEmpty() ? (" | " + desc.description) : juce::String();
-    statusLabel.setText("Triggered: " + desc.shortName + " -> " + targetStr + details, juce::dontSendNotification);
-    padGrid.flashPads(targets);
-    modifierHistory.addEntry(desc, targets);
-    // If specific user-selected pads were targeted, clear their selection state so user
-    // must actively choose new targets for the next modifier cycle.
-    if (!targets.isEmpty())
+    auto doUiWork = [this](const ModifierDescriptor& d, const juce::Array<int>& t)
     {
-        padGrid.clearSelections();
-        // Scheduler already cleared its internal userSelectedBuffers; no need to update again.
+        juce::String targetStr;
+        if (t.isEmpty()) targetStr = "(master/global)"; else {
+            for (int i = 0; i < t.size(); ++i) targetStr << (i?",":"") << (t[i]+1);
+        }
+        juce::String details = d.description.isNotEmpty() ? (" | " + d.description) : juce::String();
+        statusLabel.setText("Triggered: " + d.shortName + " -> " + targetStr + details, juce::dontSendNotification);
+        padGrid.flashPads(t);
+        modifierHistory.addEntry(d, t);
+        if (!t.isEmpty())
+        {
+            padGrid.clearSelections();
+        }
+    };
+
+    if (juce::MessageManager::getInstanceWithoutCreating() != nullptr
+        && juce::MessageManager::getInstance()->isThisTheMessageThread())
+    {
+        doUiWork(desc, targets);
+    }
+    else
+    {
+        auto descCopy = desc;
+        auto targetsCopy = targets;
+        juce::MessageManager::callAsync([this, descCopy, targetsCopy, doUiWork]() mutable
+        {
+            doUiWork(descCopy, targetsCopy);
+        });
     }
 }
 

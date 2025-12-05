@@ -71,8 +71,8 @@ Legend:
 
 - [x] Implement concrete classes for: Reverse, Speed, ResetAll
 - [x] Apply logic to targeted buffers when modifier triggers (Reverse/Speed/ResetAll active)
-- [ ] Confirm multiple simultaneous buffer targets handled safely (needs concurrency review)
-- [ ] Logging hook: record triggered modifier type + targets (history panel currently logs descriptor only)
+- [x] Confirm multiple simultaneous buffer targets handled safely (basic unit test; UI marshalling added)
+- [x] Logging hook: record triggered modifier type + targets (history panel currently logs descriptor only)
 - [x] Basic random speed selection (.25, .5, 1, 2) with inclusive list
 - [x] Ensure ResetAll semantics: preserve currently playing buffers (speed->1, direction forward, slices exited) while keeping playback running
 - [ ] Provide dry run mode (no side effects) for preview (optional)

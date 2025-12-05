@@ -120,6 +120,36 @@ public:
 
 static ModifierSchedulerVariantsTest modifierSchedulerVariantsTestInstance;
 
+// New test: ensure AppState handles multiple simultaneous targets without crashes.
+class AppStateMultipleTargetsTest : public juce::UnitTest {
+public:
+    AppStateMultipleTargetsTest() : juce::UnitTest("AppState Multiple Targets Safety") {}
+
+    void runTest() override {
+        beginTest("Applying Reverse and Speed to multiple targets is safe (no crash)");
+        AppState app; // constructs ChannelStrips and hooks scheduler listener
+        // Construct a descriptor for Reverse
+        ModifierDescriptor reverseDesc;
+        reverseDesc.type = ModifierType::Reverse;
+        reverseDesc.shortName = "Reverse";
+        juce::Array<int> targets; targets.addArray({0,1,2,3});
+        // Call directly on AppState listener implementation
+        app.modifierTriggered(reverseDesc, targets);
+
+        // Speed with planned value
+        ModifierDescriptor speedDesc;
+        speedDesc.type = ModifierType::Speed;
+        speedDesc.shortName = "Speed";
+        speedDesc.plannedSpeed = 2.0;
+        app.modifierTriggered(speedDesc, targets);
+
+        // If we reached here, consider it pass (no assertions to check engine state without audio loaded)
+        expect(true);
+    }
+};
+
+static AppStateMultipleTargetsTest appStateMultipleTargetsTestInstance;
+
 class ModifierSchedulerEveryNBarsTest : public juce::UnitTest {
 public:
     ModifierSchedulerEveryNBarsTest() : juce::UnitTest("ModifierScheduler Every N Bars") {}

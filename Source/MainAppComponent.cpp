@@ -444,6 +444,15 @@ void MainAppComponent::loadProjectClicked()
         if (file == juce::File()) return;
         if (app.projectManager.loadProject(file))
         {
+            // Clean slate: stop playback, clear audio buffers and UI pad names, reset FX state
+            app.bufferManager.stopAll();
+            app.bufferManager.clearAllBuffers();
+            for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
+                padGrid.setPadFileName(i, juce::String());
+            // Reset channel strips (FX) to defaults to avoid lingering state
+            for (int i = 0; i < app.channelStrips.size(); ++i)
+                app.channelStrips[i]->reset();
+
             // Apply loaded settings to UI & scheduler
             bpmSlider.setValue(app.settings.bpm, juce::dontSendNotification);
             quantizeToggle.setToggleState(app.settings.quantizeEnabled, juce::dontSendNotification);

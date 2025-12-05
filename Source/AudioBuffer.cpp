@@ -348,10 +348,16 @@ int AudioBuffer::getCurrentSlice() const
         return currentActiveSlice.load();
     }
     
-    // Otherwise, calculate from playhead position for display purposes
+    // Otherwise, calculate from playhead position within the active range
+    // Active range = loop window if enabled, else full file
+    const bool windowOn = loopWindowEnabled.load();
+    const int64_t start = windowOn ? loopStartSamples.load() : 0;
+    const int64_t end   = windowOn ? loopEndSamples.load()   : (int64_t) fileLengthSamples;
+    const int64_t length = juce::jmax<int64_t>(1, end - start);
     double currentPos = playheadPosition.load();
-    double sliceSize = static_cast<double>(fileLengthSamples) / params.numSlices;
-    return juce::jlimit(0, params.numSlices - 1, static_cast<int>(currentPos / sliceSize));
+    double rel = juce::jlimit(0.0, (double)(length - 1), currentPos - (double) start);
+    double sliceSize = static_cast<double>(length) / params.numSlices;
+    return juce::jlimit(0, params.numSlices - 1, static_cast<int>(rel / sliceSize));
 }
 
 //==============================================================================
@@ -411,10 +417,16 @@ double AudioBuffer::getSliceStartPosition(int sliceIndex) const
     if (sliceIndex < 0 || sliceIndex >= params.numSlices || fileLengthSamples <= 0)
         return 0.0;
     
-    double sliceSize = static_cast<double>(fileLengthSamples) / params.numSlices;
-    int targetSample = static_cast<int>(sliceIndex * sliceSize);
+    // Use active range: loop window if enabled, else the full file
+    const bool windowOn = loopWindowEnabled.load();
+    const int64_t start = windowOn ? loopStartSamples.load() : 0;
+    const int64_t end   = windowOn ? loopEndSamples.load()   : (int64_t) fileLengthSamples;
+    const int64_t length = juce::jmax<int64_t>(1, end - start);
+    double sliceSize = static_cast<double>(length) / params.numSlices;
+    int64_t offsetWithin = (int64_t) juce::jlimit(0.0, (double)(length - 1), sliceIndex * sliceSize);
+    int64_t targetSample = start + offsetWithin;
     
-    return static_cast<double>(targetSample);
+    return static_cast<double>(juce::jlimit<int64_t>(0, (int64_t)fileLengthSamples - 1, targetSample));
 }
 
 double AudioBuffer::getSliceEndPosition(int sliceIndex) const
@@ -422,10 +434,16 @@ double AudioBuffer::getSliceEndPosition(int sliceIndex) const
     if (sliceIndex < 0 || sliceIndex >= params.numSlices || fileLengthSamples <= 0)
         return 0.0;
     
-    double sliceSize = static_cast<double>(fileLengthSamples) / params.numSlices;
-    int targetSample = static_cast<int>((sliceIndex + 1) * sliceSize);
+    // Use active range: loop window if enabled, else the full file
+    const bool windowOn = loopWindowEnabled.load();
+    const int64_t start = windowOn ? loopStartSamples.load() : 0;
+    const int64_t end   = windowOn ? loopEndSamples.load()   : (int64_t) fileLengthSamples;
+    const int64_t length = juce::jmax<int64_t>(1, end - start);
+    double sliceSize = static_cast<double>(length) / params.numSlices;
+    int64_t offsetWithin = (int64_t) juce::jlimit(0.0, (double)length, (sliceIndex + 1) * sliceSize);
+    int64_t targetSample = start + offsetWithin;
     
-    return static_cast<double>(targetSample);
+    return static_cast<double>(juce::jlimit<int64_t>(0, (int64_t)fileLengthSamples, targetSample));
 }
 
 void AudioBuffer::startSliceCrossfade(int newSliceIndex, double newPlayheadPos)

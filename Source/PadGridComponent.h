@@ -24,7 +24,8 @@ public:
             formatManager.registerBasicFormats();
         for (int i = 0; i < numPads; ++i)
         {
-            auto* btn = padButtons.add(new juce::ToggleButton("Pad " + juce::String(i + 1)));
+            auto* btn = padButtons.add(new juce::ToggleButton(""));
+            btn->setLookAndFeel(&invisibleToggleLF);
             btn->setClickingTogglesState(true);
             btn->onClick = [this]{ if (selectionChanged) selectionChanged(); };
             addAndMakeVisible(btn);
@@ -181,7 +182,14 @@ public:
 
 private:
     static constexpr int numPads = 8;
+    // Look-and-feel that suppresses the default checkbox visuals of ToggleButton
+    class InvisibleToggleLookAndFeel : public juce::LookAndFeel_V4 {
+    public:
+        void drawToggleButton(juce::Graphics&, juce::ToggleButton&, bool, bool) override {}
+    };
+
     juce::OwnedArray<juce::ToggleButton> padButtons;
+    InvisibleToggleLookAndFeel invisibleToggleLF;
     juce::OwnedArray<juce::Label> padFileLabels;
     juce::StringArray padFileNames { "", "", "", "", "", "", "", "" };
     std::array<int, numPads> flashCounters { {0,0,0,0,0,0,0,0} };
@@ -322,6 +330,15 @@ private:
                         g.setColour(juce::Colours::grey);
                         g.drawText("(empty)", inner.toNearestInt(), juce::Justification::centred);
                     }
+                }
+
+                // Selection overlay (tinted) to replace checkbox visuals
+                if (padButtons[i]->getToggleState())
+                {
+                    g.setColour(juce::Colours::cornflowerblue.withAlpha(0.20f));
+                    g.fillRoundedRectangle(r, 6.f);
+                    g.setColour(juce::Colours::cornflowerblue.withAlpha(0.8f));
+                    g.drawRoundedRectangle(r.expanded(1.5f), 6.f, 2.0f);
                 }
 
                 // Playing state outline

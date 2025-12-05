@@ -243,12 +243,14 @@ ModifierDescriptor ModifierScheduler::pickRandomDescriptor() const
     if (prototypeCache.isEmpty())
         return {};
     juce::Array<int> candidateIndices;
+    const bool moreThanOnePart = settings.parts.getNumParts() > 1;
     if (restrictToImplemented.load())
     {
         for (int i = 0; i < prototypeCache.size(); ++i)
         {
             auto t = prototypeCache[i]->getDescriptor().type;
-            if (t == ModifierType::Reverse
+            // Base implemented list
+            bool allowed = (t == ModifierType::Reverse
                 || t == ModifierType::Speed
                 || t == ModifierType::ResetAll
                 || t == ModifierType::BeatSliceRandom
@@ -260,15 +262,23 @@ ModifierDescriptor ModifierScheduler::pickRandomDescriptor() const
                 || t == ModifierType::MasterLowPassOn
                 || t == ModifierType::MasterHighPassOn
                 || t == ModifierType::BufferTremolo
-                || t == ModifierType::SwitchPart)
-            {
-                candidateIndices.add(i);
-            }
+                || t == ModifierType::SwitchPart);
+            if (!allowed) continue;
+            // Gate SwitchPart: only selectable when more than one part is configured
+            if (t == ModifierType::SwitchPart && !moreThanOnePart) continue;
+            candidateIndices.add(i);
         }
     }
+    // Fallback (when not restricting): include all descriptors but still gate SwitchPart by parts count
     if (candidateIndices.isEmpty())
     {
-        for (int i = 0; i < prototypeCache.size(); ++i) candidateIndices.add(i);
+        for (int i = 0; i < prototypeCache.size(); ++i)
+        {
+            auto t = prototypeCache[i]->getDescriptor().type;
+            if (t == ModifierType::SwitchPart && !moreThanOnePart)
+                continue;
+            candidateIndices.add(i);
+        }
     }
     const juce::SpinLock::ScopedLockType lock(rngLock);
     int choice = rng.nextInt(candidateIndices.size());

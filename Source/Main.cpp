@@ -16,6 +16,9 @@
  #include "MainComponent.h"          // Legacy test UI (gated)
 #endif
 #include "MainAppComponent.h"        // New evolving application UI
+#if JUCE_IOS
+#include "IOSAppComponent.h"         // iPhone UI (header-only implementation)
+#endif
 
 // Toggle to switch between legacy test UI and new app UI.
 // Set to 1 to use new MainAppComponent, 0 to revert quickly if needed.
@@ -113,7 +116,11 @@ public:
            #if LEGACY_MAIN_COMPONENT
             setContentOwned (new MainComponent(), true);
            #else
+            #if JUCE_IOS
+            setContentOwned (new IOSAppComponent(), true);
+            #else
             setContentOwned (new MainAppComponent(), true);
+            #endif
            #endif
 
            #if JUCE_IOS || JUCE_ANDROID

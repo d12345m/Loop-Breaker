@@ -28,24 +28,64 @@ public:
         // Playback screen contents
         playbackContainer.addAndMakeVisible(modifierDisplay);
         playbackContainer.addAndMakeVisible(padGrid);
-        playbackContainer.addAndMakeVisible(playAllButton);
-        playbackContainer.addAndMakeVisible(stopAllButton);
-        playbackContainer.addAndMakeVisible(loadButton);
+    playbackContainer.addAndMakeVisible(playAllButton);
+    playbackContainer.addAndMakeVisible(stopAllButton);
         playbackContainer.addAndMakeVisible(statusLabel);
         statusLabel.setJustificationType(juce::Justification::centredLeft);
 
         playAllButton.setButtonText("Play");
         stopAllButton.setButtonText("Stop");
-        loadButton.setButtonText("Load");
-        playAllButton.onClick = [this]{ playAllClicked(); };
+    playAllButton.onClick = [this]{ playAllClicked(); };
         stopAllButton.onClick = [this]{ stopAllClicked(); };
-        loadButton.onClick = [this]{ loadClicked(); };
 
-        // Settings screen contents (minimal for now)
-        settingsContainer.addAndMakeVisible(modifiersToggle);
-        modifiersToggle.setButtonText("Modifiers");
-        modifiersToggle.setToggleState(true, juce::dontSendNotification);
-        modifiersToggle.onClick = [this]{ updatePlaybackModifierLink(); };
+    // Settings screen contents: Modifiers toggle, BPM, Quantize, Subdivision, Part selector
+    settingsContainer.addAndMakeVisible(modifiersToggle);
+    settingsContainer.addAndMakeVisible(loadButton);
+    settingsContainer.addAndMakeVisible(saveButton);
+    loadButton.setButtonText("Load Audio");
+    saveButton.setButtonText("Save Project");
+    loadButton.onClick = [this]{ loadClicked(); };
+    saveButton.onClick = [this]{ saveClicked(); };
+    modifiersToggle.setButtonText("Modifiers Enabled");
+    modifiersToggle.setToggleState(app.settings.quantizeEnabled, juce::dontSendNotification);
+    modifiersToggle.onClick = [this]{ updatePlaybackModifierLink(); };
+
+    settingsContainer.addAndMakeVisible(bpmLabel);
+    bpmLabel.setText("BPM", juce::dontSendNotification);
+    bpmLabel.setJustificationType(juce::Justification::centredLeft);
+    settingsContainer.addAndMakeVisible(bpmSlider);
+    bpmSlider.setRange(60.0, 200.0, 1.0);
+    bpmSlider.setValue(app.settings.bpm);
+    bpmSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+    bpmSlider.onValueChange = [this]{ app.settings.bpm = bpmSlider.getValue(); refreshStatus(); };
+
+    settingsContainer.addAndMakeVisible(quantizeToggle);
+    quantizeToggle.setButtonText("Quantize Triggers");
+    quantizeToggle.setToggleState(app.settings.quantizeEnabled, juce::dontSendNotification);
+    quantizeToggle.onClick = [this]{ app.settings.quantizeEnabled = quantizeToggle.getToggleState(); app.scheduler.setQuantizationEnabled(app.settings.quantizeEnabled); refreshStatus(); };
+
+    // Subdivision removed for now
+
+        settingsContainer.addAndMakeVisible(partLabel);
+        partLabel.setText("Parts", juce::dontSendNotification);
+    partLabel.setJustificationType(juce::Justification::centredLeft);
+        settingsContainer.addAndMakeVisible(partBox);
+        partBox.addItem("1 part", 1);
+        partBox.addItem("2 parts", 2);
+        partBox.addItem("3 parts", 3);
+        partBox.addItem("4 parts", 4);
+        {
+            int initialParts = app.settings.parts.getNumParts();
+            if (initialParts < 1 || initialParts > 4) initialParts = 1;
+            partBox.setSelectedId(initialParts, juce::dontSendNotification);
+        }
+        partBox.onChange = [this]{
+            int count = partBox.getSelectedId();
+            app.settings.parts.numParts = juce::jlimit(1, 4, count);
+            // Re-apply active part to recompute loop windows
+            app.setActivePart(app.getActivePart());
+            refreshStatus();
+        };
 
         // Logs screen
         logsContainer.addAndMakeVisible(logEditor);
@@ -125,15 +165,25 @@ public:
         modifierDisplay.setBounds(banner);
         auto bottomControlsArea = area.removeFromBottom(88).reduced(2);
         padGrid.setBounds(area.reduced(0, 6));
-        auto row1 = bottomControlsArea.removeFromTop(44);
-        loadButton.setBounds(row1.removeFromLeft(100).reduced(2));
-        playAllButton.setBounds(row1.removeFromLeft(100).reduced(2));
-        stopAllButton.setBounds(row1.removeFromLeft(100).reduced(2));
+    auto row1 = bottomControlsArea.removeFromTop(44);
+    playAllButton.setBounds(row1.removeFromLeft(140).reduced(2));
+    stopAllButton.setBounds(row1.removeFromLeft(140).reduced(2));
         statusLabel.setBounds(bottomControlsArea);
 
-        // Layout settings screen (simple toggle centered)
-        auto sArea = settingsContainer.getLocalBounds().reduced(16);
-        modifiersToggle.setBounds(sArea.removeFromTop(44));
+    // Layout settings screen
+    auto sArea = settingsContainer.getLocalBounds().reduced(16);
+    modifiersToggle.setBounds(sArea.removeFromTop(40));
+    auto bpmRow = sArea.removeFromTop(40);
+    bpmLabel.setBounds(bpmRow.removeFromLeft(80));
+    bpmSlider.setBounds(bpmRow);
+    auto qRow = sArea.removeFromTop(40);
+    quantizeToggle.setBounds(qRow);
+    auto partRow = sArea.removeFromTop(40);
+    partLabel.setBounds(partRow.removeFromLeft(120));
+    partBox.setBounds(partRow.removeFromLeft(140));
+    auto ioRow = sArea.removeFromTop(40);
+    loadButton.setBounds(ioRow.removeFromLeft(140).reduced(2));
+    saveButton.setBounds(ioRow.removeFromLeft(160).reduced(2));
 
         // Layout logs screen
         logEditor.setBounds(logsContainer.getLocalBounds().reduced(8));
@@ -280,6 +330,39 @@ private:
         });
     }
 
+    void saveClicked()
+    {
+        // Choose a directory to save the project (settings) JSON/state
+        auto flags = juce::FileBrowserComponent::saveMode
+                   | juce::FileBrowserComponent::canSelectDirectories
+                   | juce::FileBrowserComponent::warnAboutOverwriting;
+        auto safeThis = juce::Component::SafePointer<IOSAppComponent>(this);
+        auto defaultDir = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory);
+        fileChooser = std::make_unique<juce::FileChooser>("Choose save location...", defaultDir);
+        fileChooser->launchAsync(flags, [safeThis](const juce::FileChooser& fc){
+            if (auto* self = safeThis.getComponent())
+            {
+                self->fileChooser.reset();
+                auto f = fc.getResult();
+                if (f.exists())
+                {
+                    juce::File dir = f;
+                    if (! dir.isDirectory()) dir = f.getParentDirectory();
+                    bool ok = self->app.projectManager.saveProject(dir, true);
+                    if (ok)
+                    {
+                        self->statusLabel.setText("Project saved: " + dir.getFullPathName(), juce::dontSendNotification);
+                        self->appendLog("Saved project -> " + dir.getFullPathName());
+                    }
+                    else
+                    {
+                        juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Save Failed", "Could not save project.");
+                    }
+                }
+            }
+        });
+    }
+
     void refreshStatus()
     {
         int playing = app.bufferManager.getPlayingBufferIndices().size();
@@ -317,6 +400,14 @@ private:
 
     std::unique_ptr<juce::FileChooser> fileChooser;
     juce::TextEditor logEditor;
+
+    // Settings controls
+    juce::Label bpmLabel;
+    juce::Slider bpmSlider;
+    juce::ToggleButton quantizeToggle;
+    juce::Label partLabel;
+    juce::ComboBox partBox;
+    juce::TextButton saveButton;
 
     void appendLog(const juce::String& msg)
     {

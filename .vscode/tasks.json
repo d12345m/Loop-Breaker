@@ -43,6 +43,15 @@
 				"$xcodebuild"
 			],
 			"group": "build"
+		},
+		{
+			"label": "Clean Build and Run iOS Simulator",
+			"type": "shell",
+			"command": "cd Builds/iOS && xcodebuild -project BufferTest.xcodeproj -configuration Debug -sdk iphonesimulator clean build && open -a Simulator || true && SIMUDID=$(xcrun simctl list devices | awk -F\"[()]\" '/iPhone/{ if ($4 ~ /Shutdown|Booted/ && $2 ~ /^[A-F0-9-]+$/) {print $2; exit} }'); if [ -z \"$SIMUDID\" ]; then echo \"No simulator UDID found. Listing devices...\"; xcrun simctl list devices | cat; exit 1; fi; xcrun simctl boot \"$SIMUDID\" || true; xcrun simctl bootstatus \"$SIMUDID\" -b || true; xcrun simctl install \"$SIMUDID\" build/Debug/BufferTest.app; xcrun simctl launch \"$SIMUDID\" com.yourcompany.BufferTest | cat",
+			"problemMatcher": [
+				"$xcodebuild"
+			],
+			"group": "build"
 		}
 	]
 }

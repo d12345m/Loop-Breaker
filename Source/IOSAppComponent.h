@@ -38,15 +38,33 @@ public:
     playAllButton.onClick = [this]{ playAllClicked(); };
         stopAllButton.onClick = [this]{ stopAllClicked(); };
 
-    // Settings screen contents: Modifiers toggle, BPM, Quantize, Subdivision, Part selector
+    // Settings screen contents: Modifiers toggle, BPM, Quantize, Part selector, Load/Save, and Sample Slot selector
     settingsContainer.addAndMakeVisible(modifiersToggle);
     settingsContainer.addAndMakeVisible(loadButton);
     settingsContainer.addAndMakeVisible(saveButton);
+    settingsContainer.addAndMakeVisible(slotLabel);
+    settingsContainer.addAndMakeVisible(slotBox);
     loadButton.setButtonText("Load Audio");
     saveButton.setButtonText("Save Project");
     loadButton.onClick = [this]{ loadClicked(); };
     saveButton.onClick = [this]{ saveClicked(); };
     modifiersToggle.setButtonText("Modifiers Enabled");
+        // Slot selector (which pad to load the sample into)
+        slotLabel.setText("Load to Pad", juce::dontSendNotification);
+        slotLabel.setJustificationType(juce::Justification::centredLeft);
+        slotBox.addItem("First Empty", 0);
+        for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
+            slotBox.addItem("Pad " + juce::String(i+1), i+1);
+        // Default to First Empty
+        slotBox.setSelectedId(0, juce::dontSendNotification);
+        selectedLoadSlot = -1; // -1 means First Empty
+        slotBox.onChange = [this]
+        {
+            int id = slotBox.getSelectedId();
+            if (id == 0) selectedLoadSlot = -1; // First Empty
+            else selectedLoadSlot = juce::jlimit(0, AudioBufferManager::MAX_BUFFERS-1, id-1);
+        };
+
     modifiersToggle.setToggleState(app.settings.quantizeEnabled, juce::dontSendNotification);
     modifiersToggle.onClick = [this]{ updatePlaybackModifierLink(); };
 
@@ -181,6 +199,9 @@ public:
     auto partRow = sArea.removeFromTop(40);
     partLabel.setBounds(partRow.removeFromLeft(120));
     partBox.setBounds(partRow.removeFromLeft(140));
+    auto slotRow = sArea.removeFromTop(40);
+    slotLabel.setBounds(slotRow.removeFromLeft(120));
+    slotBox.setBounds(slotRow.removeFromLeft(140));
     auto ioRow = sArea.removeFromTop(40);
     loadButton.setBounds(ioRow.removeFromLeft(140).reduced(2));
     saveButton.setBounds(ioRow.removeFromLeft(160).reduced(2));
@@ -285,48 +306,54 @@ private:
             juce::File(), patterns);
         // Use a simple lambda with minimal captures; release chooser once we have results.
         fileChooser->launchAsync(flags, [safeThis](const juce::FileChooser& fc){
-            if (auto* self = safeThis.getComponent())
-            {
-                // Proactively clear the member to avoid any lingering references
-                self->fileChooser.reset();
-
-                // Prefer URL results on iOS, then fall back to File
-                auto urls = fc.getURLResults();
-                juce::File f;
-                if (urls.size() > 0)
-                    f = urls[0].getLocalFile();
-                else
-                    f = fc.getResult();
-
-                if (f.existsAsFile())
+            // Marshal processing to the message thread and avoid touching the chooser inside its callback
+            auto urls = fc.getURLResults();
+            auto resultFile = (urls.size() > 0) ? urls[0].getLocalFile() : fc.getResult();
+            juce::MessageManager::callAsync([safeThis, resultFile]{
+                if (auto* self = safeThis.getComponent())
                 {
-                    // Load into the first available empty pad, else pad 0
-                    int targetPad = 0;
-                    auto loaded = self->app.bufferManager.getLoadedBufferIndices();
-                    if (loaded.size() < AudioBufferManager::MAX_BUFFERS)
+                    // Clear the chooser after we return to the message thread
+                    self->fileChooser.reset();
+
+                    juce::File f = resultFile;
+                    if (f.existsAsFile())
                     {
-                        // find first empty pad
-                        juce::Array<int> used = loaded;
-                        for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
+                        int targetPad = 0;
+                        if (self->selectedLoadSlot < 0)
                         {
-                            if (! used.contains(i)) { targetPad = i; break; }
+                            auto loaded = self->app.bufferManager.getLoadedBufferIndices();
+                            juce::Array<int> used = loaded;
+                            bool found = false;
+                            for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
+                            {
+                                if (! used.contains(i)) { targetPad = i; found = true; break; }
+                            }
+                            if (!found) targetPad = 0; // fallback
+                        }
+                        else
+                        {
+                            targetPad = juce::jlimit(0, AudioBufferManager::MAX_BUFFERS-1, self->selectedLoadSlot);
+                        }
+
+                        if (self->app.bufferManager.loadAudioFile(targetPad, f, self->formatManager))
+                        {
+                            self->statusLabel.setText("Loaded to Pad " + juce::String(targetPad+1) + ": " + f.getFileName(), juce::dontSendNotification);
+                            self->padGrid.setPadFileName(targetPad, f.getFileNameWithoutExtension());
+                            while (self->app.settings.padFilePaths.size() < AudioBufferManager::MAX_BUFFERS)
+                                self->app.settings.padFilePaths.add(juce::String());
+                            self->app.settings.padFilePaths.set(targetPad, f.getFullPathName());
+                            self->padGrid.setPadFilePath(targetPad, f.getFullPathName());
+                            // Sync full list in case grid expects batched paths
+                            self->padGrid.setPadFilePaths(self->app.settings.padFilePaths);
+                            self->padGrid.repaint();
+                        }
+                        else
+                        {
+                            juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Load Failed", "Could not load file.");
                         }
                     }
-                    if (self->app.bufferManager.loadAudioFile(targetPad, f, self->formatManager))
-                    {
-                        self->statusLabel.setText("Loaded to Pad " + juce::String(targetPad+1) + ": " + f.getFileName(), juce::dontSendNotification);
-                        self->padGrid.setPadFileName(targetPad, f.getFileNameWithoutExtension());
-                        while (self->app.settings.padFilePaths.size() < AudioBufferManager::MAX_BUFFERS)
-                            self->app.settings.padFilePaths.add(juce::String());
-                        self->app.settings.padFilePaths.set(targetPad, f.getFullPathName());
-                        self->padGrid.setPadFilePath(targetPad, f.getFullPathName());
-                    }
-                    else
-                    {
-                        juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Load Failed", "Could not load file.");
-                    }
                 }
-            }
+            });
         });
     }
 
@@ -407,7 +434,10 @@ private:
     juce::ToggleButton quantizeToggle;
     juce::Label partLabel;
     juce::ComboBox partBox;
+    juce::Label slotLabel;
+    juce::ComboBox slotBox;
     juce::TextButton saveButton;
+    int selectedLoadSlot = 0; // 0-based index
 
     void appendLog(const juce::String& msg)
     {

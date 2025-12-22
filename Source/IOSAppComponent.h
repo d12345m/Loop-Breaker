@@ -326,6 +326,48 @@ private:
                     juce::File f = resultFile;
                     if (f.existsAsFile())
                     {
+                        self->appendLog("Picker result path: " + f.getFullPathName());
+                        self->appendLog("Picker result size: " + juce::String((double) f.getSize()) + " bytes");
+
+                        // Always copy to sandbox Documents before loading
+                        auto docs = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory);
+                        self->appendLog("Documents dir: " + docs.getFullPathName());
+                        juce::File dest = docs.getChildFile(f.getFileName());
+                        // If file already exists, add a numeric suffix
+                        int suffix = 1;
+                        while (dest.existsAsFile()) {
+                            dest = docs.getChildFile(f.getFileNameWithoutExtension() + "-" + juce::String(suffix) + f.getFileExtension());
+                            ++suffix;
+                        }
+                        bool copyOk = f.copyFileTo(dest);
+                        if (!copyOk) {
+                            self->appendLog("Copy FAILED from: " + f.getFullPathName() + " to: " + dest.getFullPathName());
+                            juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Copy Failed", "Could not copy file to app sandbox.");
+                            // As a fallback for debugging, try loading directly from the picked file
+                            self->appendLog("Attempting fallback load directly from picker path...");
+                            int fallbackPad = 0;
+                            if (self->selectedLoadSlot < 0)
+                            {
+                                auto loaded = self->app.bufferManager.getLoadedBufferIndices();
+                                juce::Array<int> used = loaded;
+                                bool found = false;
+                                for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
+                                {
+                                    if (! used.contains(i)) { fallbackPad = i; found = true; break; }
+                                }
+                                if (!found) fallbackPad = 0; // fallback
+                            }
+                            else
+                            {
+                                fallbackPad = juce::jlimit(0, AudioBufferManager::MAX_BUFFERS-1, self->selectedLoadSlot);
+                            }
+                            if (! self->app.bufferManager.loadAudioFile(fallbackPad, f, self->formatManager))
+                                self->appendLog("Fallback load from picker path also FAILED.");
+                            else
+                                self->appendLog("Fallback load from picker path SUCCEEDED.");
+                            return;
+                        }
+
                         int targetPad = 0;
                         if (self->selectedLoadSlot < 0)
                         {
@@ -343,20 +385,22 @@ private:
                             targetPad = juce::jlimit(0, AudioBufferManager::MAX_BUFFERS-1, self->selectedLoadSlot);
                         }
 
-                        if (self->app.bufferManager.loadAudioFile(targetPad, f, self->formatManager))
+                        if (self->app.bufferManager.loadAudioFile(targetPad, dest, self->formatManager))
                         {
-                            self->statusLabel.setText("Loaded to Pad " + juce::String(targetPad+1) + ": " + f.getFileName(), juce::dontSendNotification);
-                            self->padGrid.setPadFileName(targetPad, f.getFileNameWithoutExtension());
+                            self->appendLog("Loaded file OK from sandbox: " + dest.getFullPathName());
+                            self->statusLabel.setText("Loaded to Pad " + juce::String(targetPad+1) + ": " + dest.getFileName(), juce::dontSendNotification);
+                            self->padGrid.setPadFileName(targetPad, dest.getFileNameWithoutExtension());
                             while (self->app.settings.padFilePaths.size() < AudioBufferManager::MAX_BUFFERS)
                                 self->app.settings.padFilePaths.add(juce::String());
-                            self->app.settings.padFilePaths.set(targetPad, f.getFullPathName());
-                            self->padGrid.setPadFilePath(targetPad, f.getFullPathName());
+                            self->app.settings.padFilePaths.set(targetPad, dest.getFullPathName());
+                            self->padGrid.setPadFilePath(targetPad, dest.getFullPathName());
                             // Sync full list in case grid expects batched paths
                             self->padGrid.setPadFilePaths(self->app.settings.padFilePaths);
                             self->padGrid.repaint();
                         }
                         else
                         {
+                            self->appendLog("Load FAILED from sandbox: " + dest.getFullPathName());
                             juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Load Failed", "Could not load file.");
                         }
                     }

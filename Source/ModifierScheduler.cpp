@@ -37,6 +37,20 @@ void ModifierScheduler::stop()
     upcoming.reset();
 }
 
+void ModifierScheduler::resetTimeline()
+{
+    // Reset accumulated time and trigger window boundaries
+    accumulatedSecondsTotal = 0.0;
+    lastTriggerAbsoluteSeconds = 0.0;
+    nextTriggerAbsoluteSeconds = 0.0;
+    // Keep upcoming descriptor as-is if running; otherwise it will be selected on start()
+    if (running)
+    {
+        // Restart scheduling window from zero without changing upcoming selection
+        scheduleNextTrigger();
+    }
+}
+
 void ModifierScheduler::selectNextModifier()
 {
     auto base = pickRandomDescriptor();

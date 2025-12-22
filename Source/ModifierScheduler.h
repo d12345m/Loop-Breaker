@@ -30,6 +30,8 @@ public:
     void start();
     void stop();
     bool isRunning() const { return running; }
+    // Reset timeline counters (seconds/bars) to zero; safe whether running or stopped
+    void resetTimeline();
 
     // Force immediate selection of next upcoming modifier (does not trigger it)
     void selectNextModifier();

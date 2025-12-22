@@ -293,6 +293,9 @@ private:
     void stopAllClicked()
     {
         app.bufferManager.stopAll();
+        // Stop and reset scheduler timeline so beats/measures reset
+        if (app.scheduler.isRunning()) app.scheduler.stop();
+        app.scheduler.resetTimeline();
         updatePlaybackModifierLink();
     }
 

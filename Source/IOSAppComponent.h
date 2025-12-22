@@ -38,16 +38,19 @@ public:
     playAllButton.onClick = [this]{ playAllClicked(); };
         stopAllButton.onClick = [this]{ stopAllClicked(); };
 
-    // Settings screen contents: Modifiers toggle, BPM, Quantize, Part selector, Load/Save, and Sample Slot selector
+    // Settings screen contents: Modifiers toggle, BPM, Quantize, Part selector, Load/Save/LoadProj, and Sample Slot selector
     settingsContainer.addAndMakeVisible(modifiersToggle);
     settingsContainer.addAndMakeVisible(loadButton);
     settingsContainer.addAndMakeVisible(saveButton);
+    settingsContainer.addAndMakeVisible(loadProjectButton);
     settingsContainer.addAndMakeVisible(slotLabel);
     settingsContainer.addAndMakeVisible(slotBox);
     loadButton.setButtonText("Load Audio");
     saveButton.setButtonText("Save Project");
+    loadProjectButton.setButtonText("Load Project");
     loadButton.onClick = [this]{ loadClicked(); };
     saveButton.onClick = [this]{ saveClicked(); };
+    loadProjectButton.onClick = [this]{ loadProjectClicked(); };
     modifiersToggle.setButtonText("Modifiers Enabled");
         // Slot selector (which pad to load the sample into)
         slotLabel.setText("Load to Pad", juce::dontSendNotification);
@@ -116,6 +119,15 @@ public:
         logEditor.setColour(juce::TextEditor::textColourId, juce::Colours::lightgrey);
 
         padGrid.setAudioFormatManager(&formatManager);
+
+        // Ensure pad selections on iOS drive modifier targets just like on desktop.
+        // Without this, the scheduler only uses random pads, so a Reverse modifier
+        // often appears to "do nothing" from the user's perspective.
+        padGrid.setSelectionChangedCallback([this]
+        {
+            auto selected = padGrid.getSelectedPadIndices();
+            app.scheduler.setUserSelectedBuffers(selected);
+        });
 
         app.scheduler.addListener(this);
         setAudioChannels(0, 2);
@@ -197,9 +209,13 @@ public:
             auto sb = settingsContainer.getLocalBounds().reduced(12);
 
             auto row1 = sb.removeFromTop(36);
-            modifiersToggle.setBounds(row1.removeFromLeft(row1.getWidth() / 2).reduced(4));
-            loadButton.setBounds(row1.removeFromLeft(row1.getWidth() / 2).reduced(4));
-            saveButton.setBounds(row1.reduced(4));
+            auto third = row1.getWidth() / 3;
+            modifiersToggle.setBounds(row1.removeFromLeft(third).reduced(4));
+            loadButton.setBounds(row1.removeFromLeft(third).reduced(4));
+            saveButton.setBounds(row1.removeFromLeft(third).reduced(4));
+
+            auto rowProj = sb.removeFromTop(32);
+            loadProjectButton.setBounds(rowProj.removeFromLeft(rowProj.getWidth() / 2).reduced(4));
 
             auto row2 = sb.removeFromTop(36);
             bpmLabel.setBounds(row2.removeFromLeft(50));
@@ -489,6 +505,100 @@ private:
         });
     }
 
+    void loadProjectClicked()
+    {
+        auto flags = juce::FileBrowserComponent::openMode
+                   | juce::FileBrowserComponent::canSelectFiles;
+
+        auto safeThis = juce::Component::SafePointer<IOSAppComponent>(this);
+        auto initialDir = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory);
+
+        fileChooser = std::make_unique<juce::FileChooser>("Select project file (.json)", initialDir, "*.json");
+        fileChooser->launchAsync(flags, [safeThis](const juce::FileChooser& fc){
+            if (auto* self = safeThis.getComponent())
+            {
+                auto file = fc.getResult();
+                self->fileChooser.reset();
+
+                if (file == juce::File())
+                    return;
+
+                if (! self->app.projectManager.loadProject(file))
+                {
+                    juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
+                                                           "Load Failed",
+                                                           "Could not load project.");
+                    return;
+                }
+
+                // Clean slate: stop playback, clear audio buffers and UI pad names, reset FX state
+                self->app.bufferManager.stopAll();
+                self->app.bufferManager.clearAllBuffers();
+                for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
+                    self->padGrid.setPadFileName(i, juce::String());
+
+                // Reset channel strips (FX) to defaults to avoid lingering state
+                for (int i = 0; i < self->app.channelStrips.size(); ++i)
+                    if (self->app.channelStrips[i] != nullptr)
+                        self->app.channelStrips[i]->reset();
+
+                // Apply loaded settings to UI & scheduler
+                self->bpmSlider.setValue(self->app.settings.bpm, juce::dontSendNotification);
+                self->quantizeToggle.setToggleState(self->app.settings.quantizeEnabled, juce::dontSendNotification);
+
+                bool running = self->app.scheduler.isRunning();
+                if (running) self->app.scheduler.stop();
+                self->app.scheduler.setQuantizationEnabled(self->app.settings.quantizeEnabled);
+                self->app.scheduler.setQuantizationSubdivision(self->app.settings.quantizeSubdivision);
+                if (running) self->app.scheduler.start();
+
+                // Restore pad files from settings and push to grid
+                auto& paths = self->app.settings.padFilePaths;
+                if (paths.size() > 0)
+                {
+                    for (int i = 0; i < paths.size(); ++i)
+                    {
+                        const auto path = paths[i];
+                        if (path.isNotEmpty())
+                        {
+                            juce::File f(path);
+                            if (f.existsAsFile())
+                            {
+                                self->app.bufferManager.loadAudioFile(i, f, self->formatManager);
+                                self->padGrid.setPadFileName(i, f.getFileNameWithoutExtension());
+                                self->padGrid.setPadFilePath(i, f.getFullPathName());
+                            }
+                            else
+                            {
+                                self->padGrid.setPadFileName(i, juce::String());
+                                self->padGrid.setPadFilePath(i, juce::String());
+                            }
+                        }
+                        else
+                        {
+                            self->padGrid.setPadFileName(i, juce::String());
+                            self->padGrid.setPadFilePath(i, juce::String());
+                        }
+                    }
+
+                    self->padGrid.setPadFilePaths(paths);
+                }
+
+                // Sync parts UI to loaded settings and clamp active part if needed
+                {
+                    int loadedNumParts = juce::jlimit(1, 4, self->app.settings.parts.numParts);
+                    self->partBox.setSelectedId(loadedNumParts, juce::dontSendNotification);
+                    if (self->app.getActivePart() >= loadedNumParts)
+                        self->app.setActivePart(loadedNumParts - 1);
+                }
+
+                self->statusLabel.setText("Loaded project: " + file.getFileNameWithoutExtension(),
+                                           juce::dontSendNotification);
+                self->appendLog("Loaded project -> " + file.getFileNameWithoutExtension());
+            }
+        });
+    }
+
     void refreshStatus()
     {
         int playing = app.bufferManager.getPlayingBufferIndices().size();
@@ -598,6 +708,7 @@ private:
     juce::Label slotLabel;
     juce::ComboBox slotBox;
     juce::TextButton saveButton;
+    juce::TextButton loadProjectButton;
     int selectedLoadSlot = -1; // -1 means first empty, otherwise 0-based index
 
     void appendLog(const juce::String& msg)

@@ -23,6 +23,7 @@ AudioBuffer::AudioBuffer(int bufferIndex)
 
 void AudioBuffer::prepare(double sampleRate, int samplesPerBlockExpected)
 {
+    juce::FloatVectorOperations::disableDenormalisedNumberSupport();
     hostSampleRate = sampleRate;
     speedSmoother.reset(sampleRate, 0.05); // 50ms smoothing time
     

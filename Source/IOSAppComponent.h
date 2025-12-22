@@ -65,7 +65,8 @@ public:
             else selectedLoadSlot = juce::jlimit(0, AudioBufferManager::MAX_BUFFERS-1, id-1);
         };
 
-    modifiersToggle.setToggleState(app.settings.quantizeEnabled, juce::dontSendNotification);
+    // Default ON at launch: modifiers enabled
+    modifiersToggle.setToggleState(true, juce::dontSendNotification);
     modifiersToggle.onClick = [this]{ updatePlaybackModifierLink(); };
 
     settingsContainer.addAndMakeVisible(bpmLabel);
@@ -122,6 +123,8 @@ public:
         // Apply initial scheduler settings
         app.scheduler.setQuantizationEnabled(app.settings.quantizeEnabled);
         app.scheduler.setQuantizationSubdivision(app.settings.quantizeSubdivision);
+        // Ensure modifiers are not disabled at launch
+        app.scheduler.setSuppressed(false);
 
         refreshStatus();
         if (app.settings.padFilePaths.size() > 0)
@@ -397,7 +400,8 @@ private:
         int partIdx = app.getActivePart();
         juce::String partName = juce::String("Part ") + juce::String(partNames[juce::jlimit(0, 3, partIdx)]);
         juce::String base = partName + " | Playing: " + juce::String(playing) + " | BPM " + juce::String(app.settings.bpm, 0);
-        auto msg = app.scheduler.isRunning() ? ("Modifiers ON | " + base) : ("Modifiers OFF | " + base);
+        // Reflect suppression, not running state
+        auto msg = app.scheduler.isSuppressed() ? ("Modifiers OFF | " + base) : ("Modifiers ON | " + base);
         statusLabel.setText(msg, juce::dontSendNotification);
         appendLog(msg);
     }

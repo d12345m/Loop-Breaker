@@ -52,16 +52,18 @@ public:
         // Slot selector (which pad to load the sample into)
         slotLabel.setText("Load to Pad", juce::dontSendNotification);
         slotLabel.setJustificationType(juce::Justification::centredLeft);
-        slotBox.addItem("First Empty", 0);
+        // JUCE ComboBox item IDs must be non-zero; reserve a high ID for "First Empty"
+        constexpr int kFirstEmptyId = 100;
+        slotBox.addItem("First Empty", kFirstEmptyId);
         for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
             slotBox.addItem("Pad " + juce::String(i+1), i+1);
         // Default to First Empty
-        slotBox.setSelectedId(0, juce::dontSendNotification);
+        slotBox.setSelectedId(kFirstEmptyId, juce::dontSendNotification);
         selectedLoadSlot = -1; // -1 means First Empty
         slotBox.onChange = [this]
         {
             int id = slotBox.getSelectedId();
-            if (id == 0) selectedLoadSlot = -1; // First Empty
+            if (id == kFirstEmptyId) selectedLoadSlot = -1; // First Empty
             else selectedLoadSlot = juce::jlimit(0, AudioBufferManager::MAX_BUFFERS-1, id-1);
         };
 

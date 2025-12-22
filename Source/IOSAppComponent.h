@@ -172,47 +172,53 @@ public:
 
     void resized() override
     {
-        // Respect iOS safe area (Dynamic Island / notch)
         auto bounds = getLocalBounds();
-        int safeTop = 0;
-        if (auto* peer = getPeer())
+        tabs.setBounds(bounds);
+
+        // Playback layout
         {
-            auto display = juce::Desktop::getInstance().getDisplays().getDisplayForRect(getScreenBounds());
-            if (display != nullptr)
-                safeTop = display->safeAreaInsets.getTop();
+            auto pb = playbackContainer.getLocalBounds().reduced(10);
+            auto topRow = pb.removeFromTop(28);
+            statusLabel.setBounds(topRow);
+
+            auto buttonRow = pb.removeFromTop(40);
+            auto half = buttonRow.removeFromLeft(buttonRow.getWidth() / 2);
+            playAllButton.setBounds(half.reduced(4));
+            stopAllButton.setBounds(buttonRow.reduced(4));
+
+            auto modRow = pb.removeFromTop(60);
+            modifierDisplay.setBounds(modRow.reduced(4));
+
+            padGrid.setBounds(pb.reduced(4));
         }
-        tabs.setBounds(bounds.withTrimmedTop(safeTop));
-        // Layout playback screen
-        auto area = playbackContainer.getLocalBounds().reduced(8);
-        auto banner = area.removeFromTop(80);
-        modifierDisplay.setBounds(banner);
-        auto bottomControlsArea = area.removeFromBottom(88).reduced(2);
-        padGrid.setBounds(area.reduced(0, 6));
-    auto row1 = bottomControlsArea.removeFromTop(44);
-    playAllButton.setBounds(row1.removeFromLeft(140).reduced(2));
-    stopAllButton.setBounds(row1.removeFromLeft(140).reduced(2));
-        statusLabel.setBounds(bottomControlsArea);
 
-    // Layout settings screen
-    auto sArea = settingsContainer.getLocalBounds().reduced(16);
-    modifiersToggle.setBounds(sArea.removeFromTop(40));
-    auto bpmRow = sArea.removeFromTop(40);
-    bpmLabel.setBounds(bpmRow.removeFromLeft(80));
-    bpmSlider.setBounds(bpmRow);
-    auto qRow = sArea.removeFromTop(40);
-    quantizeToggle.setBounds(qRow);
-    auto partRow = sArea.removeFromTop(40);
-    partLabel.setBounds(partRow.removeFromLeft(120));
-    partBox.setBounds(partRow.removeFromLeft(140));
-    auto slotRow = sArea.removeFromTop(40);
-    slotLabel.setBounds(slotRow.removeFromLeft(120));
-    slotBox.setBounds(slotRow.removeFromLeft(140));
-    auto ioRow = sArea.removeFromTop(40);
-    loadButton.setBounds(ioRow.removeFromLeft(140).reduced(2));
-    saveButton.setBounds(ioRow.removeFromLeft(160).reduced(2));
+        // Settings layout
+        {
+            auto sb = settingsContainer.getLocalBounds().reduced(12);
 
-        // Layout logs screen
-        logEditor.setBounds(logsContainer.getLocalBounds().reduced(8));
+            auto row1 = sb.removeFromTop(36);
+            modifiersToggle.setBounds(row1.removeFromLeft(row1.getWidth() / 2).reduced(4));
+            loadButton.setBounds(row1.removeFromLeft(row1.getWidth() / 2).reduced(4));
+            saveButton.setBounds(row1.reduced(4));
+
+            auto row2 = sb.removeFromTop(36);
+            bpmLabel.setBounds(row2.removeFromLeft(50));
+            bpmSlider.setBounds(row2.reduced(4));
+
+            auto row3 = sb.removeFromTop(32);
+            quantizeToggle.setBounds(row3.reduced(4));
+
+            auto row4 = sb.removeFromTop(32);
+            partLabel.setBounds(row4.removeFromLeft(60));
+            partBox.setBounds(row4.reduced(4));
+
+            auto row5 = sb.removeFromTop(32);
+            slotLabel.setBounds(row5.removeFromLeft(80));
+            slotBox.setBounds(row5.reduced(4));
+        }
+
+        // Logs layout
+        logEditor.setBounds(logsContainer.getLocalBounds().reduced(6));
     }
 
     // Scheduler listener
@@ -241,8 +247,8 @@ public:
             padGrid.flashPads(t);
             if (!t.isEmpty()) padGrid.clearSelections();
         };
-    if (juce::MessageManager::getInstance()->isThisTheMessageThread()) doUi(desc, targets);
-    else { auto d=desc; auto t=targets; juce::MessageManager::callAsync([this, d, t, doUi]{ doUi(d, t); }); }
+        if (juce::MessageManager::getInstance()->isThisTheMessageThread()) doUi(desc, targets);
+        else { auto d=desc; auto t=targets; juce::MessageManager::callAsync([this, d, t, doUi]{ doUi(d, t); }); }
     }
 
 private:
@@ -303,115 +309,156 @@ private:
 
     void loadClicked()
     {
-        // Native iOS Document Picker via JUCE FileChooser
+        appendLog("loadClicked() invoked");
+        juce::Logger::outputDebugString("IOSAppComponent::loadClicked invoked");
         auto flags = juce::FileBrowserComponent::openMode
-                   | juce::FileBrowserComponent::canSelectFiles;
-        // Audio file patterns supported
-        juce::String patterns = "*.wav;*.mp3;*.aif;*.aiff;*.flac";
+               | juce::FileBrowserComponent::canSelectFiles;
+
+        // Leave patterns empty on iOS to prevent JUCE from querying LaunchServices for
+        // every extension (which caused repeated -54 sandbox errors and noticeable delay).
+        juce::String patterns;
         auto safeThis = juce::Component::SafePointer<IOSAppComponent>(this);
+        
+        // Keep fileChooser alive in member variable
         fileChooser = std::make_unique<juce::FileChooser>(
             "Select audio file...",
             juce::File(), patterns);
-        // Use a simple lambda with minimal captures; release chooser once we have results.
+
         fileChooser->launchAsync(flags, [safeThis](const juce::FileChooser& fc){
-            // Marshal processing to the message thread and avoid touching the chooser inside its callback
             auto urls = fc.getURLResults();
-            auto resultFile = (urls.size() > 0) ? urls[0].getLocalFile() : fc.getResult();
-            juce::MessageManager::callAsync([safeThis, resultFile]{
-                if (auto* self = safeThis.getComponent())
+            auto resultFile = fc.getResult();
+            
+            if (urls.isEmpty()) return;
+
+            // CRITICAL: Perform file operations IMMEDIATELY inside the callback.
+            if (auto* self = safeThis.getComponent())
+            {
+                juce::File f = resultFile;
+                juce::Logger::outputDebugString("FileChooser callback for: " + f.getFullPathName());
+
+                static const juce::StringArray allowedExtensions { ".wav", ".mp3", ".aif", ".aiff", ".flac" };
+                auto ext = f.getFileExtension().toLowerCase();
+                if (! allowedExtensions.contains(ext))
                 {
-                    // Clear the chooser after we return to the message thread
-                    self->fileChooser.reset();
-
-                    juce::File f = resultFile;
-                    if (f.existsAsFile())
-                    {
-                        self->appendLog("Picker result path: " + f.getFullPathName());
-                        self->appendLog("Picker result size: " + juce::String((double) f.getSize()) + " bytes");
-
-                        // Always copy to sandbox Documents before loading
-                        auto docs = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory);
-                        self->appendLog("Documents dir: " + docs.getFullPathName());
-                        juce::File dest = docs.getChildFile(f.getFileName());
-                        // If file already exists, add a numeric suffix
-                        int suffix = 1;
-                        while (dest.existsAsFile()) {
-                            dest = docs.getChildFile(f.getFileNameWithoutExtension() + "-" + juce::String(suffix) + f.getFileExtension());
-                            ++suffix;
+                    juce::String msg = "Unsupported file type: " + (ext.isNotEmpty() ? ext : juce::String("<none>"));
+                    juce::Logger::outputDebugString(msg);
+                    juce::MessageManager::callAsync([safeThis, msg]{
+                        if (auto* s = safeThis.getComponent())
+                        {
+                            s->fileChooser.reset();
+                            s->appendLog(msg);
+                            juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Unsupported", msg);
                         }
-                        bool copyOk = f.copyFileTo(dest);
-                        if (!copyOk) {
-                            self->appendLog("Copy FAILED from: " + f.getFullPathName() + " to: " + dest.getFullPathName());
-                            juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Copy Failed", "Could not copy file to app sandbox.");
-                            // As a fallback for debugging, try loading directly from the picked file
-                            self->appendLog("Attempting fallback load directly from picker path...");
-                            int fallbackPad = 0;
-                            if (self->selectedLoadSlot < 0)
+                    });
+                    return;
+                }
+
+                auto docs = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory);
+                juce::File dest = docs.getChildFile(f.getFileName());
+                
+                // Ensure unique filename
+                int suffix = 1;
+                while (dest.existsAsFile()) {
+                    dest = docs.getChildFile(f.getFileNameWithoutExtension() + "-" + juce::String(suffix) + f.getFileExtension());
+                    ++suffix;
+                }
+
+                juce::String errorMsg;
+                bool copyOk = false;
+
+                // Method 1: Try JUCE URL InputStream (safest if JUCE handles scope)
+                juce::URL sourceUrl = urls[0];
+                std::unique_ptr<juce::InputStream> inStream = sourceUrl.createInputStream(false);
+                if (inStream != nullptr)
+                {
+                    juce::Logger::outputDebugString("Opened InputStream from URL successfully.");
+                    juce::FileOutputStream outStream(dest);
+                    if (outStream.openedOk())
+                    {
+                        auto bytesWritten = outStream.writeFromInputStream(*inStream, -1);
+                        if (bytesWritten > 0)
+                        {
+                            copyOk = true;
+                            juce::Logger::outputDebugString("Copied " + juce::String(bytesWritten) + " bytes via InputStream.");
+                        }
+                        else
+                        {
+                            errorMsg = "Wrote 0 bytes from stream";
+                            juce::Logger::outputDebugString(errorMsg);
+                        }
+                    }
+                    else
+                    {
+                        errorMsg = "Could not open output stream: " + dest.getFullPathName();
+                        juce::Logger::outputDebugString(errorMsg);
+                    }
+                }
+                else
+                {
+                    juce::Logger::outputDebugString("InputStream failed, trying secureCopyFile...");
+                    // Method 2: Fallback to native secure copy
+                    copyOk = self->secureCopyFile(f, dest, errorMsg);
+                }
+
+                // Now schedule the UI update and cleanup. 
+                juce::MessageManager::callAsync([safeThis, dest, copyOk, errorMsg]{
+                    if (auto* s = safeThis.getComponent())
+                    {
+                        s->fileChooser.reset(); // Safe to reset now that we are out of the callback
+
+                        if (copyOk)
+                        {
+                            s->appendLog("Copied OK to: " + dest.getFullPathName());
+                            juce::Logger::outputDebugString("UI Update: Copy OK");
+                            
+                            int targetPad = 0;
+                            if (s->selectedLoadSlot < 0)
                             {
-                                auto loaded = self->app.bufferManager.getLoadedBufferIndices();
-                                juce::Array<int> used = loaded;
+                                auto loaded = s->app.bufferManager.getLoadedBufferIndices();
                                 bool found = false;
                                 for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
                                 {
-                                    if (! used.contains(i)) { fallbackPad = i; found = true; break; }
+                                    if (! loaded.contains(i)) { targetPad = i; found = true; break; }
                                 }
-                                if (!found) fallbackPad = 0; // fallback
+                                if (!found) targetPad = 0;
                             }
                             else
                             {
-                                fallbackPad = juce::jlimit(0, AudioBufferManager::MAX_BUFFERS-1, self->selectedLoadSlot);
+                                targetPad = juce::jlimit(0, AudioBufferManager::MAX_BUFFERS-1, s->selectedLoadSlot);
                             }
-                            if (! self->app.bufferManager.loadAudioFile(fallbackPad, f, self->formatManager))
-                                self->appendLog("Fallback load from picker path also FAILED.");
-                            else
-                                self->appendLog("Fallback load from picker path SUCCEEDED.");
-                            return;
-                        }
 
-                        int targetPad = 0;
-                        if (self->selectedLoadSlot < 0)
-                        {
-                            auto loaded = self->app.bufferManager.getLoadedBufferIndices();
-                            juce::Array<int> used = loaded;
-                            bool found = false;
-                            for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
+                            if (s->app.bufferManager.loadAudioFile(targetPad, dest, s->formatManager))
                             {
-                                if (! used.contains(i)) { targetPad = i; found = true; break; }
+                                s->statusLabel.setText("Loaded to Pad " + juce::String(targetPad+1) + ": " + dest.getFileName(), juce::dontSendNotification);
+                                s->padGrid.setPadFileName(targetPad, dest.getFileNameWithoutExtension());
+                                while (s->app.settings.padFilePaths.size() < AudioBufferManager::MAX_BUFFERS)
+                                    s->app.settings.padFilePaths.add(juce::String());
+                                s->app.settings.padFilePaths.set(targetPad, dest.getFullPathName());
+                                s->padGrid.setPadFilePath(targetPad, dest.getFullPathName());
+                                s->padGrid.setPadFilePaths(s->app.settings.padFilePaths);
+                                s->padGrid.repaint();
                             }
-                            if (!found) targetPad = 0; // fallback
+                            else
+                            {
+                                s->appendLog("Load FAILED from sandbox: " + dest.getFullPathName());
+                                juce::Logger::outputDebugString("Load FAILED from sandbox");
+                                juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Load Failed", "Could not load file.");
+                            }
                         }
                         else
                         {
-                            targetPad = juce::jlimit(0, AudioBufferManager::MAX_BUFFERS-1, self->selectedLoadSlot);
-                        }
-
-                        if (self->app.bufferManager.loadAudioFile(targetPad, dest, self->formatManager))
-                        {
-                            self->appendLog("Loaded file OK from sandbox: " + dest.getFullPathName());
-                            self->statusLabel.setText("Loaded to Pad " + juce::String(targetPad+1) + ": " + dest.getFileName(), juce::dontSendNotification);
-                            self->padGrid.setPadFileName(targetPad, dest.getFileNameWithoutExtension());
-                            while (self->app.settings.padFilePaths.size() < AudioBufferManager::MAX_BUFFERS)
-                                self->app.settings.padFilePaths.add(juce::String());
-                            self->app.settings.padFilePaths.set(targetPad, dest.getFullPathName());
-                            self->padGrid.setPadFilePath(targetPad, dest.getFullPathName());
-                            // Sync full list in case grid expects batched paths
-                            self->padGrid.setPadFilePaths(self->app.settings.padFilePaths);
-                            self->padGrid.repaint();
-                        }
-                        else
-                        {
-                            self->appendLog("Load FAILED from sandbox: " + dest.getFullPathName());
-                            juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Load Failed", "Could not load file.");
+                            s->appendLog("Copy FAILED: " + errorMsg);
+                            juce::Logger::outputDebugString("UI Update: Copy FAILED: " + errorMsg);
+                            juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Copy Failed", "Could not copy file. " + errorMsg);
                         }
                     }
-                }
-            });
+                });
+            }
         });
     }
 
     void saveClicked()
     {
-        // Choose a directory to save the project (settings) JSON/state
         auto flags = juce::FileBrowserComponent::saveMode
                    | juce::FileBrowserComponent::canSelectDirectories
                    | juce::FileBrowserComponent::warnAboutOverwriting;
@@ -449,7 +496,6 @@ private:
         int partIdx = app.getActivePart();
         juce::String partName = juce::String("Part ") + juce::String(partNames[juce::jlimit(0, 3, partIdx)]);
         juce::String base = partName + " | Playing: " + juce::String(playing) + " | BPM " + juce::String(app.settings.bpm, 0);
-        // Reflect suppression, not running state
         auto msg = app.scheduler.isSuppressed() ? ("Modifiers OFF | " + base) : ("Modifiers ON | " + base);
         statusLabel.setText(msg, juce::dontSendNotification);
         appendLog(msg);
@@ -472,6 +518,68 @@ private:
         refreshStatus();
     }
 
+    // Helper: secure copy using NSFileCoordinator
+    bool secureCopyFile(const juce::File& src, const juce::File& dest, juce::String& errorMsg)
+    {
+       #if JUCE_IOS && __OBJC__
+        @autoreleasepool {
+            NSString* srcPath = [NSString stringWithUTF8String: src.getFullPathName().toRawUTF8()];
+            NSURL* srcUrl = [NSURL fileURLWithPath:srcPath];
+            
+            BOOL accessing = [srcUrl startAccessingSecurityScopedResource];
+            if (!accessing) {
+                juce::Logger::outputDebugString("secureCopyFile: startAccessing returned NO (might be normal for local files)");
+            }
+
+            __block BOOL copySuccess = NO;
+            __block NSError* copyError = nil;
+
+            NSFileCoordinator* coordinator = [[NSFileCoordinator alloc] initWithFilePresenter:nil];
+            NSError* coordError = nil;
+            
+            [coordinator coordinateReadingItemAtURL:srcUrl 
+                                            options:NSFileCoordinatorReadingWithoutChanges 
+                                              error:&coordError 
+                                         byAccessor:^(NSURL *newURL) {
+                
+                NSFileManager* fm = [NSFileManager defaultManager];
+                NSString* dstPath = [NSString stringWithUTF8String: dest.getFullPathName().toRawUTF8()];
+                NSURL* dstUrl = [NSURL fileURLWithPath:dstPath];
+                
+                if ([fm fileExistsAtPath:dstUrl.path]) {
+                    [fm removeItemAtURL:dstUrl error:nil];
+                }
+                
+                copySuccess = [fm copyItemAtURL:newURL toURL:dstUrl error:&copyError];
+            }];
+
+            if (accessing) [srcUrl stopAccessingSecurityScopedResource];
+
+            if (coordError != nil) {
+                const char* errStr = [coordError.localizedDescription UTF8String];
+                errorMsg = "Coordinator error: " + juce::String(errStr ? errStr : "unknown");
+                return false;
+            }
+            
+            if (!copySuccess) {
+                if (copyError) {
+                    const char* errStr = [copyError.localizedDescription UTF8String];
+                    errorMsg = "Copy error: " + juce::String(errStr ? errStr : "unknown");
+                } else {
+                    errorMsg = "Copy failed unknown error";
+                }
+                return false;
+            }
+            
+            return true;
+        }
+       #else
+        bool ok = src.copyFileTo(dest);
+        if (!ok) errorMsg = "copy failed";
+        return ok;
+       #endif
+    }
+
     // UI containers
     juce::TabbedComponent tabs { juce::TabbedButtonBar::TabsAtTop };
     juce::Component playbackContainer;
@@ -490,7 +598,7 @@ private:
     juce::Label slotLabel;
     juce::ComboBox slotBox;
     juce::TextButton saveButton;
-    int selectedLoadSlot = 0; // 0-based index
+    int selectedLoadSlot = -1; // -1 means first empty, otherwise 0-based index
 
     void appendLog(const juce::String& msg)
     {

@@ -328,6 +328,15 @@ void AudioBufferManager::resetAllBuffers()
     }
 }
 
+void AudioBufferManager::restartAllLoadedBuffersToBeginning()
+{
+    for (auto& buffer : buffers)
+    {
+        if (buffer->hasAudioLoaded())
+            buffer->resetToBeginning();
+    }
+}
+
 void AudioBufferManager::setStartOffsetSamples(int64_t startOffsetSamples)
 {
     globalStartOffsetSamples = juce::jmax<int64_t>(0, startOffsetSamples);

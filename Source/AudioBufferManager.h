@@ -66,6 +66,7 @@ public:
     void playAll();
     void stopAll();
     void resetAllBuffers();
+    void restartAllLoadedBuffersToBeginning();
   // Parts: set playback start offset for all buffers (in samples)
   void setStartOffsetSamples(int64_t startOffsetSamples);
   // Parts: set end offset (absolute samples from start of file); 0 disables

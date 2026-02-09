@@ -198,6 +198,7 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
         bool gateAsPlaying = true;
         HostTransportState state = HostTransportState::Unknown;
         HostTransportSource source = HostTransportSource::Unknown;
+        bool restartedToBeginning = false;
     };
 
     const auto host = [this, numSamples = buffer.getNumSamples()]() -> HostTransportResult
@@ -216,12 +217,56 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
         if (positionInfoLooksEmpty(pos))
             return r; // host gave us nothing meaningful
 
+        auto detectRestart = [&pos, numSamples](HostTransportResult& out,
+                                                int64_t prevTimeInSamples,
+                                                bool prevPpqValid,
+                                                double prevPpqPosition)
+        {
+            // If the host playhead jumps backwards to (near) the start, treat it as a restart.
+            // This makes pads restart from the beginning when the user sets the DAW playhead to bar 1.
+            bool restarted = false;
+
+            if (auto tis = pos.getTimeInSamples(); tis.hasValue())
+            {
+                const int64_t current = (int64_t) *tis;
+                if (prevTimeInSamples >= 0)
+                {
+                    const int64_t delta = current - prevTimeInSamples;
+                    const int64_t nearStart = (int64_t) numSamples * 4;
+
+                    if (delta < -(int64_t) numSamples * 4 && current <= nearStart)
+                        restarted = true;
+                }
+            }
+
+            if (auto ppq = pos.getPpqPosition(); ppq.hasValue())
+            {
+                const double current = (double) *ppq;
+                // Most hosts report bar 1 beat 1 near PPQ = 0.0.
+                const bool nearStart = current <= 0.25;
+                if (prevPpqValid)
+                {
+                    const double delta = current - prevPpqPosition;
+                    if (delta < -0.5 && nearStart)
+                        restarted = true;
+                }
+            }
+
+            out.restartedToBeginning = restarted;
+        };
+
         const bool reportedPlaying = pos.getIsPlaying();
         if (reportedPlaying)
         {
             r.gateAsPlaying = true;
             r.state = HostTransportState::Playing;
             r.source = HostTransportSource::Reported;
+
+            const int64_t prevTime = lastHostTimeInSamples;
+            const bool prevPpqValid = lastHostPpqValid;
+            const double prevPpq = lastHostPpqPosition;
+            detectRestart(r, prevTime, prevPpqValid, prevPpq);
+
             // Keep inference state warm when playing.
             if (auto tis = pos.getTimeInSamples(); tis.hasValue())
                 lastHostTimeInSamples = (int64_t) *tis;
@@ -235,6 +280,10 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
 
         // Fallback inference: some hosts/plugins report isPlaying=false while timeline still advances.
         bool inferredPlaying = false;
+
+        const int64_t prevTime = lastHostTimeInSamples;
+        const bool prevPpqValid = lastHostPpqValid;
+        const double prevPpq = lastHostPpqPosition;
 
         if (auto tis = pos.getTimeInSamples(); tis.hasValue())
         {
@@ -268,6 +317,9 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
         {
             lastHostPpqValid = false;
         }
+
+        // Even if the host reports stopped, we still want to detect explicit playhead jumps.
+        detectRestart(r, prevTime, prevPpqValid, prevPpq);
 
         r.gateAsPlaying = inferredPlaying;
         r.state = inferredPlaying ? HostTransportState::Playing : HostTransportState::Stopped;
@@ -312,6 +364,11 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
 
     const bool hostPlaying = host.gateAsPlaying;
     const bool wasHostPlaying = lastHostPlaying.exchange(hostPlaying);
+
+    // If the user restarts the DAW playhead to the beginning, restart pads too.
+    // Do this even while stopped so it's armed before pressing play.
+    if (host.restartedToBeginning)
+        app.bufferManager.restartAllLoadedBuffersToBeginning();
 
     // If we have pending state-restored samples to reload, schedule background decode now.
     if (pendingRestoreReload.exchange(false))

@@ -28,7 +28,7 @@ public:
         addAndMakeVisible(fxStatusPanel);
 
         addAndMakeVisible(modifiersToggle);
-        modifiersToggle.setToggleState(true, juce::dontSendNotification);
+        modifiersToggle.setToggleState(app.settings.modifiersEnabled, juce::dontSendNotification);
         modifiersToggle.onClick = [this]{ modifiersToggleChanged(); };
 
         addAndMakeVisible(implementedOnlyToggle);
@@ -297,6 +297,7 @@ private:
     void modifiersToggleChanged()
     {
         const bool enabled = modifiersToggle.getToggleState();
+        app.settings.modifiersEnabled = enabled;
         if (enabled)
         {
             if (! app.scheduler.isRunning())

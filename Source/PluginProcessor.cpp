@@ -379,6 +379,10 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
 
     if (! hostPlaying)
     {
+        // Stop modifier queue when the host transport is stopped.
+        if (app.scheduler.isRunning())
+            app.scheduler.stop();
+
         // When stopped, reset tempo-follow multiplier so the next transport start establishes
         // a fresh reference BPM.
         tempoReferenceBpm = 0.0;
@@ -403,6 +407,18 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
         app.bufferManager.stopAll();
 
     const bool enabled = transportPlaybackEnabled.load();
+
+    // Start modifier queue when the host begins playback (and user hasn't disabled modifiers).
+    if (app.settings.modifiersEnabled)
+    {
+        if (! app.scheduler.isRunning())
+            app.scheduler.start();
+    }
+    else
+    {
+        if (app.scheduler.isRunning())
+            app.scheduler.stop();
+    }
 
     // When following the DAW transport, keep buffers playing while the host is playing.
     // This makes transport-start reliable and also starts newly-loaded pads immediately

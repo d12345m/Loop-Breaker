@@ -19,6 +19,9 @@ struct SessionSettings
     int timeSigDenominator = 4;         // e.g. 4 in 4/4
     int barsBetweenModifiers = 4;       // How many bars elapse before next modifier is applied
 
+  // Modifier scheduling
+  bool modifiersEnabled = true;       // If false, the modifier queue is stopped/suppressed
+
   // Scheduler quantization
   bool quantizeEnabled = false;       // If true, triggers snap to grid
   int quantizeSubdivision = 4;        // Subdivisions per bar when quantized (1,2,4,8,16)

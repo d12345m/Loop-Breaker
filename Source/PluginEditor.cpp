@@ -72,6 +72,11 @@ public:
         padGrid.setAudioFormatManager(&processor.getFormatManager());
         attachPadCallbacks();
 
+        padGrid.setFilesDroppedOnPadCallback([this](int startPadIndex, const juce::StringArray& files)
+        {
+            loadDroppedFiles(startPadIndex, files);
+        });
+
         modifierSelectionPanel.setForceSelectionCallback([this](ModifierType type){
             app.scheduler.forceUpcomingModifier(type);
         });
@@ -189,6 +194,45 @@ private:
 
     std::unique_ptr<juce::FileChooser> fileChooser;
 
+    void ensurePadFilePathsSized()
+    {
+        while (app.settings.padFilePaths.size() < AudioBufferManager::MAX_BUFFERS)
+            app.settings.padFilePaths.add({});
+    }
+
+    void loadFileIntoPad(int padIndex, const juce::File& file)
+    {
+        if (! juce::isPositiveAndBelow(padIndex, AudioBufferManager::MAX_BUFFERS))
+            return;
+
+        if (! file.existsAsFile())
+            return;
+
+        const bool ok = app.bufferManager.loadAudioFile(padIndex, file, processor.getFormatManager());
+        if (! ok)
+            return;
+
+        ensurePadFilePathsSized();
+        app.settings.padFilePaths.set(padIndex, file.getFullPathName());
+        padGrid.setPadFilePath(padIndex, file.getFullPathName());
+    }
+
+    void loadDroppedFiles(int startPadIndex, const juce::StringArray& files)
+    {
+        if (! juce::isPositiveAndBelow(startPadIndex, AudioBufferManager::MAX_BUFFERS))
+            return;
+
+        int padIndex = startPadIndex;
+        for (const auto& path : files)
+        {
+            if (padIndex >= AudioBufferManager::MAX_BUFFERS)
+                break;
+
+            loadFileIntoPad(padIndex, juce::File(path));
+            ++padIndex;
+        }
+    }
+
     void timerCallback() override
     {
         // Lightweight UI refresh only; timing is driven by the audio thread in the processor.
@@ -284,15 +328,7 @@ private:
                 auto file = chooser.getResult();
                 if (file.existsAsFile())
                 {
-                    const bool ok = app.bufferManager.loadAudioFile(padIndex, file, processor.getFormatManager());
-                    if (ok)
-                    {
-                        // Update settings + UI labels
-                        while (app.settings.padFilePaths.size() < AudioBufferManager::MAX_BUFFERS)
-                            app.settings.padFilePaths.add({});
-                        app.settings.padFilePaths.set(padIndex, file.getFullPathName());
-                        padGrid.setPadFilePath(padIndex, file.getFullPathName());
-                    }
+                    loadFileIntoPad(padIndex, file);
                 }
                 fileChooser.reset();
             });

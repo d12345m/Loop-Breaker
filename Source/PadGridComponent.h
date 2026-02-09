@@ -13,6 +13,7 @@
 
 // Simple 2x4 pad grid showing selectable pads and (new) filename indicators.
 class PadGridComponent : public juce::Component,
+                         public juce::FileDragAndDropTarget,
                          private juce::Timer,
                          private juce::ChangeListener
 {
@@ -211,7 +212,39 @@ public:
     // Callback for external listeners when any pad selection toggles.
     std::function<void()> selectionChanged;
 
+    // Callback invoked when files are dropped on a specific pad.
+    // The StringArray contains full file paths.
+    std::function<void(int /*padIndex*/, const juce::StringArray& /*files*/)> filesDroppedOnPad;
+
     void setSelectionChangedCallback(std::function<void()> cb) { selectionChanged = std::move(cb); }
+
+    void setFilesDroppedOnPadCallback(std::function<void(int, const juce::StringArray&)> cb)
+    {
+        filesDroppedOnPad = std::move(cb);
+    }
+
+    bool isInterestedInFileDrag (const juce::StringArray& files) override
+    {
+        for (const auto& f : files)
+        {
+            const auto ext = juce::File(f).getFileExtension().toLowerCase();
+            if (ext == ".wav" || ext == ".aif" || ext == ".aiff" || ext == ".flac" || ext == ".mp3")
+                return true;
+        }
+        return false;
+    }
+
+    void filesDropped (const juce::StringArray& files, int x, int y) override
+    {
+        if (filesDroppedOnPad == nullptr)
+            return;
+
+        const int padIndex = getPadIndexAt({ x, y });
+        if (! juce::isPositiveAndBelow(padIndex, numPads))
+            return;
+
+        filesDroppedOnPad(padIndex, files);
+    }
 
     // Set total sample length for a pad (for full-file visualization mapping)
     void setTotalSamplesForPad(int padIndex, double totalSamples)
@@ -271,6 +304,19 @@ private:
         // Colour-code missing pads to draw attention
         padFileLabels[padIndex]->setColour(juce::Label::textColourId, isMissing ? juce::Colours::orangered : juce::Colours::lightgrey);
         padFileLabels[padIndex]->setText(name, juce::dontSendNotification);
+    }
+
+    int getPadIndexAt(juce::Point<int> p) const
+    {
+        for (int i = 0; i < numPads; ++i)
+        {
+            if ((padButtons[i] != nullptr && padButtons[i]->getBounds().contains(p))
+                || (padFileLabels[i] != nullptr && padFileLabels[i]->getBounds().contains(p)))
+            {
+                return i;
+            }
+        }
+        return -1;
     }
 
     void paintOverChildren(juce::Graphics& g) override

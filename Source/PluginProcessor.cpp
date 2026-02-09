@@ -194,13 +194,73 @@ juce::AudioProcessorEditor* BufferTestAudioProcessor::createEditor()
 
 void BufferTestAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-    // TODO: plugin state persistence will be wired to ProjectManager/SessionSettings.
-    destData.reset();
+    // Persist the minimal state required to restore loaded samples when the DAW session reopens.
+    // (Absolute file paths; if a file is missing on restore, the pad will remain empty.)
+    juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+    obj->setProperty("v", 1);
+
+    juce::Array<juce::var> pads;
+    pads.ensureStorageAllocated(AudioBufferManager::MAX_BUFFERS);
+    for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
+        pads.add(app.settings.padFilePaths[i]);
+    obj->setProperty("pads", juce::var(pads));
+
+    const juce::String json = juce::JSON::toString(juce::var(obj.get()), false);
+    destData.replaceWith(json.toRawUTF8(), (size_t) json.getNumBytesAsUTF8());
 }
 
 void BufferTestAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
-    juce::ignoreUnused(data, sizeInBytes);
+    if (data == nullptr || sizeInBytes <= 0)
+        return;
+
+    const juce::String stateString = juce::String::fromUTF8((const char*) data, sizeInBytes);
+    juce::var parsed = juce::JSON::parse(stateString);
+    if (parsed.isVoid() || ! parsed.isObject())
+        return;
+
+    auto* obj = parsed.getDynamicObject();
+    if (obj == nullptr)
+        return;
+
+    if (! obj->hasProperty("pads"))
+        return;
+
+    auto padsVar = obj->getProperty("pads");
+    if (! padsVar.isArray())
+        return;
+
+    auto* arr = padsVar.getArray();
+    if (arr == nullptr)
+        return;
+
+    // Update settings
+    app.settings.padFilePaths.clearQuick();
+    for (int i = 0; i < arr->size(); ++i)
+        app.settings.padFilePaths.add(arr->getReference(i).toString());
+
+    while (app.settings.padFilePaths.size() < AudioBufferManager::MAX_BUFFERS)
+        app.settings.padFilePaths.add({});
+    if (app.settings.padFilePaths.size() > AudioBufferManager::MAX_BUFFERS)
+        app.settings.padFilePaths.removeRange(AudioBufferManager::MAX_BUFFERS,
+                                              app.settings.padFilePaths.size() - AudioBufferManager::MAX_BUFFERS);
+
+    // Reload buffers from paths
+    for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
+    {
+        const auto path = app.settings.padFilePaths[i];
+        if (path.isNotEmpty())
+        {
+            const juce::File f(path);
+            if (f.existsAsFile())
+            {
+                app.bufferManager.loadAudioFile(i, f, formatManager);
+                continue;
+            }
+        }
+
+        app.bufferManager.clearBuffer(i);
+    }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

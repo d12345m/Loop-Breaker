@@ -330,13 +330,27 @@ private:
     void updatePadLabel(int padIndex)
     {
     if (!juce::isPositiveAndBelow(padIndex, padFileLabels.size())) return;
-        auto name = padFileNames[padIndex];
-        const bool isMissing = name.equalsIgnoreCase("[missing]");
-        if (name.isEmpty())
+        const auto stored = padFileNames[padIndex];
+        if (stored.isEmpty())
         {
             padFileLabels[padIndex]->setText("", juce::dontSendNotification);
             return;
         }
+
+        // Determine whether this looks like a file path and whether it's missing on disk.
+        const juce::File f(stored);
+        const bool looksLikePath = juce::File::isAbsolutePath(stored) || stored.containsChar('/') || stored.containsChar('\\');
+        const bool missingOnDisk = looksLikePath && ! f.existsAsFile();
+        const bool isMissing = stored.equalsIgnoreCase("[missing]") || missingOnDisk;
+
+        // Display just the basename for paths; keep the full path in state.
+        auto name = looksLikePath ? f.getFileNameWithoutExtension() : stored;
+        if (name.isEmpty())
+            name = isMissing ? juce::String("Missing") : juce::String();
+
+        if (isMissing)
+            name << "!";
+
         // Truncate long names for compact display
         const int maxChars = 10;
         if (name.length() > maxChars)

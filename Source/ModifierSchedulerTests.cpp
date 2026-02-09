@@ -2,6 +2,7 @@
 #include <JuceHeader.h>
 #include "ModifierScheduler.h"
 #include "SessionSettings.h"
+#include "AppState.h"
 
 class ModifierSchedulerQuantizeTest : public juce::UnitTest {
 public:

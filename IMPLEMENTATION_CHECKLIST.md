@@ -22,6 +22,18 @@ Legend:
 
 ---
 
+## Pivot: VST Plugin Target (NEW)
+
+The project is pivoting from “iOS-first app” to “VST3 plugin-first”. Keep existing targets for now (standalone/iOS), but new work should prioritize plugin requirements:
+
+- [ ] Enable VST3 target in Projucer (.jucer) while leaving existing targets intact
+- [ ] Define plugin bus layout for multi-output (8 buffers -> 8 distinct DAW outputs)
+- [ ] Decide default mode: master-only stereo vs multi-out enabled by default (document)
+- [ ] Add routing policy for hosts that don’t enable all outputs (document + fallback)
+- [ ] Update UI/UX assumptions for plugin (no iOS-only pickers; drag-and-drop required)
+
+---
+
 ## 1. UI Architecture Migration
 
 - [x] Create `MainAppComponent` to replace `MainComponent` gradually
@@ -35,6 +47,13 @@ Legend:
 - [x] Expanded visual feedback / log area for modifier history (basic panel w/ last 100 events)
 - [x] Per‑pad playing-state indicator (highlight/outline while buffer active)
 - [x] Replace old `MainComponent` (now gated & excluded by default build)
+
+### Plugin Editor UX (NEW)
+
+- [ ] Add drag-and-drop sample loading onto pads (desktop OS file drop)
+- [ ] Keep click-to-load fallback (FileChooser) for hosts where drag/drop is limited
+- [ ] Visual affordance for drop target (per-pad highlight on drag enter)
+- [ ] Failure UX: unsupported format / missing file / permission error (non-modal, logged)
 
 #### Modifier History Panel Enhancements (incremental)
 
@@ -64,6 +83,11 @@ Legend:
 - [x] Drift resilience: use absolute nextTriggerTime (monotonic) instead of resetting window accumulator
 - [x] UI: countdown / progress display (UpcomingModifierDisplay progress bar)
 - [x] Suppression mode: maintain visual progress while preventing modifier firing when modifiers toggle off
+
+### Plugin Timing Considerations (NEW)
+
+- [ ] Confirm timeline source policy for plugin: BPM internal vs DAW tempo sync (needs decision)
+- [ ] If DAW tempo sync is desired: map host tempo + transport state to scheduler (document)
 
 ---
 
@@ -98,6 +122,22 @@ Legend:
 - [ ] Implement tremolo (LFO depth & rate envelope capable)
 - [ ] Master chain: HPF + LPF available (enable/disable via master modifiers)
 - [ ] Performance audit: no dynamic allocations per audio block
+
+---
+
+## Multi-Output Routing (DAW) (NEW)
+
+Goal: each of the 8 buffers can be routed to its own DAW output channel/bus.
+
+- [ ] Implement per-buffer output assignment (buffer i -> output bus j)
+- [ ] Ensure master FX chain is compatible with both master-only and multi-out modes
+- [ ] Verify behavior in at least one multi-out-capable host (manual QA checklist)
+- [ ] Add debug display showing which outputs are currently active/enabled by host
+
+Constraints:
+
+- [ ] Host may not activate all outputs; plugin must not crash and must produce sensible audio
+- [ ] No dynamic allocations or file I/O on the audio thread
 
 ---
 
@@ -153,12 +193,14 @@ Legend:
 
 ## 11. iOS Platform Integration
 
-- [ ] Replace desktop file chooser with UIDocumentPicker bridge
-- [ ] Optimize UI layout for portrait/landscape
-- [ ] Touch interactions: larger pads, velocity? (future)
-- [ ] Background audio session category configuration
-- [ ] Power / CPU profiling on device
-- [ ] iOS specific entitlements (file access, audio)
+Status: deferred while VST3 plugin is the primary target.
+
+- [ ] (Deferred) Replace desktop file chooser with UIDocumentPicker bridge
+- [ ] (Deferred) Optimize UI layout for portrait/landscape
+- [ ] (Deferred) Touch interactions: larger pads, velocity? (future)
+- [ ] (Deferred) Background audio session category configuration
+- [ ] (Deferred) Power / CPU profiling on device
+- [ ] (Deferred) iOS specific entitlements (file access, audio)
 
 ---
 
@@ -214,6 +256,12 @@ Legend:
 - [ ] Confirm file access limited to user-chosen locations
 - [ ] Remove diagnostic exports in release builds
 - [ ] Harden JSON parsing (validate schema)
+
+## 17b. Host / File Access Considerations (Plugin) (NEW)
+
+- [ ] Document expected file access model (absolute paths, missing-file recovery)
+- [ ] Decide whether to copy imported samples into a project-managed folder vs reference-in-place
+- [ ] Ensure graceful handling when file paths become invalid
 
 ---
 
@@ -290,3 +338,5 @@ Add clarifications inline as decisions are made.
 - 2025-09-30: Implemented per-pad playing-state indicator (green outline updated via timer), unified UI refinement.
 - 2025-10-01: Integrated UpcomingModifierDisplay progress bar & suppression mode; scheduler now absolute-time with quantization backend; Reverse/Speed/ResetAll modifiers fully active with ResetAll preserving playback.
 - 2025-10-01: Implemented experimental reverse & speed-jump crossfades (artifact mitigation); decision made to defer & plan rollback; checklist updated to reflect true current state.
+
+- 2026-02-09: Pivot decision: prioritize VST3 plugin target; added checklist sections for VST enablement, multi-output routing, and drag-and-drop sample loading.

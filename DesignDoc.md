@@ -91,9 +91,7 @@ There should be an options area where users can set:
 
 2.) BPM
 
-3.) Add/change the audio files.
-    - Plugin: drag-and-drop from the desktop OS + file chooser fallback.
-    - (If the iOS target remains in use later: still support the Apple Files picker bridge.)
+3.) Add/change the audio files. - Plugin: drag-and-drop from the desktop OS + file chooser fallback. - (If the iOS target remains in use later: still support the Apple Files picker bridge.)
 
 4.) Time signature
 
@@ -103,9 +101,7 @@ There should be an options area where users can set:
 
 6.) About
 
-7.) Multi-output routing mode:
-    - Master-only (all buffers mixed to main out)
-    - Multi-out (each buffer to its own DAW output bus)
+7.) Multi-output routing mode: - Master-only (all buffers mixed to main out) - Multi-out (each buffer to its own DAW output bus)
 
 ## Project Settings
 

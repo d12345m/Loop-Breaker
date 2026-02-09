@@ -245,6 +245,7 @@ public:
 
         isFileDragActive = false;
         hoveredPadIndex = -1;
+        dragAudioFileCount = 0;
         repaint();
 
         filesDroppedOnPad(padIndex, files);
@@ -256,6 +257,7 @@ public:
             return;
 
         isFileDragActive = true;
+        dragAudioFileCount = countAudioFiles(files);
         hoveredPadIndex = getPadIndexAt({ x, y });
         repaint();
     }
@@ -266,6 +268,7 @@ public:
             return;
 
         isFileDragActive = true;
+        dragAudioFileCount = countAudioFiles(files);
 
         const int newHover = getPadIndexAt({ x, y });
         if (newHover != hoveredPadIndex)
@@ -279,6 +282,7 @@ public:
     {
         isFileDragActive = false;
         hoveredPadIndex = -1;
+        dragAudioFileCount = 0;
         repaint();
     }
 
@@ -438,18 +442,31 @@ private:
                 }
 
                 // File-drag hover overlay + hint
-                if (isFileDragActive && hoveredPadIndex == i)
+                if (isFileDragActive && hoveredPadIndex >= 0)
                 {
-                    g.setColour(juce::Colours::cornflowerblue.withAlpha(0.18f));
-                    g.fillRoundedRectangle(r.expanded(2.f), 6.f);
-                    g.setColour(juce::Colours::cornflowerblue.withAlpha(0.9f));
-                    g.drawRoundedRectangle(r.expanded(2.f), 6.f, 2.0f);
+                    const int count = juce::jmax(1, dragAudioFileCount);
+                    const int previewEnd = juce::jmin(numPads, hoveredPadIndex + count);
+                    const bool inPreviewRange = (i >= hoveredPadIndex && i < previewEnd);
 
-                    auto hintArea = r.reduced(10.f).toNearestInt();
-                    hintArea.removeFromBottom(18); // keep clear of filename label region
-                    g.setColour(juce::Colours::lightgrey.withAlpha(0.9f));
-                    g.setFont(juce::Font(juce::FontOptions().withHeight(13.0f)));
-                    g.drawFittedText("Drop to load", hintArea, juce::Justification::centred, 1);
+                    if (inPreviewRange)
+                    {
+                        const bool isHovered = (hoveredPadIndex == i);
+                        g.setColour(juce::Colours::cornflowerblue.withAlpha(isHovered ? 0.18f : 0.10f));
+                        g.fillRoundedRectangle(r.expanded(2.f), 6.f);
+                        g.setColour(juce::Colours::cornflowerblue.withAlpha(isHovered ? 0.9f : 0.55f));
+                        g.drawRoundedRectangle(r.expanded(2.f), 6.f, isHovered ? 2.0f : 1.2f);
+
+                        if (isHovered)
+                        {
+                            auto hintArea = r.reduced(10.f).toNearestInt();
+                            hintArea.removeFromBottom(18); // keep clear of filename label region
+                            g.setColour(juce::Colours::lightgrey.withAlpha(0.9f));
+                            g.setFont(juce::Font(juce::FontOptions().withHeight(13.0f)));
+                            const auto hint = (count > 1) ? ("Drop to load " + juce::String(count))
+                                                         : juce::String("Drop to load");
+                            g.drawFittedText(hint, hintArea, juce::Justification::centred, 1);
+                        }
+                    }
                 }
             }
         }
@@ -457,6 +474,19 @@ private:
 
     bool isFileDragActive { false };
     int hoveredPadIndex { -1 };
+    int dragAudioFileCount { 0 };
+
+    static int countAudioFiles(const juce::StringArray& files)
+    {
+        int count = 0;
+        for (const auto& f : files)
+        {
+            const auto ext = juce::File(f).getFileExtension().toLowerCase();
+            if (ext == ".wav" || ext == ".aif" || ext == ".aiff" || ext == ".flac" || ext == ".mp3")
+                ++count;
+        }
+        return count;
+    }
 
     void timerCallback() override
     {

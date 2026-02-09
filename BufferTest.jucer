@@ -3,7 +3,7 @@
 <JUCERPROJECT id="vFjAY7" name="BufferTest" projectType="audioplug" useAppConfig="0"
               addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1"
               pluginName="BufferTest" pluginDesc="BufferTest" pluginManufacturer="Glowmachine"
-              pluginManufacturerCode="GloM" pluginCode="BfTs" pluginChannelConfigs="{1, 1}, {2, 2}"
+              pluginManufacturerCode="GloM" pluginCode="BfTs"
               pluginIsSynth="0" pluginWantsMidiIn="0" pluginProducesMidiOut="0"
               pluginIsMidiEffectPlugin="0" pluginEditorRequiresKeys="0"
               pluginAUExportPrefix="BufferTestAU" pluginAAXIdentifier="com.glowmachine.BufferTest"

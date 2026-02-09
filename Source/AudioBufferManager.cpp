@@ -82,6 +82,28 @@ void AudioBufferManager::processBlock(juce::AudioBuffer<float>& outputBuffer)
     }
 }
 
+void AudioBufferManager::processSingleBuffer(int bufferIndex, juce::AudioBuffer<float>& outputBuffer)
+{
+    outputBuffer.clear();
+
+    if (! isValidBufferIndex(bufferIndex))
+        return;
+
+    auto& buffer = buffers[(size_t) bufferIndex];
+    if (buffer == nullptr || ! buffer->hasAudioLoaded())
+        return;
+
+    buffer->processBlock(outputBuffer);
+
+    if (perBufferProcessor)
+        perBufferProcessor(bufferIndex, outputBuffer, hostSampleRate);
+
+    const float masterVol = masterVolume.load();
+    if (masterVol != 1.0f)
+        outputBuffer.applyGain(masterVol);
+
+}
+
 void AudioBufferManager::releaseResources()
 {
     for (auto& buffer : buffers)

@@ -38,6 +38,7 @@ public:
     // Setup and lifecycle
     void prepare(double sampleRate, int samplesPerBlockExpected);
     void processBlock(juce::AudioBuffer<float>& outputBuffer);
+    void processSingleBuffer(int bufferIndex, juce::AudioBuffer<float>& outputBuffer);
     void releaseResources();
     
     //==============================================================================

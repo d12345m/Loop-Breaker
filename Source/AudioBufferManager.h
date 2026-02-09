@@ -56,6 +56,8 @@ public:
     //==============================================================================
     // File loading
     bool loadAudioFile(int bufferIndex, const juce::File& file, juce::AudioFormatManager& formatManager);
+    bool requestLoadAudioFile(int bufferIndex, const juce::File& file);
+    void applyPendingLoads();
     void clearBuffer(int bufferIndex);
     void clearAllBuffers();
     
@@ -105,6 +107,23 @@ private:
   double hostSampleRate = 44100.0;
   int64_t globalStartOffsetSamples = 0; // applied at play() time
   int64_t globalEndOffsetSamples = 0;   // enforced during processing; 0 = disabled
+
+    //==============================================================================
+    // Background loading (no disk I/O on realtime thread)
+    struct PendingLoadedBuffer
+    {
+      int bufferIndex = -1;
+      AudioBuffer::LoadedAudioData::Ptr data;
+      juce::String sourcePath;
+      bool ok = false;
+    };
+
+    static constexpr int maxPendingLoads = 32;
+    juce::ThreadPool loaderPool { 1 };
+    juce::AbstractFifo pendingFifo { maxPendingLoads };
+    std::array<PendingLoadedBuffer, (size_t) maxPendingLoads> pendingLoads;
+
+    void enqueuePendingLoad(PendingLoadedBuffer&& p);
     
     // Listeners
     juce::Array<AudioBufferListener*> listeners;

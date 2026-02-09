@@ -244,8 +244,8 @@ private:
         if (! file.existsAsFile())
             return;
 
-        const bool ok = app.bufferManager.loadAudioFile(padIndex, file, processor.getFormatManager());
-        if (! ok)
+        const bool scheduled = app.bufferManager.requestLoadAudioFile(padIndex, file);
+        if (! scheduled)
             return;
 
         ensurePadFilePathsSized();

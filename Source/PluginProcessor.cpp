@@ -145,6 +145,10 @@ void BufferTestAudioProcessor::changeProgramName (int, const juce::String&)
 void BufferTestAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     app.bufferManager.prepare(sampleRate, samplesPerBlock);
+
+    // Some hosts may call setStateInformation before prepareToPlay; reload on the audio thread.
+    if (pendingRestoreReload.exchange(false))
+        reloadBuffersFromPadPaths();
 }
 
 void BufferTestAudioProcessor::releaseResources()
@@ -309,6 +313,13 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     const bool hostPlaying = host.gateAsPlaying;
     const bool wasHostPlaying = lastHostPlaying.exchange(hostPlaying);
 
+    // If we have pending state-restored samples to reload, schedule background decode now.
+    if (pendingRestoreReload.exchange(false))
+        reloadBuffersFromPadPaths();
+
+    // Apply any completed background loads (fast pointer swap; no disk I/O).
+    app.bufferManager.applyPendingLoads();
+
     if (! hostPlaying)
     {
         // On transport stop transition, stop buffers so the next play starts cleanly.
@@ -469,18 +480,31 @@ void BufferTestAudioProcessor::setStateInformation (const void* data, int sizeIn
         app.settings.padFilePaths.removeRange(AudioBufferManager::MAX_BUFFERS,
                                               app.settings.padFilePaths.size() - AudioBufferManager::MAX_BUFFERS);
 
-    // Reload buffers from paths
+    // Defer reloading buffers until we are on the audio thread (prepareToPlay/processBlock).
+    pendingRestoreReload.store(true);
+}
+
+void BufferTestAudioProcessor::reloadBuffersFromPadPaths()
+{
     for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
     {
         const auto path = app.settings.padFilePaths[i];
         if (path.isNotEmpty())
         {
             const juce::File f(path);
+
+            // existsAsFile can be true even if the reader fails to open (codec/permissions).
             if (f.existsAsFile())
             {
-                app.bufferManager.loadAudioFile(i, f, formatManager);
+                const bool scheduled = app.bufferManager.requestLoadAudioFile(i, f);
+                if (! scheduled)
+                    juce::Logger::writeToLog("State restore: failed to schedule pad " + juce::String(i + 1)
+                                             + " from " + f.getFullPathName());
                 continue;
             }
+
+            juce::Logger::writeToLog("State restore: missing file for pad " + juce::String(i + 1)
+                                     + " -> " + f.getFullPathName());
         }
 
         app.bufferManager.clearBuffer(i);

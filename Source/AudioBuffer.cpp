@@ -56,10 +56,33 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
     notifyPositionChanged();
 }
 
+AudioBuffer::LoadedAudioData::Ptr AudioBuffer::getAudioDataSnapshot() const
+{
+    const juce::SpinLock::ScopedLockType sl(audioDataLock);
+    return audioData;
+}
+
+bool AudioBuffer::hasAudioLoaded() const
+{
+    auto data = getAudioDataSnapshot();
+    return data != nullptr && data->buffer.getNumSamples() > 0;
+}
+
 void AudioBuffer::processWithRepitching(juce::AudioBuffer<float>& outputBuffer)
 {
     const int numOutputSamples = outputBuffer.getNumSamples();
-    const int numChannels = juce::jmin(outputBuffer.getNumChannels(), audioFileBuffer.getNumChannels());
+
+    auto data = getAudioDataSnapshot();
+    if (data == nullptr || data->buffer.getNumSamples() <= 0 || data->sampleRate <= 0.0)
+    {
+        outputBuffer.clear();
+        return;
+    }
+
+    const auto& sourceBuffer = data->buffer;
+    const int fileLengthSamples = sourceBuffer.getNumSamples();
+    const double fileSampleRate = data->sampleRate;
+    const int numChannels = juce::jmin(outputBuffer.getNumChannels(), sourceBuffer.getNumChannels());
     
     outputBuffer.clear();
     
@@ -69,7 +92,7 @@ void AudioBuffer::processWithRepitching(juce::AudioBuffer<float>& outputBuffer)
         double currentPos = playheadPosition.load();
         
         // Handle slice-based playback first
-        handleSlicePlayback(currentPos);
+        handleSlicePlayback(currentPos, fileLengthSamples);
         currentPos = playheadPosition.load(); // Get updated position after slice handling
         
         // Only handle normal boundary conditions if not in slicing mode
@@ -153,8 +176,8 @@ void AudioBuffer::processWithRepitching(juce::AudioBuffer<float>& outputBuffer)
         
         for (int channel = 0; channel < numChannels; ++channel)
         {
-            const float sample1 = audioFileBuffer.getSample(channel, pos1);
-            const float sample2 = audioFileBuffer.getSample(channel, pos2);
+            const float sample1 = sourceBuffer.getSample(channel, pos1);
+            const float sample2 = sourceBuffer.getSample(channel, pos2);
             const float interpolatedSample = sample1 + static_cast<float>(fraction) * (sample2 - sample1);
             
             outputBuffer.setSample(channel, sample, interpolatedSample);
@@ -163,7 +186,7 @@ void AudioBuffer::processWithRepitching(juce::AudioBuffer<float>& outputBuffer)
         // Apply crossfading for slice transitions (if active)
         if (isInCrossfade)
         {
-            applyCrossfadeToSliceTransition(outputBuffer, sample, 1);
+            applyCrossfadeToSliceTransition(sourceBuffer, fileLengthSamples, fileSampleRate, outputBuffer, sample, 1);
         }
         
         // Advance playhead
@@ -200,30 +223,51 @@ bool AudioBuffer::loadAudioFile(const juce::File& file, juce::AudioFormatManager
     
     if (reader == nullptr)
         return false;
-    
-    fileSampleRate = reader->sampleRate;
-    fileLengthSamples = static_cast<int>(reader->lengthInSamples);
+
+    auto newData = new LoadedAudioData();
+    newData->sampleRate = reader->sampleRate;
+    newData->fileName = file.getFileNameWithoutExtension();
+
+    const int fileLengthSamples = static_cast<int>(reader->lengthInSamples);
     const int numChannels = static_cast<int>(reader->numChannels);
-    
-    // Load entire file into memory for reliable playback
-    audioFileBuffer.setSize(numChannels, fileLengthSamples);
-    reader->read(&audioFileBuffer, 0, fileLengthSamples, 0, true, true);
-    
-    // Store filename for reference
-    loadedFileName = file.getFileNameWithoutExtension();
-    
-    // Reset playback position
-    playheadPosition.store(0.0);
-    
+
+    // Load entire file into memory (on the calling thread).
+    newData->buffer.setSize(numChannels, fileLengthSamples);
+    reader->read(&newData->buffer, 0, fileLengthSamples, 0, true, true);
+
+    setLoadedAudioData(newData);
     return true;
+}
+
+void AudioBuffer::setLoadedAudioData(LoadedAudioData::Ptr newData)
+{
+    {
+        const juce::SpinLock::ScopedLockType sl(audioDataLock);
+        audioData = newData;
+    }
+
+    // Reset playback position and transient state for a clean start.
+    playheadPosition.store(0.0);
+    clearLoopWindow();
+    slicingModeActive.store(false);
+    sliceTriggered.store(false);
+    currentActiveSlice.store(0);
+    targetSlice.store(0);
+    params.continuousRandomSlicing = false;
+
+    isInCrossfade = false;
+    crossfadePosition = 0;
+    previousSliceIndex = -1;
 }
 
 void AudioBuffer::clearAudioData()
 {
-    audioFileBuffer.setSize(0, 0);
-    loadedFileName.clear();
+    {
+        const juce::SpinLock::ScopedLockType sl(audioDataLock);
+        audioData = nullptr;
+    }
     playheadPosition.store(0.0);
-    fileLengthSamples = 0;
+    clearLoopWindow();
     resetToDefaults();
 }
 
@@ -340,6 +384,9 @@ void AudioBuffer::exitSlicingMode()
 
 int AudioBuffer::getCurrentSlice() const
 {
+    auto data = getAudioDataSnapshot();
+    const int fileLengthSamples = (data != nullptr ? data->buffer.getNumSamples() : 0);
+
     if (params.numSlices <= 1 || fileLengthSamples <= 0)
         return 0;
     
@@ -367,6 +414,9 @@ int AudioBuffer::getCurrentSlice() const
 
 double AudioBuffer::getPlayheadPositionInSeconds() const
 {
+    auto data = getAudioDataSnapshot();
+    const double fileSampleRate = (data != nullptr ? data->sampleRate : 0.0);
+
     if (fileSampleRate <= 0.0)
         return 0.0;
     return playheadPosition.load() / fileSampleRate;
@@ -374,9 +424,31 @@ double AudioBuffer::getPlayheadPositionInSeconds() const
 
 double AudioBuffer::getDurationInSeconds() const
 {
+    auto data = getAudioDataSnapshot();
+    const double fileSampleRate = (data != nullptr ? data->sampleRate : 0.0);
+    const int fileLengthSamples = (data != nullptr ? data->buffer.getNumSamples() : 0);
+
     if (fileSampleRate <= 0.0)
         return 0.0;
     return static_cast<double>(fileLengthSamples) / fileSampleRate;
+}
+
+int AudioBuffer::getDurationInSamples() const
+{
+    auto data = getAudioDataSnapshot();
+    return data != nullptr ? data->buffer.getNumSamples() : 0;
+}
+
+double AudioBuffer::getFileSampleRate() const
+{
+    auto data = getAudioDataSnapshot();
+    return data != nullptr ? data->sampleRate : 0.0;
+}
+
+juce::String AudioBuffer::getLoadedFileName() const
+{
+    auto data = getAudioDataSnapshot();
+    return data != nullptr ? data->fileName : juce::String();
 }
 
 //==============================================================================
@@ -413,7 +485,7 @@ void AudioBuffer::removeListener(AudioBufferListener* listener)
 // Internal Processing Methods
 //==============================================================================
 
-double AudioBuffer::getSliceStartPosition(int sliceIndex) const
+double AudioBuffer::getSliceStartPosition(int sliceIndex, int fileLengthSamples) const
 {
     if (sliceIndex < 0 || sliceIndex >= params.numSlices || fileLengthSamples <= 0)
         return 0.0;
@@ -430,7 +502,7 @@ double AudioBuffer::getSliceStartPosition(int sliceIndex) const
     return static_cast<double>(juce::jlimit<int64_t>(0, (int64_t)fileLengthSamples - 1, targetSample));
 }
 
-double AudioBuffer::getSliceEndPosition(int sliceIndex) const
+double AudioBuffer::getSliceEndPosition(int sliceIndex, int fileLengthSamples) const
 {
     if (sliceIndex < 0 || sliceIndex >= params.numSlices || fileLengthSamples <= 0)
         return 0.0;
@@ -462,12 +534,17 @@ void AudioBuffer::startSliceCrossfade(int newSliceIndex, double newPlayheadPos)
     playheadPosition.store(newPlayheadPos);
 }
 
-void AudioBuffer::applyCrossfadeToSliceTransition(juce::AudioBuffer<float>& outputBuffer, int startSample, int numSamples)
+void AudioBuffer::applyCrossfadeToSliceTransition(const juce::AudioBuffer<float>& sourceBuffer,
+                                                  int fileLengthSamples,
+                                                  double fileSampleRate,
+                                                  juce::AudioBuffer<float>& outputBuffer,
+                                                  int startSample,
+                                                  int numSamples)
 {
     if (!isInCrossfade)
         return;
         
-    const int numChannels = juce::jmin(outputBuffer.getNumChannels(), audioFileBuffer.getNumChannels());
+    const int numChannels = juce::jmin(outputBuffer.getNumChannels(), sourceBuffer.getNumChannels());
     const int remainingCrossfadeSamples = crossfadeLengthSamples - crossfadePosition;
     const int samplesToProcess = juce::jmin(numSamples, remainingCrossfadeSamples);
     
@@ -496,7 +573,7 @@ void AudioBuffer::applyCrossfadeToSliceTransition(juce::AudioBuffer<float>& outp
             for (int channel = 0; channel < numChannels; ++channel)
             {
                 // Linear interpolation for previous slice
-                const float* readPtr = audioFileBuffer.getReadPointer(channel);
+                const float* readPtr = sourceBuffer.getReadPointer(channel);
                 const float prevSample1 = readPtr[prevSampleIndex];
                 const float prevSample2 = readPtr[prevSampleIndex + 1];
                 const float prevInterpolatedSample = prevSample1 + static_cast<float>(prevFraction) * (prevSample2 - prevSample1);
@@ -530,7 +607,7 @@ void AudioBuffer::startBoundaryCrossfade(double newPlayheadPos)
     playheadPosition.store(newPlayheadPos);
 }
 
-void AudioBuffer::handleSlicePlayback(double& currentPos)
+void AudioBuffer::handleSlicePlayback(double& currentPos, int fileLengthSamples)
 {
     if (!slicingModeActive.load())
         return;
@@ -545,11 +622,11 @@ void AudioBuffer::handleSlicePlayback(double& currentPos)
         double newPos;
         if (speed >= 0.0)
         {
-            newPos = getSliceStartPosition(slice);
+            newPos = getSliceStartPosition(slice, fileLengthSamples);
         }
         else
         {
-            newPos = getSliceEndPosition(slice) - 1.0;
+            newPos = getSliceEndPosition(slice, fileLengthSamples) - 1.0;
         }
         
         // Start crossfade transition to new slice
@@ -563,8 +640,8 @@ void AudioBuffer::handleSlicePlayback(double& currentPos)
     if (params.continuousRandomSlicing)
     {
         int activeSlice = currentActiveSlice.load();
-        double sliceStart = getSliceStartPosition(activeSlice);
-        double sliceEnd = getSliceEndPosition(activeSlice);
+        double sliceStart = getSliceStartPosition(activeSlice, fileLengthSamples);
+        double sliceEnd = getSliceEndPosition(activeSlice, fileLengthSamples);
         
         // Check if we've reached the end/beginning of the current slice
         bool shouldTriggerNext = false;
@@ -588,11 +665,11 @@ void AudioBuffer::handleSlicePlayback(double& currentPos)
             double newPos;
             if (speed > 0.0)
             {
-                newPos = getSliceStartPosition(nextSlice);
+                newPos = getSliceStartPosition(nextSlice, fileLengthSamples);
             }
             else
             {
-                newPos = getSliceEndPosition(nextSlice) - 1.0;
+                newPos = getSliceEndPosition(nextSlice, fileLengthSamples) - 1.0;
             }
             
             // Start crossfade transition to new random slice
@@ -605,8 +682,8 @@ void AudioBuffer::handleSlicePlayback(double& currentPos)
     {
         // Non-continuous slice mode - check if we've reached the end of the current slice
         int activeSlice = currentActiveSlice.load();
-        double sliceStart = getSliceStartPosition(activeSlice);
-        double sliceEnd = getSliceEndPosition(activeSlice);
+        double sliceStart = getSliceStartPosition(activeSlice, fileLengthSamples);
+        double sliceEnd = getSliceEndPosition(activeSlice, fileLengthSamples);
         double speed = params.speed;
         
         if (speed > 0.0 && currentPos >= sliceEnd - 1.0)
@@ -689,7 +766,10 @@ void AudioBuffer::notifyPositionChanged()
 
 void AudioBuffer::releaseResources()
 {
-    audioFileBuffer.setSize(0, 0);
+    {
+        const juce::SpinLock::ScopedLockType sl(audioDataLock);
+        audioData = nullptr;
+    }
     repitchBuffer.setSize(0, 0);
     tempProcessingBuffer.setSize(0, 0);
     crossfadeBuffer.setSize(0, 0);

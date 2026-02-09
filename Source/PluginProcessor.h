@@ -95,5 +95,10 @@ private:
     bool lastHostPpqValid = false;
     double lastHostPpqPosition = 0.0;
 
+    // State restore: defer disk I/O until we are on the audio thread.
+    std::atomic<bool> pendingRestoreReload { false };
+
+    void reloadBuffersFromPadPaths();
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BufferTestAudioProcessor)
 };

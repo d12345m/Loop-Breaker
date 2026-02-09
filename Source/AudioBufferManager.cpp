@@ -16,6 +16,8 @@
 
 AudioBufferManager::AudioBufferManager()
 {
+    pendingLoads.fill({});
+
     // Initialize all buffers
     for (int i = 0; i < MAX_BUFFERS; ++i)
     {
@@ -106,6 +108,9 @@ void AudioBufferManager::processSingleBuffer(int bufferIndex, juce::AudioBuffer<
 
 void AudioBufferManager::releaseResources()
 {
+    // Ensure no background jobs are still decoding.
+    loaderPool.removeAllJobs(true, 5000);
+
     for (auto& buffer : buffers)
     {
         buffer->releaseResources();
@@ -149,6 +154,123 @@ bool AudioBufferManager::loadAudioFile(int bufferIndex, const juce::File& file, 
         return buffer->loadAudioFile(file, formatManager);
     }
     return false;
+}
+
+namespace
+{
+AudioBuffer::LoadedAudioData::Ptr decodeFileToLoadedData(const juce::File& file)
+{
+    if (!file.existsAsFile())
+        return nullptr;
+
+    juce::AudioFormatManager fm;
+    fm.registerBasicFormats();
+
+    std::unique_ptr<juce::AudioFormatReader> reader(fm.createReaderFor(file));
+    if (reader == nullptr)
+        return nullptr;
+
+    const int lengthSamples = (int) reader->lengthInSamples;
+    const int channels = (int) reader->numChannels;
+    if (lengthSamples <= 0 || channels <= 0)
+        return nullptr;
+
+    auto data = new AudioBuffer::LoadedAudioData();
+    data->sampleRate = reader->sampleRate;
+    data->fileName = file.getFileNameWithoutExtension();
+    data->buffer.setSize(channels, lengthSamples);
+    reader->read(&data->buffer, 0, lengthSamples, 0, true, true);
+    return data;
+}
+}
+
+void AudioBufferManager::enqueuePendingLoad(PendingLoadedBuffer&& p)
+{
+    int start1 = 0, size1 = 0, start2 = 0, size2 = 0;
+    pendingFifo.prepareToWrite(1, start1, size1, start2, size2);
+
+    if (size1 <= 0)
+    {
+        juce::Logger::writeToLog("Sample loader: pending queue full; dropping load for pad "
+                                 + juce::String(p.bufferIndex + 1) + " (" + p.sourcePath + ")");
+        return;
+    }
+
+    pendingLoads[(size_t) start1] = std::move(p);
+    pendingFifo.finishedWrite(1);
+}
+
+bool AudioBufferManager::requestLoadAudioFile(int bufferIndex, const juce::File& file)
+{
+    if (!isValidBufferIndex(bufferIndex) || !file.existsAsFile())
+        return false;
+
+    struct LoadJob final : public juce::ThreadPoolJob
+    {
+        LoadJob(AudioBufferManager& mgr, int idx, juce::File f)
+            : juce::ThreadPoolJob("Load sample")
+            , manager(mgr)
+            , bufferIndex(idx)
+            , file(std::move(f))
+        {
+        }
+
+        JobStatus runJob() override
+        {
+            PendingLoadedBuffer p;
+            p.bufferIndex = bufferIndex;
+            p.sourcePath = file.getFullPathName();
+            p.data = decodeFileToLoadedData(file);
+            p.ok = (p.data != nullptr);
+            manager.enqueuePendingLoad(std::move(p));
+            return jobHasFinished;
+        }
+
+        AudioBufferManager& manager;
+        int bufferIndex;
+        juce::File file;
+    };
+
+    loaderPool.addJob(new LoadJob(*this, bufferIndex, file), true);
+    return true;
+}
+
+void AudioBufferManager::applyPendingLoads()
+{
+    int start1 = 0, size1 = 0, start2 = 0, size2 = 0;
+    const int ready = pendingFifo.getNumReady();
+    if (ready <= 0)
+        return;
+
+    pendingFifo.prepareToRead(ready, start1, size1, start2, size2);
+
+    auto applyRange = [this](int start, int size)
+    {
+        for (int i = 0; i < size; ++i)
+        {
+            auto p = std::move(pendingLoads[(size_t) (start + i)]);
+            pendingLoads[(size_t) (start + i)] = {};
+
+            if (!isValidBufferIndex(p.bufferIndex))
+                continue;
+
+            if (!p.ok || p.data == nullptr)
+            {
+                juce::Logger::writeToLog("Sample loader: failed to decode pad "
+                                         + juce::String(p.bufferIndex + 1) + " from " + p.sourcePath);
+                clearBuffer(p.bufferIndex);
+                continue;
+            }
+
+            if (auto* buffer = getBuffer(p.bufferIndex))
+                buffer->setLoadedAudioData(p.data);
+        }
+    };
+
+    if (size1 > 0) applyRange(start1, size1);
+    if (size2 > 0) applyRange(start2, size2);
+
+    pendingFifo.finishedRead(size1 + size2);
 }
 
 void AudioBufferManager::clearBuffer(int bufferIndex)

@@ -71,6 +71,15 @@ struct AudioBufferParams
 class AudioBuffer
 {
 public:
+    struct LoadedAudioData : public juce::ReferenceCountedObject
+    {
+        using Ptr = juce::ReferenceCountedObjectPtr<LoadedAudioData>;
+
+        juce::AudioBuffer<float> buffer;
+        double sampleRate = 0.0;
+        juce::String fileName;
+    };
+
     AudioBuffer(int bufferIndex = 0);
     ~AudioBuffer() = default;
     
@@ -84,6 +93,9 @@ public:
     // Audio file loading
     bool loadAudioFile(const juce::File& file, juce::AudioFormatManager& formatManager);
     void clearAudioData();
+
+    // Swap in already-decoded audio data (safe for audio thread; no disk I/O)
+    void setLoadedAudioData(LoadedAudioData::Ptr newData);
     
     //==============================================================================
     // Transport controls
@@ -107,7 +119,7 @@ public:
     
     //==============================================================================
     // State queries
-    bool hasAudioLoaded() const { return audioFileBuffer.getNumSamples() > 0; }
+    bool hasAudioLoaded() const;
     bool isPlaying() const { return params.isPlaying; }
     bool isLooping() const { return params.isLooping; }
     double getSpeed() const { return params.speed; }
@@ -121,8 +133,8 @@ public:
     double getPlayheadPositionInSeconds() const;
     double getPlayheadPositionInSamples() const { return playheadPosition.load(); }
     double getDurationInSeconds() const;
-    int getDurationInSamples() const { return fileLengthSamples; }
-    double getFileSampleRate() const { return fileSampleRate; }
+    int getDurationInSamples() const;
+    double getFileSampleRate() const;
     
     //==============================================================================
     // Parameters
@@ -137,7 +149,7 @@ public:
     //==============================================================================
     // Utility
     int getBufferIndex() const { return bufferIndex; }
-    juce::String getLoadedFileName() const { return loadedFileName; }
+    juce::String getLoadedFileName() const;
     void setPlayheadSamples(int64_t samples) { playheadPosition.store((double) juce::jmax<int64_t>(0, samples)); }
     // Loop window controls
     void setLoopWindow(int64_t startSamples, int64_t endSamples);
@@ -150,7 +162,8 @@ public:
 private:
     //==============================================================================
     // Core audio data
-    juce::AudioBuffer<float> audioFileBuffer;
+    LoadedAudioData::Ptr audioData;
+    mutable juce::SpinLock audioDataLock;
     std::atomic<double> playheadPosition { 0.0 };
     juce::SmoothedValue<double> speedSmoother;
     
@@ -159,7 +172,6 @@ private:
     
     // Buffer identification
     int bufferIndex;
-    juce::String loadedFileName;
     
     // State management
     std::atomic<bool> slicingModeActive { false };
@@ -177,9 +189,7 @@ private:
     juce::AudioBuffer<float> crossfadeBuffer;
     
     // DSP parameters
-    double fileSampleRate = 44100.0;
     double hostSampleRate = 44100.0;
-    int fileLengthSamples = 0;
     
     // Processing buffers
     juce::AudioBuffer<float> repitchBuffer;
@@ -196,12 +206,19 @@ private:
     //==============================================================================
     // Internal processing methods
     void processWithRepitching(juce::AudioBuffer<float>& outputBuffer);
-    void handleSlicePlayback(double& currentPos);
-    void applyCrossfadeToSliceTransition(juce::AudioBuffer<float>& outputBuffer, int startSample, int numSamples);
+    void handleSlicePlayback(double& currentPos, int fileLengthSamples);
+    void applyCrossfadeToSliceTransition(const juce::AudioBuffer<float>& sourceBuffer,
+                                         int fileLengthSamples,
+                                         double fileSampleRate,
+                                         juce::AudioBuffer<float>& outputBuffer,
+                                         int startSample,
+                                         int numSamples);
     void startSliceCrossfade(int newSliceIndex, double newPlayheadPos);
     void startBoundaryCrossfade(double newPlayheadPos);
-    double getSliceStartPosition(int sliceIndex) const;
-    double getSliceEndPosition(int sliceIndex) const;
+    double getSliceStartPosition(int sliceIndex, int fileLengthSamples) const;
+    double getSliceEndPosition(int sliceIndex, int fileLengthSamples) const;
+
+    LoadedAudioData::Ptr getAudioDataSnapshot() const;
 
     // Optional per-buffer loop window in absolute samples (file rate). When enabled, playback wraps within [loopStart, loopEnd).
     std::atomic<bool> loopWindowEnabled { false };

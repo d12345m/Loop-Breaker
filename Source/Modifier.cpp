@@ -86,6 +86,9 @@ juce::OwnedArray<IModifier> ModifierFactory::createAllPrototypes()
     // Navigation
     add(ModifierType::SwitchPart, ModifierCategory::GlobalUtility, "Switch Part", "Switch to a different part");
 
+    // Scheduler
+    add(ModifierType::QuarterNoteBurst, ModifierCategory::GlobalUtility, "Burst", "Trigger modifiers every quarter note for X bars");
+
     return list;
 }
 

@@ -46,6 +46,10 @@ public:
     // Called externally each audio block with elapsed seconds (sample accurate source)
     void updateTime(double secondsElapsed);
 
+    // DAW-agnostic host timeline sync (preferred when the host provides PPQ + tempo).
+    // ppqPosition is in quarter notes; bpm is quarter-note BPM.
+    void updateHostTimeline(double ppqPosition, double bpm);
+
     // Exposed timeline metrics (valid while running)
     double getAccumulatedSecondsInBar() const { return fmod(accumulatedSecondsTotal, settings.getSecondsPerBar()); }
     double getAccumulatedBars() const { return accumulatedSecondsTotal / settings.getSecondsPerBar(); }
@@ -102,6 +106,14 @@ private:
     double nextTriggerAbsoluteSeconds = 0.0;           // absolute time of next trigger
     double lastTriggerAbsoluteSeconds = 0.0;            // absolute time of previous trigger (or start)
 
+    // Host-synced timeline (PPQ-based). When enabled, accumulatedSecondsTotal is derived from PPQ+tempo.
+    std::atomic<bool> hostTimelineActive { false };
+    double lastHostPpqPosition = 0.0;
+    double nextTriggerPpq = 0.0;
+
+    // Quarter-note burst scheduling (rapid-fire modifiers)
+    std::atomic<int> quarterNoteBurstRemaining { 0 }; // number of quarter-note triggers remaining
+
     juce::OwnedArray<IModifier> prototypeCache; // list of available types
     std::optional<ModifierDescriptor> upcoming;
     juce::Array<int> userSelectedBuffers;
@@ -120,7 +132,9 @@ private:
     // Variant planning now carried on the upcoming ModifierDescriptor itself
 
     void scheduleNextTrigger();
+    void scheduleNextTriggerHost(double currentPpq, double bpm);
     void triggerIfDue();
+    void triggerIfDueHost(double currentPpq, double bpm);
     void broadcastUpcoming();
     ModifierDescriptor pickRandomDescriptor() const;
     juce::Array<int> selectTargetBuffers(const ModifierDescriptor& desc) const;

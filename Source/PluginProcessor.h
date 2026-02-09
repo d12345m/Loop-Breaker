@@ -46,11 +46,54 @@ public:
 
     juce::AudioFormatManager& getFormatManager() { return formatManager; }
 
+    // Transport-tied playback control
+    void requestPlayAll();
+    void requestStopAll();
+    bool isPlaybackEnabled() const { return transportPlaybackEnabled.load(); }
+
+    enum class HostTransportState : int
+    {
+        Unknown = 0,
+        Playing = 1,
+        Stopped = 2,
+    };
+
+    enum class HostTransportSource : int
+    {
+        Unknown = 0,
+        Reported = 1,
+        Inferred = 2,
+    };
+
+    HostTransportState getLastHostTransportState() const
+    {
+        return static_cast<HostTransportState>(lastHostTransportState.load());
+    }
+
+    HostTransportSource getLastHostTransportSource() const
+    {
+        return static_cast<HostTransportSource>(lastHostTransportSource.load());
+    }
+
 private:
     AppState app;
     juce::AudioFormatManager formatManager;
 
     juce::AudioBuffer<float> scratchBuffer;
+
+    std::atomic<bool> transportPlaybackEnabled { true }; // user-facing enable/disable
+    std::atomic<bool> startRequested { false };          // start on next audio block (or immediately if host already playing)
+    std::atomic<bool> stopRequested { false };           // stop on next audio block
+    std::atomic<bool> lastHostPlaying { false };         // track transport transitions
+
+    // Host transport readout for UI (written on audio thread)
+    std::atomic<int> lastHostTransportState { (int) HostTransportState::Unknown };
+    std::atomic<int> lastHostTransportSource { (int) HostTransportSource::Unknown };
+
+    // Host play detection fallbacks (audio thread only)
+    int64_t lastHostTimeInSamples = -1;
+    bool lastHostPpqValid = false;
+    double lastHostPpqPosition = 0.0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BufferTestAudioProcessor)
 };

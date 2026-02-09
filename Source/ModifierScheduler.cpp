@@ -26,6 +26,10 @@ void ModifierScheduler::start()
         return;
     running = true;
     accumulatedSecondsTotal = 0.0;
+    hostTimelineActive.store(false);
+    lastHostPpqPosition = 0.0;
+    nextTriggerPpq = 0.0;
+    quarterNoteBurstRemaining.store(0);
     scheduleNextTrigger();
     selectNextModifier();
 }
@@ -35,6 +39,7 @@ void ModifierScheduler::stop()
     if (!running) return;
     running = false;
     upcoming.reset();
+    hostTimelineActive.store(false);
 }
 
 void ModifierScheduler::resetTimeline()
@@ -43,6 +48,10 @@ void ModifierScheduler::resetTimeline()
     accumulatedSecondsTotal = 0.0;
     lastTriggerAbsoluteSeconds = 0.0;
     nextTriggerAbsoluteSeconds = 0.0;
+    hostTimelineActive.store(false);
+    lastHostPpqPosition = 0.0;
+    nextTriggerPpq = 0.0;
+    quarterNoteBurstRemaining.store(0);
     // Keep upcoming descriptor as-is if running; otherwise it will be selected on start()
     if (running)
     {
@@ -61,8 +70,46 @@ void ModifierScheduler::selectNextModifier()
 void ModifierScheduler::updateTime(double secondsElapsed)
 {
     if (!running) return;
+    // If we have a host-synced timeline active, ignore delta-time updates.
+    if (hostTimelineActive.load())
+        return;
     accumulatedSecondsTotal += secondsElapsed;
     triggerIfDue();
+}
+
+void ModifierScheduler::updateHostTimeline(double ppqPosition, double bpm)
+{
+    if (!running)
+        return;
+
+    if (bpm <= 0.0)
+        return;
+
+    // Derive seconds from host musical timeline (ppq is quarter-note units).
+    const double secondsPerQuarter = 60.0 / bpm;
+    const double absoluteSeconds = ppqPosition * secondsPerQuarter;
+
+    // Detect first sync or transport seek/jump.
+    const bool first = ! hostTimelineActive.exchange(true);
+    const double prevPpq = lastHostPpqPosition;
+    const double deltaPpq = ppqPosition - prevPpq;
+    lastHostPpqPosition = ppqPosition;
+
+    const bool seekedBack = (!first && deltaPpq < -0.5);
+    const bool bigJumpFwd = (!first && deltaPpq > 64.0); // more than 64 quarter-notes in a single callback is almost certainly a jump
+
+    accumulatedSecondsTotal = absoluteSeconds;
+
+    if (first || seekedBack || bigJumpFwd)
+    {
+        lastTriggerAbsoluteSeconds = absoluteSeconds;
+        scheduleNextTriggerHost(ppqPosition, bpm);
+        if (!upcoming.has_value())
+            selectNextModifier();
+        return;
+    }
+
+    triggerIfDueHost(ppqPosition, bpm);
 }
 
 void ModifierScheduler::setUserSelectedBuffers(const juce::Array<int>& indices)
@@ -74,22 +121,25 @@ void ModifierScheduler::setUserSelectedBuffers(const juce::Array<int>& indices)
 
 void ModifierScheduler::scheduleNextTrigger()
 {
-    // Base unquantized target (absolute seconds)
-    double base = accumulatedSecondsTotal + settings.getSecondsBetweenModifiers();
+    // Base target aligned to the *next* bar boundary after a fixed bar interval.
+    const double secondsPerBar = settings.getSecondsPerBar();
+    const double currentBars = (secondsPerBar > 0.0 ? (accumulatedSecondsTotal / secondsPerBar) : 0.0);
+    const double nextBarIndex = std::floor(currentBars + 1e-9) + (double) settings.barsBetweenModifiers;
+    double base = nextBarIndex * secondsPerBar;
 
     if (quantizationEnabled.load())
     {
         const int subDiv = juce::jmax(1, subdivisionsPerBar.load());
-        const double secondsPerBar = settings.getSecondsPerBar();
-        const double secondsPerSubdivision = secondsPerBar / static_cast<double>(subDiv);
+        const double secondsPerBarQ = settings.getSecondsPerBar();
+        const double secondsPerSubdivision = secondsPerBarQ / static_cast<double>(subDiv);
 
         // Compute how many subdivisions have elapsed at 'base' time
-        double barsAtBase = base / secondsPerBar; // continuous
+        double barsAtBase = (secondsPerBarQ > 0.0 ? (base / secondsPerBarQ) : 0.0); // continuous
         double subDivsAtBase = barsAtBase * subDiv;
         // Snap forward to the NEXT integer subdivision boundary (ceiling) to avoid retrograde timing
         double snappedSubDivIndex = std::ceil(subDivsAtBase - 1e-9); // small bias prevents floating errors near integer
         double snappedBars = snappedSubDivIndex / subDiv;
-        double snappedTime = snappedBars * secondsPerBar;
+        double snappedTime = snappedBars * secondsPerBarQ;
         // Safety: ensure snapped time is never earlier than a tiny horizon ahead of 'now'
         const double minLead = 1e-5; // ~10 microseconds; effectively immediate next subdivision
         if (snappedTime < accumulatedSecondsTotal + minLead)
@@ -103,6 +153,44 @@ void ModifierScheduler::scheduleNextTrigger()
     {
         nextTriggerAbsoluteSeconds = base;
     }
+}
+
+void ModifierScheduler::scheduleNextTriggerHost(double currentPpq, double bpm)
+{
+    // Compute PPQ per bar based on time signature.
+    const double denom = (double) juce::jmax(1, settings.timeSigDenominator);
+    const double barLenPpq = (double) settings.timeSigNumerator * (4.0 / denom);
+    const double secondsPerQuarter = 60.0 / bpm;
+
+    const int burstRemaining = quarterNoteBurstRemaining.load();
+    if (burstRemaining > 0)
+    {
+        // Next trigger is the next quarter-note boundary.
+        const double nextQ = std::floor(currentPpq + 1e-9) + 1.0;
+        nextTriggerPpq = nextQ;
+    }
+    else
+    {
+        // Next trigger is at the next bar boundary, plus barsBetweenModifiers.
+        const double currentBar = (barLenPpq > 0.0 ? std::floor((currentPpq / barLenPpq) + 1e-9) : 0.0);
+        const double targetBar = currentBar + (double) settings.barsBetweenModifiers;
+        nextTriggerPpq = targetBar * barLenPpq;
+
+        // Optional extra snapping to subdivisions (kept for future flexibility)
+        if (quantizationEnabled.load())
+        {
+            const int subDiv = juce::jmax(1, subdivisionsPerBar.load());
+            const double grid = (barLenPpq > 0.0 ? (barLenPpq / (double) subDiv) : 1.0);
+            if (grid > 0.0)
+            {
+                const double snapped = std::ceil((nextTriggerPpq / grid) - 1e-9) * grid;
+                nextTriggerPpq = snapped;
+            }
+        }
+    }
+
+    // Mirror PPQ schedule into seconds-based fields for UI.
+    nextTriggerAbsoluteSeconds = nextTriggerPpq * secondsPerQuarter;
 }
 
 void ModifierScheduler::triggerIfDue()
@@ -126,6 +214,81 @@ void ModifierScheduler::triggerIfDue()
         lastTriggerAbsoluteSeconds = accumulatedSecondsTotal;
         scheduleNextTrigger();
         selectNextModifier();
+    }
+}
+
+void ModifierScheduler::triggerIfDueHost(double currentPpq, double bpm)
+{
+    if (!running || !upcoming.has_value())
+        return;
+
+    static constexpr double eps = 1e-6;
+    const double secondsPerQuarter = 60.0 / bpm;
+
+    // Limit catch-up triggers in case of unusual host blocks or jumps.
+    int safety = 0;
+    while (currentPpq + eps >= nextTriggerPpq && safety++ < 128)
+    {
+        auto descriptor = upcoming.value();
+
+        if (descriptor.type == ModifierType::Unknown)
+        {
+            // no-op
+        }
+
+        if (descriptor.type == ModifierType::Unknown)
+        {
+            // no-op
+        }
+
+        if (descriptor.type == ModifierType::Unknown)
+        {
+            // no-op
+        }
+
+        if (descriptor.type == ModifierType::Unknown)
+        {
+            // no-op
+        }
+
+        if (descriptor.type == ModifierType::Unknown)
+        {
+            // no-op
+        }
+
+        if (!suppressed.load())
+        {
+            auto targets = selectTargetBuffers(descriptor);
+            for (auto* l : listeners) l->modifierTriggered(descriptor, targets);
+            if (!userSelectedBuffers.isEmpty())
+                userSelectedBuffers.clearQuick();
+        }
+
+        // If the triggered modifier is QuarterNoteBurst, enable rapid-fire mode.
+        if (descriptor.type == ModifierType::QuarterNoteBurst)
+        {
+            const double denom = (double) juce::jmax(1, settings.timeSigDenominator);
+            const double barLenPpq = (double) settings.timeSigNumerator * (4.0 / denom);
+            const int quartersPerBar = juce::jmax(1, (int) std::round(barLenPpq));
+            const int bars = juce::jmax(1, descriptor.plannedBurstBars.value_or(2));
+            const int total = juce::jmax(1, bars) * quartersPerBar;
+            quarterNoteBurstRemaining.store(total);
+        }
+        else
+        {
+            const int remaining = quarterNoteBurstRemaining.load();
+            if (remaining > 0)
+                quarterNoteBurstRemaining.store(remaining - 1);
+        }
+
+        lastTriggerAbsoluteSeconds = nextTriggerPpq * secondsPerQuarter;
+
+        // Schedule next boundary and choose next modifier.
+        scheduleNextTriggerHost(nextTriggerPpq, bpm);
+        selectNextModifier();
+
+        // Keep accumulatedSecondsTotal consistent for UI.
+        accumulatedSecondsTotal = currentPpq * secondsPerQuarter;
     }
 }
 
@@ -276,7 +439,8 @@ ModifierDescriptor ModifierScheduler::pickRandomDescriptor() const
                 || t == ModifierType::MasterLowPassOn
                 || t == ModifierType::MasterHighPassOn
                 || t == ModifierType::BufferTremolo
-                || t == ModifierType::SwitchPart);
+                    || t == ModifierType::SwitchPart
+                    || t == ModifierType::QuarterNoteBurst);
             if (!allowed) continue;
             // Gate SwitchPart: only selectable when more than one part is configured
             if (t == ModifierType::SwitchPart && !moreThanOnePart) continue;
@@ -384,6 +548,14 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
         juce::String name = (base.type == ModifierType::MasterLowPassOn ? "Master LPF" : "Master HPF");
         modified.description = base.description + " -> " + name + " " + juce::String((int)dur) + " bars" + " | " + mode;
     }
+        else if (base.type == ModifierType::QuarterNoteBurst)
+        {
+            static const int barsOptions[] { 1, 2, 4 };
+            const juce::SpinLock::ScopedLockType lock(rngLock);
+            int bars = barsOptions[rng.nextInt((int) std::size(barsOptions))];
+            modified.plannedBurstBars = bars;
+            modified.description = base.description + " -> " + juce::String(bars) + (bars == 1 ? " bar" : " bars");
+        }
     return modified;
 }
 

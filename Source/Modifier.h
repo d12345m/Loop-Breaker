@@ -49,6 +49,9 @@ enum class ModifierType
     // Navigation modifiers
     SwitchPart,
 
+    // Scheduler modifiers
+    QuarterNoteBurst,
+
     // Global
     ResetAll,
 
@@ -78,6 +81,9 @@ struct ModifierDescriptor
     // Future: dub burst durations could be parameterized; for now use defaults
     // Generic FX fade duration in bars (e.g., reverb ramp)
     std::optional<double> plannedFxFadeBars;     // e.g., 0 (instant), 1, 2
+
+    // Scheduler-only: when QuarterNoteBurst triggers, schedule quarter-note triggers for X bars.
+    std::optional<int> plannedBurstBars;         // e.g., 1, 2, 4
     // For temporary global filters: choose whether to jump immediately to target, then ramp back
     std::optional<bool> plannedImmediateJump;    // true: jump to target then ramp back; false: ramp up then ramp down
 };

@@ -28,10 +28,10 @@ public:
         addAndMakeVisible(fxStatusPanel);
 
         addAndMakeVisible(playAllButton);
-        playAllButton.onClick = [this]{ app.bufferManager.playAll(); };
+        playAllButton.onClick = [this]{ processor.requestPlayAll(); };
 
         addAndMakeVisible(stopAllButton);
-        stopAllButton.onClick = [this]{ app.bufferManager.stopAll(); };
+        stopAllButton.onClick = [this]{ processor.requestStopAll(); };
 
         addAndMakeVisible(modifiersToggle);
         modifiersToggle.setToggleState(true, juce::dontSendNotification);
@@ -69,6 +69,9 @@ public:
         addAndMakeVisible(statusLabel);
         statusLabel.setJustificationType(juce::Justification::centredLeft);
 
+        addAndMakeVisible(hostTransportLabel);
+        hostTransportLabel.setJustificationType(juce::Justification::centredRight);
+
         padGrid.setAudioFormatManager(&processor.getFormatManager());
         attachPadCallbacks();
 
@@ -93,6 +96,7 @@ public:
             padGrid.setPadFilePaths(app.settings.padFilePaths);
 
         refreshStatus();
+        refreshHostTransportReadout();
         startTimerHz(30);
     }
 
@@ -128,6 +132,7 @@ public:
         auto row2 = area.removeFromTop(28).reduced(2);
         padSelectForLoad.setBounds(row2.removeFromLeft(110).reduced(2));
         loadFileButton.setBounds(row2.removeFromLeft(170).reduced(2));
+        hostTransportLabel.setBounds(row2.removeFromRight(240).reduced(2));
         statusLabel.setBounds(row2.reduced(2));
 
         area.removeFromTop(6);
@@ -191,8 +196,39 @@ private:
     juce::ComboBox padSelectForLoad;
     juce::TextButton loadFileButton { "Load File To Pad..." };
     juce::Label statusLabel { {}, "Status: Idle" };
+    juce::Label hostTransportLabel { {}, "Host: Unknown" };
 
     std::unique_ptr<juce::FileChooser> fileChooser;
+
+    void refreshHostTransportReadout()
+    {
+        const auto state = processor.getLastHostTransportState();
+        const auto source = processor.getLastHostTransportSource();
+
+        juce::String s;
+        s << "Host: ";
+
+        switch (state)
+        {
+            case BufferTestAudioProcessor::HostTransportState::Playing: s << "Playing"; break;
+            case BufferTestAudioProcessor::HostTransportState::Stopped: s << "Stopped"; break;
+            default: s << "Unknown"; break;
+        }
+
+        s << " (";
+        switch (source)
+        {
+            case BufferTestAudioProcessor::HostTransportSource::Reported: s << "reported"; break;
+            case BufferTestAudioProcessor::HostTransportSource::Inferred: s << "inferred"; break;
+            default: s << "unknown"; break;
+        }
+        s << ")";
+
+        if (! processor.isPlaybackEnabled())
+            s << " | gated";
+
+        hostTransportLabel.setText(s, juce::dontSendNotification);
+    }
 
     void ensurePadFilePathsSized()
     {
@@ -237,6 +273,7 @@ private:
     {
         // Lightweight UI refresh only; timing is driven by the audio thread in the processor.
         refreshStatus();
+        refreshHostTransportReadout();
         padGrid.setPlayingStates(app.bufferManager.getPlayingBufferIndices());
 
         // Update playhead positions for waveform display.

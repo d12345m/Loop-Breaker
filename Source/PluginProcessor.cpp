@@ -26,6 +26,62 @@ BufferTestAudioProcessor::BufferTestAudioProcessor()
 
 BufferTestAudioProcessor::~BufferTestAudioProcessor() = default;
 
+void BufferTestAudioProcessor::requestPlayAll()
+{
+    transportPlaybackEnabled.store(true);
+    startRequested.store(true);
+}
+
+void BufferTestAudioProcessor::requestStopAll()
+{
+    transportPlaybackEnabled.store(false);
+    stopRequested.store(true);
+}
+
+namespace
+{
+bool positionInfoLooksEmpty(const juce::AudioPlayHead::PositionInfo& pos)
+{
+    // If a host provides a PositionInfo object but doesn't populate any optional fields,
+    // treat it as "unknown" rather than incorrectly gating audio.
+    if (pos.getTimeInSamples().hasValue()) return false;
+    if (pos.getTimeInSeconds().hasValue()) return false;
+    if (pos.getPpqPosition().hasValue()) return false;
+    if (pos.getBpm().hasValue()) return false;
+    if (pos.getBarCount().hasValue()) return false;
+    return true;
+}
+
+bool getHostTimeline(juce::AudioProcessor& processor, double& outPpq, double& outBpm)
+{
+    if (auto* ph = processor.getPlayHead())
+    {
+       #if JUCE_MAJOR_VERSION >= 7
+        if (auto pos = ph->getPosition())
+        {
+            auto ppq = pos->getPpqPosition();
+            auto bpm = pos->getBpm();
+            if (ppq.hasValue() && bpm.hasValue())
+            {
+                outPpq = *ppq;
+                outBpm = *bpm;
+                return true;
+            }
+        }
+       #else
+        juce::AudioPlayHead::CurrentPositionInfo info;
+        if (ph->getCurrentPosition(info) && info.bpm > 0.0)
+        {
+            outPpq = info.ppqPosition;
+            outBpm = info.bpm;
+            return true;
+        }
+       #endif
+    }
+    return false;
+}
+}
+
 const juce::String BufferTestAudioProcessor::getName() const
 {
     return JucePlugin_Name;
@@ -132,6 +188,167 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
 
     juce::ScopedNoDenormals noDenormals;
 
+    // Transport-tied playback: stop output when the host is stopped.
+    struct HostTransportResult
+    {
+        bool gateAsPlaying = true;
+        HostTransportState state = HostTransportState::Unknown;
+        HostTransportSource source = HostTransportSource::Unknown;
+    };
+
+    const auto host = [this, numSamples = buffer.getNumSamples()]() -> HostTransportResult
+    {
+        HostTransportResult r;
+        auto* ph = getPlayHead();
+        if (ph == nullptr)
+            return r; // unknown: don't gate
+
+       #if JUCE_MAJOR_VERSION >= 7
+        auto posOpt = ph->getPosition();
+        if (!posOpt.hasValue())
+            return r; // unknown: don't gate
+
+        const auto& pos = *posOpt;
+        if (positionInfoLooksEmpty(pos))
+            return r; // host gave us nothing meaningful
+
+        const bool reportedPlaying = pos.getIsPlaying();
+        if (reportedPlaying)
+        {
+            r.gateAsPlaying = true;
+            r.state = HostTransportState::Playing;
+            r.source = HostTransportSource::Reported;
+            // Keep inference state warm when playing.
+            if (auto tis = pos.getTimeInSamples(); tis.hasValue())
+                lastHostTimeInSamples = (int64_t) *tis;
+            if (auto ppq = pos.getPpqPosition(); ppq.hasValue())
+            {
+                lastHostPpqValid = true;
+                lastHostPpqPosition = (double) *ppq;
+            }
+            return r;
+        }
+
+        // Fallback inference: some hosts/plugins report isPlaying=false while timeline still advances.
+        bool inferredPlaying = false;
+
+        if (auto tis = pos.getTimeInSamples(); tis.hasValue())
+        {
+            const int64_t current = (int64_t) *tis;
+            if (lastHostTimeInSamples >= 0)
+            {
+                const int64_t delta = current - lastHostTimeInSamples;
+                if (delta > 0 && delta <= (int64_t) numSamples * 8)
+                    inferredPlaying = true;
+            }
+            lastHostTimeInSamples = current;
+        }
+        else
+        {
+            lastHostTimeInSamples = -1;
+        }
+
+        if (auto ppq = pos.getPpqPosition(); ppq.hasValue())
+        {
+            const double current = (double) *ppq;
+            if (lastHostPpqValid)
+            {
+                const double delta = current - lastHostPpqPosition;
+                if (delta > 0.0 && delta < 16.0)
+                    inferredPlaying = true;
+            }
+            lastHostPpqValid = true;
+            lastHostPpqPosition = current;
+        }
+        else
+        {
+            lastHostPpqValid = false;
+        }
+
+        r.gateAsPlaying = inferredPlaying;
+        r.state = inferredPlaying ? HostTransportState::Playing : HostTransportState::Stopped;
+        r.source = inferredPlaying ? HostTransportSource::Inferred : HostTransportSource::Reported;
+        return r;
+
+       #else
+        juce::AudioPlayHead::CurrentPositionInfo info;
+        if (!ph->getCurrentPosition(info))
+            return r; // unknown: don't gate
+
+        if (info.isPlaying)
+        {
+            r.gateAsPlaying = true;
+            r.state = HostTransportState::Playing;
+            r.source = HostTransportSource::Reported;
+            lastHostTimeInSamples = (int64_t) info.timeInSamples;
+            lastHostPpqValid = true;
+            lastHostPpqPosition = info.ppqPosition;
+            return r;
+        }
+
+        bool inferredPlaying = false;
+        if (lastHostTimeInSamples >= 0)
+        {
+            const int64_t delta = (int64_t) info.timeInSamples - lastHostTimeInSamples;
+            if (delta > 0 && delta <= (int64_t) numSamples * 8)
+                inferredPlaying = true;
+        }
+        lastHostTimeInSamples = (int64_t) info.timeInSamples;
+        lastHostPpqValid = true;
+        lastHostPpqPosition = info.ppqPosition;
+        r.gateAsPlaying = inferredPlaying;
+        r.state = inferredPlaying ? HostTransportState::Playing : HostTransportState::Stopped;
+        r.source = inferredPlaying ? HostTransportSource::Inferred : HostTransportSource::Reported;
+        return r;
+       #endif
+    }();
+
+    lastHostTransportState.store((int) host.state);
+    lastHostTransportSource.store((int) host.source);
+
+    const bool hostPlaying = host.gateAsPlaying;
+    const bool wasHostPlaying = lastHostPlaying.exchange(hostPlaying);
+
+    if (! hostPlaying)
+    {
+        // On transport stop transition, stop buffers so the next play starts cleanly.
+        if (wasHostPlaying)
+            app.bufferManager.stopAll();
+
+        // Clear any pending start request (so we don't "surprise start" when transport resumes unless user pressed Play again).
+        startRequested.store(false);
+
+        // Always output silence when the host transport is stopped.
+        const int numOutBuses = getBusCount(false);
+        for (int busIndex = 0; busIndex < numOutBuses; ++busIndex)
+            getBusBuffer(buffer, false, busIndex).clear();
+        return;
+    }
+
+    // Handle stop request first (disables playback).
+    if (stopRequested.exchange(false))
+        app.bufferManager.stopAll();
+
+    const bool enabled = transportPlaybackEnabled.load();
+
+    // When following the DAW transport, keep buffers playing while the host is playing.
+    // This makes transport-start reliable and also starts newly-loaded pads immediately
+    // when the transport is already running.
+    if (enabled)
+        app.bufferManager.playAll();
+
+    // Clear any pending start request (kept for UI semantics).
+    startRequested.store(false);
+
+    // If playback is disabled, output silence (but keep UI/state responsive).
+    if (! enabled)
+    {
+        const int numOutBuses = getBusCount(false);
+        for (int busIndex = 0; busIndex < numOutBuses; ++busIndex)
+            getBusBuffer(buffer, false, busIndex).clear();
+        return;
+    }
+
     // Multi-out: main output bus is a stereo mix.
     // Individual pads 0..7 map to output buses Ch1..Ch8.
     const int numSamples = buffer.getNumSamples();
@@ -177,7 +394,14 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     {
         const double blockSeconds = (double) buffer.getNumSamples() / sr;
         if (app.scheduler.isRunning())
-            app.scheduler.updateTime(blockSeconds);
+        {
+            double ppq = 0.0;
+            double bpm = 0.0;
+            if (getHostTimeline(*this, ppq, bpm))
+                app.scheduler.updateHostTimeline(ppq, bpm);
+            else
+                app.scheduler.updateTime(blockSeconds);
+        }
         app.advanceFxEnvelopes(blockSeconds);
     }
 }

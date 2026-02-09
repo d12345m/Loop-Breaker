@@ -7,14 +7,17 @@ BufferTestAudioProcessor::BufferTestAudioProcessor()
                                                         #if ! JucePlugin_IsSynth
                                                          .withInput  ("Input", juce::AudioChannelSet::stereo(), true)
                                                         #endif
-                                                         .withOutput ("Ch1",   juce::AudioChannelSet::stereo(), true)
-                                                         .withOutput ("Ch2",   juce::AudioChannelSet::stereo(), true)
-                                                         .withOutput ("Ch3",   juce::AudioChannelSet::stereo(), true)
-                                                         .withOutput ("Ch4",   juce::AudioChannelSet::stereo(), true)
-                                                         .withOutput ("Ch5",   juce::AudioChannelSet::stereo(), true)
-                                                         .withOutput ("Ch6",   juce::AudioChannelSet::stereo(), true)
-                                                         .withOutput ("Ch7",   juce::AudioChannelSet::stereo(), true)
-                                                         .withOutput ("Ch8",   juce::AudioChannelSet::stereo(), true)
+                                                         // Main bus is a stereo mix (what the track hosting the plugin hears in Ableton).
+                                                         // Pads 1..8 are exposed as additional stereo output buses.
+                                                         .withOutput ("Mix",  juce::AudioChannelSet::stereo(), true)
+                                                         .withOutput ("Ch1",  juce::AudioChannelSet::stereo(), true)
+                                                         .withOutput ("Ch2",  juce::AudioChannelSet::stereo(), true)
+                                                         .withOutput ("Ch3",  juce::AudioChannelSet::stereo(), true)
+                                                         .withOutput ("Ch4",  juce::AudioChannelSet::stereo(), true)
+                                                         .withOutput ("Ch5",  juce::AudioChannelSet::stereo(), true)
+                                                         .withOutput ("Ch6",  juce::AudioChannelSet::stereo(), true)
+                                                         .withOutput ("Ch7",  juce::AudioChannelSet::stereo(), true)
+                                                         .withOutput ("Ch8",  juce::AudioChannelSet::stereo(), true)
                                                      #endif
                                                          )
 {
@@ -95,7 +98,7 @@ void BufferTestAudioProcessor::releaseResources()
 
 bool BufferTestAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
-    if ((int) layouts.outputBuses.size() != AudioBufferManager::MAX_BUFFERS)
+    if ((int) layouts.outputBuses.size() != (AudioBufferManager::MAX_BUFFERS + 1))
         return false;
 
     // Require stereo on the main output bus. Allow other output buses to be stereo or disabled.
@@ -129,8 +132,8 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
 
     juce::ScopedNoDenormals noDenormals;
 
-    // Multi-out: buffer 0..7 map to output buses Ch1..Ch8.
-    // If a given bus is disabled by the host, we fall back to mixing that channel into Ch1.
+    // Multi-out: main output bus is a stereo mix.
+    // Individual pads 0..7 map to output buses Ch1..Ch8.
     const int numSamples = buffer.getNumSamples();
     const int numOutBuses = getBusCount(false);
     if (numOutBuses <= 0)
@@ -140,31 +143,33 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     for (int busIndex = 0; busIndex < numOutBuses; ++busIndex)
         getBusBuffer(buffer, false, busIndex).clear();
 
-    auto ch1 = getBusBuffer(buffer, false, 0);
-    if (ch1.getNumChannels() == 0)
+    auto mix = getBusBuffer(buffer, false, 0);
+    if (mix.getNumChannels() == 0)
         return;
 
-    if (scratchBuffer.getNumChannels() != ch1.getNumChannels() || scratchBuffer.getNumSamples() < numSamples)
-        scratchBuffer.setSize(ch1.getNumChannels(), numSamples, false, false, true);
+    if (scratchBuffer.getNumChannels() != mix.getNumChannels() || scratchBuffer.getNumSamples() < numSamples)
+        scratchBuffer.setSize(mix.getNumChannels(), numSamples, false, false, true);
 
     for (int bufferIndex = 0; bufferIndex < AudioBufferManager::MAX_BUFFERS; ++bufferIndex)
     {
-        const int busIndex = bufferIndex;
-        if (busIndex < numOutBuses)
-        {
-            auto busBuffer = getBusBuffer(buffer, false, busIndex);
-            if (busBuffer.getNumChannels() > 0)
-            {
-                app.bufferManager.processSingleBuffer(bufferIndex, busBuffer);
-                continue;
-            }
-        }
-
-        // Fallback: mix into Ch1
         scratchBuffer.clear();
         app.bufferManager.processSingleBuffer(bufferIndex, scratchBuffer);
-        for (int ch = 0; ch < ch1.getNumChannels(); ++ch)
-            ch1.addFrom(ch, 0, scratchBuffer, ch, 0, numSamples);
+
+        // Always add to the main mix bus (what the track hosting the plugin hears)
+        for (int ch = 0; ch < mix.getNumChannels(); ++ch)
+            mix.addFrom(ch, 0, scratchBuffer, ch, 0, numSamples);
+
+        // Also copy to the per-pad bus if enabled: bus 1..8 correspond to pads 0..7
+        const int padBusIndex = bufferIndex + 1;
+        if (padBusIndex < numOutBuses)
+        {
+            auto padBus = getBusBuffer(buffer, false, padBusIndex);
+            if (padBus.getNumChannels() > 0)
+            {
+                for (int ch = 0; ch < padBus.getNumChannels(); ++ch)
+                    padBus.addFrom(ch, 0, scratchBuffer, ch, 0, numSamples);
+            }
+        }
     }
 
     const double sr = getSampleRate();

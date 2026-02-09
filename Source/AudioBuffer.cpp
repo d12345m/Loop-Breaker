@@ -45,7 +45,7 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
     }
     
     // Smooth speed changes to avoid artifacts
-    speedSmoother.setTargetValue(params.speed);
+    speedSmoother.setTargetValue(getEffectiveSpeed());
     
     // Process with repitching (speed and pitch change together)
     processWithRepitching(outputBuffer);
@@ -555,6 +555,7 @@ void AudioBuffer::applyCrossfadeToSliceTransition(const juce::AudioBuffer<float>
     }
     
     // Process crossfade sample by sample
+    const double effectiveSpeed = getEffectiveSpeed();
     for (int sample = 0; sample < samplesToProcess; ++sample)
     {
         const double fadeProgress = static_cast<double>(crossfadePosition + sample) / static_cast<double>(crossfadeLengthSamples);
@@ -564,7 +565,7 @@ void AudioBuffer::applyCrossfadeToSliceTransition(const juce::AudioBuffer<float>
         const float fadeIn = static_cast<float>(std::sin(fadeProgress * juce::MathConstants<double>::halfPi));
         
         // Get sample from previous slice position with proper speed compensation
-        const double prevPos = previousSlicePlayheadPos + sample * params.speed * (fileSampleRate / hostSampleRate);
+        const double prevPos = previousSlicePlayheadPos + sample * effectiveSpeed * (fileSampleRate / hostSampleRate);
         const int prevSampleIndex = static_cast<int>(prevPos);
         const double prevFraction = prevPos - prevSampleIndex;
         
@@ -616,7 +617,7 @@ void AudioBuffer::handleSlicePlayback(double& currentPos, int fileLengthSamples)
     if (sliceTriggered.load())
     {
         int slice = targetSlice.load();
-        double speed = params.speed;
+        double speed = getEffectiveSpeed();
         
         // Calculate new position based on playback direction
         double newPos;
@@ -645,7 +646,7 @@ void AudioBuffer::handleSlicePlayback(double& currentPos, int fileLengthSamples)
         
         // Check if we've reached the end/beginning of the current slice
         bool shouldTriggerNext = false;
-        double speed = params.speed;
+        double speed = getEffectiveSpeed();
         
         if (speed > 0.0) // Forward playback
         {
@@ -684,7 +685,7 @@ void AudioBuffer::handleSlicePlayback(double& currentPos, int fileLengthSamples)
         int activeSlice = currentActiveSlice.load();
         double sliceStart = getSliceStartPosition(activeSlice, fileLengthSamples);
         double sliceEnd = getSliceEndPosition(activeSlice, fileLengthSamples);
-        double speed = params.speed;
+        double speed = getEffectiveSpeed();
         
         if (speed > 0.0 && currentPos >= sliceEnd - 1.0)
         {

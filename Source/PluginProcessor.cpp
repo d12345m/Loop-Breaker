@@ -379,6 +379,11 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
 
     if (! hostPlaying)
     {
+        // When stopped, reset tempo-follow multiplier so the next transport start establishes
+        // a fresh reference BPM.
+        tempoReferenceBpm = 0.0;
+        app.bufferManager.setTempoMultiplier(1.0);
+
         // On transport stop transition, stop buffers so the next play starts cleanly.
         if (wasHostPlaying)
             app.bufferManager.stopAll();
@@ -415,6 +420,36 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
         for (int busIndex = 0; busIndex < numOutBuses; ++busIndex)
             getBusBuffer(buffer, false, busIndex).clear();
         return;
+    }
+
+    // Host timeline (tempo) sync. Read once per block and use for tempo-follow and scheduler.
+    double ppq = 0.0;
+    double bpm = 0.0;
+    const bool haveHostTimeline = getHostTimeline(*this, ppq, bpm);
+
+    // Apply tempo-follow playback scaling (repitch) so playback speed tracks DAW tempo changes.
+    if (haveHostTimeline && bpm > 0.0)
+    {
+        if (! wasHostPlaying || tempoReferenceBpm <= 0.0)
+            tempoReferenceBpm = bpm;
+
+        const double mult = (tempoReferenceBpm > 0.0 ? (bpm / tempoReferenceBpm) : 1.0);
+        app.bufferManager.setTempoMultiplier(mult);
+
+        // Keep our internal BPM in sync with host tempo so any beat/bar-based logic
+        // (slicing + FX envelopes/LFOs) tracks DAW tempo changes.
+        constexpr double bpmEpsilon = 1.0e-3; // avoid thrashing on tiny float jitter
+        if (lastAppliedHostBpm <= 0.0 || std::abs(bpm - lastAppliedHostBpm) > bpmEpsilon)
+        {
+            app.settings.bpm = bpm;
+            app.resyncTempoLFOs();
+            lastAppliedHostBpm = bpm;
+        }
+    }
+    else
+    {
+        // No reliable host tempo -> don't apply tempo-follow scaling.
+        app.bufferManager.setTempoMultiplier(1.0);
     }
 
     // Multi-out: main output bus is a stereo mix.
@@ -461,11 +496,10 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     if (sr > 0.0)
     {
         const double blockSeconds = (double) buffer.getNumSamples() / sr;
+
         if (app.scheduler.isRunning())
         {
-            double ppq = 0.0;
-            double bpm = 0.0;
-            if (getHostTimeline(*this, ppq, bpm))
+            if (haveHostTimeline)
                 app.scheduler.updateHostTimeline(ppq, bpm);
             else
                 app.scheduler.updateTime(blockSeconds);

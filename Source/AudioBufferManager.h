@@ -67,6 +67,8 @@ public:
     void stopAll();
     void resetAllBuffers();
     void restartAllLoadedBuffersToBeginning();
+    // Scale playback speed for all buffers without overwriting their base speed.
+    void setTempoMultiplier(double multiplier);
   // Parts: set playback start offset for all buffers (in samples)
   void setStartOffsetSamples(int64_t startOffsetSamples);
   // Parts: set end offset (absolute samples from start of file); 0 disables

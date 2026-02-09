@@ -95,6 +95,13 @@ private:
     bool lastHostPpqValid = false;
     double lastHostPpqPosition = 0.0;
 
+    // Cache host tempo to avoid resync work on every block (audio thread only)
+    double lastAppliedHostBpm = 0.0;
+
+    // Reference BPM captured on transport start, used to scale playback speed
+    // so loops follow DAW tempo changes.
+    double tempoReferenceBpm = 0.0;
+
     // State restore: defer disk I/O until we are on the audio thread.
     std::atomic<bool> pendingRestoreReload { false };
 

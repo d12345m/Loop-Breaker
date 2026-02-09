@@ -27,12 +27,6 @@ public:
         addAndMakeVisible(modifierSelectionViewport);
         addAndMakeVisible(fxStatusPanel);
 
-        addAndMakeVisible(playAllButton);
-        playAllButton.onClick = [this]{ processor.requestPlayAll(); };
-
-        addAndMakeVisible(stopAllButton);
-        stopAllButton.onClick = [this]{ processor.requestStopAll(); };
-
         addAndMakeVisible(modifiersToggle);
         modifiersToggle.setToggleState(true, juce::dontSendNotification);
         modifiersToggle.onClick = [this]{ modifiersToggleChanged(); };
@@ -120,8 +114,6 @@ public:
         modifierDisplay.setBounds(topBar.removeFromLeft(topBar.getWidth() * 0.5f).reduced(4));
 
         auto controlBar = topBar;
-        playAllButton.setBounds(controlBar.removeFromLeft(90).reduced(2));
-        stopAllButton.setBounds(controlBar.removeFromLeft(90).reduced(2));
         modifiersToggle.setBounds(controlBar.removeFromLeft(120).reduced(2));
 
         auto rightRegion = controlBar;
@@ -185,8 +177,6 @@ private:
     juce::Viewport modifierSelectionViewport;
     FxStatusPanel fxStatusPanel;
 
-    juce::TextButton playAllButton { "Play All" };
-    juce::TextButton stopAllButton { "Stop All" };
     juce::ToggleButton modifiersToggle { "Modifiers" };
 
     juce::ToggleButton implementedOnlyToggle { "Implemented Only" };

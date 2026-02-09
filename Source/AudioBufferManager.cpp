@@ -337,6 +337,17 @@ void AudioBufferManager::restartAllLoadedBuffersToBeginning()
     }
 }
 
+void AudioBufferManager::setTempoMultiplier(double multiplier)
+{
+    // This is safe to call from the audio thread: it only writes atomics.
+    const double m = (multiplier > 0.0 ? multiplier : 1.0);
+    for (auto& buffer : buffers)
+    {
+        if (buffer != nullptr)
+            buffer->setTempoMultiplier(m);
+    }
+}
+
 void AudioBufferManager::setStartOffsetSamples(int64_t startOffsetSamples)
 {
     globalStartOffsetSamples = juce::jmax<int64_t>(0, startOffsetSamples);

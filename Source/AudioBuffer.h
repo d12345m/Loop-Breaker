@@ -104,6 +104,9 @@ public:
     void pause();
     void setPlaying(bool shouldPlay);
     void setSpeed(double newSpeed);
+    // Multiplies the base speed (params.speed). Used for host-tempo-following behavior.
+    void setTempoMultiplier(double multiplier) { tempoMultiplier.store(multiplier); }
+    double getTempoMultiplier() const { return tempoMultiplier.load(); }
     void setLooping(bool shouldLoop);
     void resetToBeginning();
     void resetToDefaults();
@@ -166,6 +169,10 @@ private:
     mutable juce::SpinLock audioDataLock;
     std::atomic<double> playheadPosition { 0.0 };
     juce::SmoothedValue<double> speedSmoother;
+
+    std::atomic<double> tempoMultiplier { 1.0 };
+
+    double getEffectiveSpeed() const { return params.speed * tempoMultiplier.load(); }
     
     // Parameters
     AudioBufferParams params;

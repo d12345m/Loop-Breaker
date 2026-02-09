@@ -243,7 +243,43 @@ public:
         if (! juce::isPositiveAndBelow(padIndex, numPads))
             return;
 
+        isFileDragActive = false;
+        hoveredPadIndex = -1;
+        repaint();
+
         filesDroppedOnPad(padIndex, files);
+    }
+
+    void fileDragEnter (const juce::StringArray& files, int x, int y) override
+    {
+        if (! isInterestedInFileDrag(files))
+            return;
+
+        isFileDragActive = true;
+        hoveredPadIndex = getPadIndexAt({ x, y });
+        repaint();
+    }
+
+    void fileDragMove (const juce::StringArray& files, int x, int y) override
+    {
+        if (! isInterestedInFileDrag(files))
+            return;
+
+        isFileDragActive = true;
+
+        const int newHover = getPadIndexAt({ x, y });
+        if (newHover != hoveredPadIndex)
+        {
+            hoveredPadIndex = newHover;
+            repaint();
+        }
+    }
+
+    void fileDragExit (const juce::StringArray& /*files*/) override
+    {
+        isFileDragActive = false;
+        hoveredPadIndex = -1;
+        repaint();
     }
 
     // Set total sample length for a pad (for full-file visualization mapping)
@@ -400,9 +436,27 @@ private:
                     g.setColour(juce::Colours::yellow.withAlpha(0.35f));
                     g.fillRoundedRectangle(r.expanded(2.f), 6.f);
                 }
+
+                // File-drag hover overlay + hint
+                if (isFileDragActive && hoveredPadIndex == i)
+                {
+                    g.setColour(juce::Colours::cornflowerblue.withAlpha(0.18f));
+                    g.fillRoundedRectangle(r.expanded(2.f), 6.f);
+                    g.setColour(juce::Colours::cornflowerblue.withAlpha(0.9f));
+                    g.drawRoundedRectangle(r.expanded(2.f), 6.f, 2.0f);
+
+                    auto hintArea = r.reduced(10.f).toNearestInt();
+                    hintArea.removeFromBottom(18); // keep clear of filename label region
+                    g.setColour(juce::Colours::lightgrey.withAlpha(0.9f));
+                    g.setFont(juce::Font(juce::FontOptions().withHeight(13.0f)));
+                    g.drawFittedText("Drop to load", hintArea, juce::Justification::centred, 1);
+                }
             }
         }
     }
+
+    bool isFileDragActive { false };
+    int hoveredPadIndex { -1 };
 
     void timerCallback() override
     {

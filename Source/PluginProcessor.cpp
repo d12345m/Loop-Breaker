@@ -188,9 +188,33 @@ bool BufferTestAudioProcessor::isBusesLayoutSupported (const BusesLayout& layout
 
 void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
-    juce::ignoreUnused(midi);
-
     juce::ScopedNoDenormals noDenormals;
+
+    // Process MIDI input: General MIDI drum map (notes 36-43 map to pads 0-7)
+    // Toggle mode: note-on toggles pad selection, note-off ignored
+    if (!midi.isEmpty())
+    {
+        for (const auto metadata : midi)
+        {
+            const auto msg = metadata.getMessage();
+            DBG("MIDI message: " << msg.getDescription());
+            
+            if (msg.isNoteOn())
+            {
+                const int note = msg.getNoteNumber();
+                const int padIndex = note - 36; // MIDI notes 36-43 → pads 0-7
+                DBG("Note-on received: note=" << note << ", padIndex=" << padIndex);
+                
+                if (padIndex >= 0 && padIndex < 8)
+                {
+                    // Request toggle on UI thread (atomic flag ensures thread safety)
+                    midiPadToggleRequests[padIndex].store(true);
+                    DBG("Pad " << padIndex << " toggle requested");
+                }
+            }
+            // Note-off is ignored in toggle mode
+        }
+    }
 
     // Transport-tied playback: stop output when the host is stopped.
     struct HostTransportResult

@@ -64,6 +64,14 @@ public:
         return indices;
     }
 
+    // Toggle a pad's selection state (for MIDI control)
+    void togglePadSelection(int padIndex)
+    {
+        if (!juce::isPositiveAndBelow(padIndex, numPads)) return;
+        auto* btn = padButtons[padIndex];
+        btn->setToggleState(!btn->getToggleState(), juce::sendNotification);
+    }
+
     // Provide an AudioFormatManager to use for reading files (prepared by the app)
     void setAudioFormatManager(juce::AudioFormatManager* afm)
     {

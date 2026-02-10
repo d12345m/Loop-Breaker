@@ -51,6 +51,13 @@ public:
     void requestStopAll();
     bool isPlaybackEnabled() const { return transportPlaybackEnabled.load(); }
 
+    // Check and clear any pending MIDI toggle requests for a pad (call from UI thread)
+    bool checkAndClearMidiToggle(int padIndex)
+    {
+        if (padIndex < 0 || padIndex >= 8) return false;
+        return midiPadToggleRequests[padIndex].exchange(false);
+    }
+
     enum class HostTransportState : int
     {
         Unknown = 0,
@@ -106,6 +113,9 @@ private:
     std::atomic<bool> pendingRestoreReload { false };
 
     void reloadBuffersFromPadPaths();
+
+    // MIDI pad control: atomic flags for toggle requests (written on audio thread, read/cleared on UI thread)
+    std::atomic<bool> midiPadToggleRequests[8] { {false}, {false}, {false}, {false}, {false}, {false}, {false}, {false} };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BufferTestAudioProcessor)
 };

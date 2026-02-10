@@ -287,6 +287,15 @@ private:
         refreshHostTransportReadout();
         padGrid.setPlayingStates(app.bufferManager.getPlayingBufferIndices());
 
+        // Poll for MIDI pad toggle requests (from audio thread)
+        for (int i = 0; i < 8; ++i)
+        {
+            if (processor.checkAndClearMidiToggle(i))
+            {
+                padGrid.togglePadSelection(i);
+            }
+        }
+
         // Update modifier countdown/progress (driven by scheduler host timeline when available).
         if (app.scheduler.isRunning())
         {

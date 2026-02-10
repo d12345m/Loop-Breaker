@@ -24,11 +24,13 @@ public:
         st.setPitch (1.0f);
         st.setRate (1.0f);
 
-        // Favor smoother output over minimal latency. These values are moderate and stable.
+        // Favor lower latency for real-time playback while keeping quality acceptable.
         // sequence: analysis window; seek: search window; overlap: crossfade between windows.
-        st.setSetting (SETTING_SEQUENCE_MS, 60);
-        st.setSetting (SETTING_SEEKWINDOW_MS, 30);
-        st.setSetting (SETTING_OVERLAP_MS, 12);
+        // Smaller windows + quickseek reduce internal buffering and CPU, which helps avoid crackles under load.
+        st.setSetting (SETTING_SEQUENCE_MS, 40);
+        st.setSetting (SETTING_SEEKWINDOW_MS, 20);
+        st.setSetting (SETTING_OVERLAP_MS, 10);
+        st.setSetting (SETTING_USE_QUICKSEEK, 1);
     }
 
     void reset()
@@ -40,6 +42,12 @@ public:
     void setTempoRatio (float ratio)
     {
         st.setTempo (juce::jlimit (0.25f, 4.0f, ratio));
+    }
+
+    // Expose SoundTouch's reported initial latency so callers can prime appropriately.
+    int getLatencySamples() const
+    {
+        return (int) st.getSetting (SETTING_INITIAL_LATENCY);
     }
 
     // Process non-interleaved JUCE buffers by interleaving into a scratch buffer.

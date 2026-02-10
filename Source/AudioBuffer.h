@@ -184,6 +184,7 @@ private:
     // Time-stretch engine + scratch buffers (used when stretchRatio != 1.0)
     TimeStretchSoundTouch stretcher;
     bool stretcherPrepared = false;
+    bool stretcherPrimed = false;
     double stretcherPreparedSampleRate = 0.0;
     int stretcherPreparedChannels = 0;
     juce::AudioBuffer<float> stretchInScratch;

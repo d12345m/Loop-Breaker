@@ -9,6 +9,8 @@
 */
 
 #include "AudioBuffer.h"
+#include <vector>
+#include <algorithm>
 
 //==============================================================================
 // AudioBuffer Implementation
@@ -270,6 +272,7 @@ void AudioBuffer::setLoadedAudioData(LoadedAudioData::Ptr newData)
     // Reset time-stretch state for a clean start.
     stretchRatio.store(1.0);
     stretcherPrepared = false;
+    stretcherPrimed = false; // Ensure the new primed flag resets
     stretcher.reset();
 }
 
@@ -306,6 +309,14 @@ void AudioBuffer::pause()
 void AudioBuffer::setPlaying(bool shouldPlay)
 {
     params.isPlaying = shouldPlay;
+
+    if (! shouldPlay)
+    {
+        // Flush any buffered SoundTouch audio so we don't resume with stale data.
+        stretcher.reset();
+        stretcherPrepared = false;
+        stretcherPrimed = false; // Ensure the new primed flag resets
+    }
 }
 
 void AudioBuffer::setSpeed(double newSpeed)
@@ -345,6 +356,7 @@ void AudioBuffer::resetToDefaults()
 
     stretchRatio.store(1.0);
     stretcherPrepared = false;
+    stretcherPrimed = false;
     stretcher.reset();
     
     // Reset crossfade state
@@ -385,7 +397,9 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
     // We intentionally keep these buffers around; setSize may allocate but only when capacity grows.
     // For time-stretch we may need to feed more input than output; size input scratch accordingly.
     const double clampedRatio = juce::jlimit (0.25, 4.0, ratio);
-    const int maxInputChunkFrames = juce::jmax (512, (int) std::ceil (numOutputSamples * clampedRatio) + 512);
+    const int warmupFloorMs = 200; // cover several windows to avoid startup gaps
+    const int warmupFloorFrames = (int) std::ceil (hostSampleRate * warmupFloorMs / 1000.0);
+    const int maxInputChunkFrames = juce::jmax (numOutputSamples, (int) std::ceil (numOutputSamples * clampedRatio) + warmupFloorFrames);
     if (stretchInScratch.getNumChannels() != numChannels || stretchInScratch.getNumSamples() < maxInputChunkFrames)
         stretchInScratch.setSize (numChannels, maxInputChunkFrames, false, false, true);
 
@@ -397,6 +411,7 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
         stretcherPrepared = true;
         stretcherPreparedSampleRate = hostSampleRate;
         stretcherPreparedChannels = numChannels;
+        stretcherPrimed = false;
     }
     else
     {
@@ -515,18 +530,37 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
         return framesFilled;
     };
 
+    // Prime SoundTouch once after prepare with a warmup feed to reduce initial starvation.
+    if (! stretcherPrimed)
+    {
+        const int primeFrames = warmupFloorFrames;
+        const int framesFilled = fillInputScratch (primeFrames);
+        if (framesFilled > 0)
+        {
+            std::vector<const float*> primeInPtrs (numChannels, nullptr);
+            for (int ch = 0; ch < numChannels; ++ch)
+                primeInPtrs[ch] = stretchInScratch.getReadPointer (ch);
+
+            std::vector<float*> dummyOut (numChannels, nullptr); // not used when maxOutputSamples==0
+            stretcher.processNonInterleaved (primeInPtrs.data(), framesFilled, dummyOut.data(), 0, false,
+                                             stretchInterleavedIn, stretchInterleavedOut);
+        }
+        stretcherPrimed = true;
+    }
+
+    const int stretcherLatency = juce::jmax (0, stretcher.getLatencySamples());
+
     int framesWritten = 0;
     int safetyIters = 0;
-    while (framesWritten < numOutputSamples && safetyIters++ < 32)
+    while (framesWritten < numOutputSamples && safetyIters++ < 128)
     {
         const int remaining = numOutputSamples - framesWritten;
-
-        float* outPtrs[2] { nullptr, nullptr };
+        std::vector<float*> outPtrs (numChannels, nullptr);
         for (int ch = 0; ch < numChannels; ++ch)
             outPtrs[ch] = outputBuffer.getWritePointer (ch) + framesWritten;
 
         // 1) Drain any already-buffered output without consuming input.
-        const int drained = stretcher.processNonInterleaved (nullptr, 0, outPtrs, remaining, false,
+        const int drained = stretcher.processNonInterleaved (nullptr, 0, outPtrs.data(), remaining, false,
                                                             stretchInterleavedIn, stretchInterleavedOut);
         if (drained > 0)
         {
@@ -537,20 +571,47 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
         // 2) Feed more input and try again.
         // Keep chunks modest to avoid huge lookahead; SoundTouch can buffer internally.
         const int desiredInputChunk = (int) std::ceil (remaining * clampedRatio);
-        const int inputChunkFrames = juce::jlimit (512, maxInputChunkFrames, desiredInputChunk);
+        // On first fills after a reset, feed at least the reported initial latency + a warmup floor.
+        const int primeTarget = std::max({ desiredInputChunk, stretcherLatency, warmupFloorFrames });
+        const int inputChunkFrames = juce::jlimit (1, maxInputChunkFrames, primeTarget);
 
         const int framesFilled = fillInputScratch (inputChunkFrames);
         if (framesFilled <= 0)
             break;
 
-        const float* inPtrs[2] { nullptr, nullptr };
+        std::vector<const float*> inPtrs (numChannels, nullptr);
         for (int ch = 0; ch < numChannels; ++ch)
             inPtrs[ch] = stretchInScratch.getReadPointer (ch);
 
-        const int produced = stretcher.processNonInterleaved (inPtrs, framesFilled, outPtrs, remaining, false,
+        const int produced = stretcher.processNonInterleaved (inPtrs.data(), framesFilled, outPtrs.data(), remaining, false,
                                                              stretchInterleavedIn, stretchInterleavedOut);
         if (produced > 0)
             framesWritten += produced;
+    }
+
+    // Warn in debug if we repeatedly failed to fill the block.
+#if JUCE_DEBUG
+    jassertquiet (framesWritten == numOutputSamples || safetyIters >= 128);
+#endif
+
+    // If we still underfilled, pad the tail to avoid hard zeros/crackles.
+    if (framesWritten < numOutputSamples)
+    {
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            const float last = framesWritten > 0 ? outputBuffer.getSample (ch, framesWritten - 1) : 0.0f;
+            outputBuffer.copyFrom (ch, framesWritten, &last, numOutputSamples - framesWritten);
+        }
+
+        static juce::uint32 lastWarnMs = 0;
+        const juce::uint32 now = juce::Time::getMillisecondCounter();
+        if (now - lastWarnMs > 500)
+        {
+            DBG ("TimeStretch underrun: wrote " << framesWritten << " / " << numOutputSamples
+                 << " ratio=" << ratio << " latency=" << stretcherLatency
+                 << " safetyIters=" << safetyIters << " warmupFrames=" << warmupFloorFrames);
+            lastWarnMs = now;
+        }
     }
 }
 

@@ -34,7 +34,7 @@ struct SessionSettings
   struct PartsConfig {
     int activePart = 0;            // 0-based index
     int partLengthBars = 4;        // equal length per design
-    int numParts = 4;              // configurable 1..4
+    int numParts = 1;              // configurable 1..4 (default to 1 on new instance)
     // Derived helpers
     int getNumParts() const { return juce::jlimit(1, 4, numParts); }
     // Get start bar offset for a given part index (0..3)

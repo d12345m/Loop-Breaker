@@ -315,11 +315,10 @@ private:
 
     void partsCountChanged()
     {
-        int n = juce::jlimit(1, 4, partsCountBox.getSelectedId());
+        const int n = juce::jlimit(1, 4, partsCountBox.getSelectedId());
         app.settings.parts.numParts = n;
-        // Clamp active part within new range
-        if (app.getActivePart() >= n)
-            app.setActivePart(n - 1);
+        // Re-apply active part to recompute loop windows immediately.
+        app.setActivePart(app.getActivePart());
     }
 
 
@@ -329,6 +328,10 @@ private:
         juce::String s;
         s << (app.scheduler.isRunning() ? "Running" : "Stopped");
         s << " | Selected: " << padGrid.getSelectedPadIndices().size();
+        static const char* partNames[] = { "A", "B", "C", "D" };
+        const int numParts = app.settings.parts.getNumParts();
+        const int active = juce::jlimit(0, 3, app.getActivePart());
+        s << " | Parts: " << numParts << " | Active: " << partNames[active];
         statusLabel.setText("Status: " + s, juce::dontSendNotification);
     }
 };

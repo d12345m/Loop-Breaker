@@ -235,16 +235,18 @@ bool AudioBufferManager::requestLoadAudioFile(int bufferIndex, const juce::File&
     return true;
 }
 
-void AudioBufferManager::applyPendingLoads()
+int AudioBufferManager::applyPendingLoads()
 {
     int start1 = 0, size1 = 0, start2 = 0, size2 = 0;
     const int ready = pendingFifo.getNumReady();
     if (ready <= 0)
-        return;
+        return 0;
 
     pendingFifo.prepareToRead(ready, start1, size1, start2, size2);
 
-    auto applyRange = [this](int start, int size)
+    int appliedCount = 0;
+
+    auto applyRange = [this, &appliedCount](int start, int size)
     {
         for (int i = 0; i < size; ++i)
         {
@@ -253,6 +255,8 @@ void AudioBufferManager::applyPendingLoads()
 
             if (!isValidBufferIndex(p.bufferIndex))
                 continue;
+
+            ++appliedCount;
 
             if (!p.ok || p.data == nullptr)
             {
@@ -271,6 +275,8 @@ void AudioBufferManager::applyPendingLoads()
     if (size2 > 0) applyRange(start2, size2);
 
     pendingFifo.finishedRead(size1 + size2);
+
+    return appliedCount;
 }
 
 void AudioBufferManager::clearBuffer(int bufferIndex)

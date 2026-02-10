@@ -375,7 +375,14 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
         reloadBuffersFromPadPaths();
 
     // Apply any completed background loads (fast pointer swap; no disk I/O).
-    app.bufferManager.applyPendingLoads();
+    // If new audio arrived, immediately apply the active part division (loop window) so
+    // the buffer is segmented without waiting for a SwitchPart modifier.
+    if (app.bufferManager.applyPendingLoads() > 0)
+    {
+        app.setActivePart(app.getActivePart());
+        if (! hostPlaying)
+            app.bufferManager.stopAll();
+    }
 
     if (! hostPlaying)
     {

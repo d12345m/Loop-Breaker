@@ -548,8 +548,8 @@ private:
                 {
                     int loadedNumParts = juce::jlimit(1, 4, self->app.settings.parts.numParts);
                     self->partBox.setSelectedId(loadedNumParts, juce::dontSendNotification);
-                    if (self->app.getActivePart() >= loadedNumParts)
-                        self->app.setActivePart(loadedNumParts - 1);
+                    // Re-apply active part so loop windows are recomputed immediately.
+                    self->app.setActivePart(self->app.getActivePart());
                 }
 
                 self->statusLabel.setText("Loaded project: " + file.getFileNameWithoutExtension(),

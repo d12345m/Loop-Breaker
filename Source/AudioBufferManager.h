@@ -57,7 +57,8 @@ public:
     // File loading
     bool loadAudioFile(int bufferIndex, const juce::File& file, juce::AudioFormatManager& formatManager);
     bool requestLoadAudioFile(int bufferIndex, const juce::File& file);
-    void applyPendingLoads();
+    // Applies completed background decode jobs. Returns number of pending items applied.
+    int applyPendingLoads();
     void clearBuffer(int bufferIndex);
     void clearAllBuffers();
     

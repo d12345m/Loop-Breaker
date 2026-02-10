@@ -332,6 +332,7 @@ void MainAppComponent::refreshStatus()
     static const char* partNames[] = { "A", "B", "C", "D" };
     int partIdx = app.getActivePart();
     juce::String partName = juce::String("Part ") + juce::String(partNames[juce::jlimit(0, 3, partIdx)]);
+    const int numParts = app.settings.parts.getNumParts();
     // Show span in bars. Prefer a currently playing buffer; fall back to first loaded.
     double startBars = 0.0, endBars = 0.0;
     int bufferForSpan = -1;
@@ -351,7 +352,8 @@ void MainAppComponent::refreshStatus()
         endBars = spanBars.second;
     }
     juce::String spanStr = juce::String(startBars, 2) + " bars–" + juce::String(endBars, 2) + " bars";
-    juce::String base = partName + " [" + spanStr + "] | Playing: " + juce::String(playing) + " | BPM " + juce::String(app.settings.bpm, 0);
+    juce::String base = partName + " [" + spanStr + "] | Parts: " + juce::String(numParts)
+        + " | Playing: " + juce::String(playing) + " | BPM " + juce::String(app.settings.bpm, 0);
     if (app.scheduler.isRunning())
     {
         double secUntil = app.scheduler.getSecondsUntilNextTrigger();
@@ -380,9 +382,8 @@ void MainAppComponent::partsCountChanged()
 {
     int n = juce::jlimit(1, 4, partsCountBox.getSelectedId());
     app.settings.parts.numParts = n;
-    // Clamp active part within new range
-    if (app.getActivePart() >= n)
-        app.setActivePart(n - 1);
+    // Re-apply active part to recompute loop windows immediately.
+    app.setActivePart(app.getActivePart());
 }
 
 void MainAppComponent::saveProjectClicked()
@@ -441,8 +442,8 @@ void MainAppComponent::loadProjectClicked()
             {
                 int loadedNumParts = juce::jlimit(1, 4, app.settings.parts.numParts);
                 partsCountBox.setSelectedId(loadedNumParts, juce::dontSendNotification);
-                if (app.getActivePart() >= loadedNumParts)
-                    app.setActivePart(loadedNumParts - 1);
+                // Re-apply active part so loop windows are recomputed immediately.
+                app.setActivePart(app.getActivePart());
             }
 
             // Update project name UI

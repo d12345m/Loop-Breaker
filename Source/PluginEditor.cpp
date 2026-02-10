@@ -314,19 +314,17 @@ private:
         }
 
         // Poll for MIDI learn completion
-        if (processor.isMidiLearnEnabled())
+        // Check for learned note even if learn mode was disabled by audio thread
+        const int learnedNote = processor.checkAndClearLearnedNote();
+        if (learnedNote >= 0)
         {
-            const int learnedNote = processor.checkAndClearLearnedNote();
-            if (learnedNote >= 0)
+            const int padIndex = processor.getMidiLearnPadIndex();
+            if (padIndex >= 0 && padIndex < 8)
             {
-                const int padIndex = processor.getMidiLearnPadIndex();
-                if (padIndex >= 0 && padIndex < 8)
-                {
-                    app.settings.midiNoteMap[padIndex] = learnedNote;
-                    padGrid.setMidiNoteForPad(padIndex, learnedNote);
-                    padGrid.setMidiLearnForPad(padIndex, false);
-                    processor.setMidiLearnMode(false, -1);
-                }
+                app.settings.midiNoteMap[padIndex] = learnedNote;
+                padGrid.setMidiNoteForPad(padIndex, learnedNote);
+                padGrid.setMidiLearnForPad(padIndex, false);
+                processor.setMidiLearnMode(false, -1);
             }
         }
 

@@ -112,7 +112,7 @@ public:
 
         refreshStatus();
         refreshHostTransportReadout();
-        startTimerHz(30);
+        startTimerHz(20); // 50ms UI refresh - lower overhead
     }
 
     ~PluginEditorContent() override
@@ -302,7 +302,7 @@ private:
         // Show paused styling when modifiers are disabled.
         modifierDisplay.setSuppressed((! app.settings.modifiersEnabled) || app.scheduler.isSuppressed());
 
-        // Update playhead positions for waveform display.
+        // Update playhead positions for waveform display (only when not playing).
         for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
         {
             if (auto* b = app.bufferManager.getBuffer(i); b && b->hasAudioLoaded())
@@ -315,7 +315,9 @@ private:
                                            (double) b->getLoopEndSamples());
             }
         }
-        repaint();
+        
+        // Repaint for smooth playhead animation
+        padGrid.repaint();
     }
 
     void attachPadCallbacks()

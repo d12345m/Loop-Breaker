@@ -397,7 +397,7 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
     // We intentionally keep these buffers around; setSize may allocate but only when capacity grows.
     // For time-stretch we may need to feed more input than output; size input scratch accordingly.
     const double clampedRatio = juce::jlimit (0.25, 4.0, ratio);
-    const int warmupFloorMs = 300; // cover several windows to avoid startup gaps
+    const int warmupFloorMs = 800; // Very large warmup to completely eliminate startup starvation
     const int warmupFloorFrames = (int) std::ceil (hostSampleRate * warmupFloorMs / 1000.0);
     const int maxInputChunkFrames = juce::jmax (numOutputSamples, (int) std::ceil (numOutputSamples * clampedRatio) + warmupFloorFrames);
     if (stretchInScratch.getNumChannels() != numChannels || stretchInScratch.getNumSamples() < maxInputChunkFrames)
@@ -603,7 +603,7 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
 
     int framesWritten = 0;
     int safetyIters = 0;
-    while (framesWritten < numOutputSamples && safetyIters++ < 128)
+    while (framesWritten < numOutputSamples && safetyIters++ < 256)
     {
         const int remaining = numOutputSamples - framesWritten;
         std::vector<float*> outPtrs (numChannels, nullptr);
@@ -642,7 +642,7 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
 
     // Warn in debug if we repeatedly failed to fill the block.
 #if JUCE_DEBUG
-    jassertquiet (framesWritten == numOutputSamples || safetyIters >= 128);
+    jassertquiet (framesWritten == numOutputSamples || safetyIters >= 256);
 #endif
 
     // If we still underfilled, pad the tail to avoid hard zeros/crackles.

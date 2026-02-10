@@ -90,7 +90,7 @@ MainAppComponent::MainAppComponent()
     setAudioChannels(0, 2);
     setSize(920, 600);
 
-    startTimerHz(30); // 33ms UI refresh for smoother playhead motion
+    startTimerHz(20); // 50ms UI refresh - lower overhead to avoid blocking audio thread
 
     // Apply initial scheduler settings from SessionSettings
     app.scheduler.setQuantizationEnabled(app.settings.quantizeEnabled);
@@ -273,7 +273,9 @@ void MainAppComponent::modifierTriggered(const ModifierDescriptor& desc, const j
 void MainAppComponent::timerCallback()
 {
     refreshStatus();
-    padGrid.setPlayingStates(app.bufferManager.getPlayingBufferIndices());
+    const auto playingIndices = app.bufferManager.getPlayingBufferIndices();
+    padGrid.setPlayingStates(playingIndices);
+    
     // Update per-pad playheads and loop windows for waveform overlays
     for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
     {
@@ -287,8 +289,10 @@ void MainAppComponent::timerCallback()
                                         (double) buf->getLoopEndSamples());
         }
     }
-    // Ensure the pad grid repaints so the playhead line moves continuously
+    
+    // Repaint pad grid for smooth playhead animation
     padGrid.repaint();
+    
     if (app.scheduler.isRunning())
     {
         modifierDisplay.setCountdown(app.scheduler.getSecondsUntilNextTrigger(),

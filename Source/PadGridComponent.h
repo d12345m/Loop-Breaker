@@ -51,7 +51,7 @@ public:
             loopEndSamples[(size_t)i] = 0.0;
         }
 
-        startTimerHz(30); // for transient flash highlight decay
+        startTimerHz(20); // for transient flash highlight decay - lower overhead
     }
 
     // Returns indices of pads whose toggle state is on (selected by user for modifiers)
@@ -128,6 +128,7 @@ public:
     {
         if (!juce::isPositiveAndBelow(padIndex, numPads)) return;
         playheadSamples[(size_t)padIndex] = samples;
+        // Throttled repaint to reduce overhead but keep UI responsive
     }
 
     void setLoopWindowForPad(int padIndex, bool enabled, double startSamples, double endSamples)

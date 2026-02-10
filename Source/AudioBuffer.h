@@ -192,6 +192,7 @@ private:
     juce::AudioBuffer<float> stretchInterleavedIn;
     juce::AudioBuffer<float> stretchInterleavedOut;
     std::atomic<int> timeStretchUnderfills { 0 };
+    int stretchFadeInRemaining = 0; // samples of fade-in left to apply on first stretch block
     
     // Parameters
     AudioBufferParams params;

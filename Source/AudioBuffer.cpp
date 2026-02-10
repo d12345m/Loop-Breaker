@@ -274,6 +274,7 @@ void AudioBuffer::setLoadedAudioData(LoadedAudioData::Ptr newData)
     stretchRatio.store(1.0);
     stretcherPrepared = false;
     stretcherPrimed = false; // Ensure the new primed flag resets
+    stretchFadeInRemaining = 0;
     stretcher.reset();
 }
 
@@ -317,6 +318,7 @@ void AudioBuffer::setPlaying(bool shouldPlay)
         stretcher.reset();
         stretcherPrepared = false;
         stretcherPrimed = false; // Ensure the new primed flag resets
+        stretchFadeInRemaining = 0;
     }
 }
 
@@ -413,6 +415,7 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
         stretcherPreparedSampleRate = hostSampleRate;
         stretcherPreparedChannels = numChannels;
         stretcherPrimed = false;
+        stretchFadeInRemaining = 0;
     }
     else
     {
@@ -420,13 +423,10 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
         stretcher.setTempoRatio ((float) clampedRatio);
     }
 
-    // Ensure scratch buffers are large enough for priming too.
+    // Ensure scratch buffers are appropriately sized.
     const int stretcherLatency = juce::jmax (0, stretcher.getLatencySamples());
-    {
-        const int neededScratch = juce::jmax (maxInputChunkFrames, stretcherLatency + marginFrames);
-        if (stretchInScratch.getNumChannels() != numChannels || stretchInScratch.getNumSamples() < neededScratch)
-            stretchInScratch.setSize (numChannels, neededScratch, false, false, true);
-    }
+    if (stretchInScratch.getNumChannels() != numChannels || stretchInScratch.getNumSamples() < maxInputChunkFrames)
+        stretchInScratch.setSize (numChannels, maxInputChunkFrames, false, false, true);
 
     // Fill / pull in a loop so we always output a full block.
     // Key idea: try to drain existing SoundTouch output first; if insufficient, feed more input and retry.
@@ -677,37 +677,13 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
         return framesFilled;
     };
 
-    // ──── Prime SoundTouch on first use after a reset ────
-    // Feed stretcherLatency worth of real audio and discard the output so the
-    // first frames the main loop drains are fully warmed up (no initial crackle).
-    if (! stretcherPrimed && stretcherLatency > 0)
+    // On the very first block after a reset, schedule a short fade-in (~5ms)
+    // to mask any startup transient from SoundTouch's empty internal buffers.
+    // No expensive priming — just let the normal feed/drain loop do its job.
+    if (! stretcherPrimed)
     {
-        const int primeSamples = juce::jmin (stretcherLatency + marginFrames, maxInputChunkFrames);
-        const int filled = fillInputScratch (primeSamples);
-        if (filled > 0)
-        {
-            std::vector<const float*> primeIn (numChannels, nullptr);
-            for (int ch = 0; ch < numChannels; ++ch)
-                primeIn[ch] = stretchInScratch.getReadPointer (ch);
-
-            // Feed the audio; any output produced is latency artefact — discard it.
-            stretcher.processNonInterleaved (primeIn.data(), filled, nullptr, 0, false,
-                                            stretchInterleavedIn, stretchInterleavedOut);
-
-            // Drain and throw away whatever SoundTouch buffered.
-            if (stretcher.numSamplesAvailable() > 0)
-            {
-                // Use stretchInScratch as a throwaway drain target (it was just consumed).
-                std::vector<float*> discardPtrs (numChannels, nullptr);
-                for (int ch = 0; ch < numChannels; ++ch)
-                    discardPtrs[ch] = stretchInScratch.getWritePointer (ch);
-
-                stretcher.processNonInterleaved (nullptr, 0, discardPtrs.data(),
-                                                stretcher.numSamplesAvailable(), false,
-                                                stretchInterleavedIn, stretchInterleavedOut);
-            }
-        }
         stretcherPrimed = true;
+        stretchFadeInRemaining = juce::jmax (1, (int) (hostSampleRate * 0.005));
     }
 
     int framesWritten = 0;
@@ -752,6 +728,22 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
                                                              stretchInterleavedIn, stretchInterleavedOut);
         if (produced > 0)
             framesWritten += produced;
+    }
+
+    // Apply fade-in if this is the first block after priming.
+    if (stretchFadeInRemaining > 0 && framesWritten > 0)
+    {
+        const int fadeLen = juce::jmin (stretchFadeInRemaining, framesWritten);
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            float* out = outputBuffer.getWritePointer (ch);
+            for (int i = 0; i < fadeLen; ++i)
+            {
+                const float g = (float) (i + 1) / (float) fadeLen;
+                out[i] *= g;
+            }
+        }
+        stretchFadeInRemaining -= fadeLen;
     }
 
     // Warn in debug if we repeatedly failed to fill the block.

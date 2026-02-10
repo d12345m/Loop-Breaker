@@ -191,6 +191,7 @@ private:
     juce::AudioBuffer<float> stretchOutScratch;
     juce::AudioBuffer<float> stretchInterleavedIn;
     juce::AudioBuffer<float> stretchInterleavedOut;
+    std::atomic<int> timeStretchUnderfills { 0 };
     
     // Parameters
     AudioBufferParams params;

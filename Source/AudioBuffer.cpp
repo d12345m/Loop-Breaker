@@ -397,7 +397,7 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
     // We intentionally keep these buffers around; setSize may allocate but only when capacity grows.
     // For time-stretch we may need to feed more input than output; size input scratch accordingly.
     const double clampedRatio = juce::jlimit (0.25, 4.0, ratio);
-    const int warmupFloorMs = 200; // cover several windows to avoid startup gaps
+    const int warmupFloorMs = 300; // cover several windows to avoid startup gaps
     const int warmupFloorFrames = (int) std::ceil (hostSampleRate * warmupFloorMs / 1000.0);
     const int maxInputChunkFrames = juce::jmax (numOutputSamples, (int) std::ceil (numOutputSamples * clampedRatio) + warmupFloorFrames);
     if (stretchInScratch.getNumChannels() != numChannels || stretchInScratch.getNumSamples() < maxInputChunkFrames)
@@ -533,8 +533,57 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
     // Prime SoundTouch once after prepare with a warmup feed to reduce initial starvation.
     if (! stretcherPrimed)
     {
+        // Avoid advancing the real playhead or altering slicing state during priming.
+        const double startPos = playheadPosition.load();
         const int primeFrames = warmupFloorFrames;
-        const int framesFilled = fillInputScratch (primeFrames);
+
+        if (stretchInScratch.getNumChannels() != numChannels || stretchInScratch.getNumSamples() < primeFrames)
+            stretchInScratch.setSize (numChannels, primeFrames, false, false, true);
+
+        // Fill linearly from the current position without touching state or slice handlers.
+        double pos = startPos;
+        int framesFilled = 0;
+        for (int sample = 0; sample < primeFrames; ++sample)
+        {
+            // Basic boundary handling with looping; ignore slicing side effects for priming.
+            if (inputSpeed >= 0.0)
+            {
+                if (pos >= fileLengthSamples - 1)
+                {
+                    if (params.isLooping)
+                        pos = 0.0;
+                    else
+                        break;
+                }
+            }
+            else
+            {
+                if (pos <= 0.0)
+                {
+                    if (params.isLooping)
+                        pos = (double) (fileLengthSamples - 1);
+                    else
+                        break;
+                }
+            }
+
+            pos = juce::jlimit (0.0, (double) (fileLengthSamples - 1), pos);
+            const int pos1 = (int) pos;
+            const int pos2 = juce::jmin (pos1 + 1, fileLengthSamples - 1);
+            const double frac = pos - (double) pos1;
+
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                const float s1 = sourceBuffer.getSample (ch, pos1);
+                const float s2 = sourceBuffer.getSample (ch, pos2);
+                const float s = s1 + (float) frac * (s2 - s1);
+                stretchInScratch.setSample (ch, sample, s);
+            }
+
+            pos += inputSpeed * (fileSampleRate / hostSampleRate);
+            ++framesFilled;
+        }
+
         if (framesFilled > 0)
         {
             std::vector<const float*> primeInPtrs (numChannels, nullptr);
@@ -545,6 +594,8 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
             stretcher.processNonInterleaved (primeInPtrs.data(), framesFilled, dummyOut.data(), 0, false,
                                              stretchInterleavedIn, stretchInterleavedOut);
         }
+
+        // Restore playhead unchanged; the real process loop continues normally.
         stretcherPrimed = true;
     }
 
@@ -603,15 +654,7 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
             outputBuffer.copyFrom (ch, framesWritten, &last, numOutputSamples - framesWritten);
         }
 
-        static juce::uint32 lastWarnMs = 0;
-        const juce::uint32 now = juce::Time::getMillisecondCounter();
-        if (now - lastWarnMs > 500)
-        {
-            DBG ("TimeStretch underrun: wrote " << framesWritten << " / " << numOutputSamples
-                 << " ratio=" << ratio << " latency=" << stretcherLatency
-                 << " safetyIters=" << safetyIters << " warmupFrames=" << warmupFloorFrames);
-            lastWarnMs = now;
-        }
+        timeStretchUnderfills.fetch_add (1, std::memory_order_relaxed);
     }
 }
 

@@ -318,9 +318,11 @@ private:
         const int learnedNote = processor.checkAndClearLearnedNote();
         if (learnedNote >= 0)
         {
+            DBG("UI received learned note: " + juce::String(learnedNote));
             const int padIndex = processor.getMidiLearnPadIndex();
             if (padIndex >= 0 && padIndex < 8)
             {
+                DBG("Assigning note " + juce::String(learnedNote) + " to pad " + juce::String(padIndex));
                 app.settings.midiNoteMap[padIndex] = learnedNote;
                 padGrid.setMidiNoteForPad(padIndex, learnedNote);
                 padGrid.setMidiLearnForPad(padIndex, false);

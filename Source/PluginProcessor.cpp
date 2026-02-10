@@ -196,6 +196,8 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
         const bool learnMode = midiLearnEnabled.load();
         const int learnPad = midiLearnPadIndex.load();
         
+        DBG("MIDI received - learnMode: " + juce::String(learnMode ? "true" : "false") + " learnPad: " + juce::String(learnPad));
+        
         for (const auto metadata : midi)
         {
             const auto msg = metadata.getMessage();
@@ -204,9 +206,12 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             {
                 const int note = msg.getNoteNumber();
                 
+                DBG("MIDI Note On: " + juce::String(note));
+                
                 // MIDI learn mode: capture note for assignment
                 if (learnMode && learnPad >= 0 && learnPad < 8)
                 {
+                    DBG("Capturing note " + juce::String(note) + " for pad " + juce::String(learnPad));
                     learnedMidiNote.store(note);
                     midiLearnEnabled.store(false);  // Disable learn mode after capturing
                     continue;

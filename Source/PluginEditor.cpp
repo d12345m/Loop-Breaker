@@ -181,6 +181,8 @@ public:
         {
             modifierHistory.addEntry(desc, targets);
             padGrid.flashPads(targets);
+            if (! targets.isEmpty())
+                padGrid.clearSelections();
             refreshStatus();
         });
     }

@@ -21,6 +21,8 @@
 #include <memory>
 #include <functional>
 
+#include "TimeStretchSoundTouch.h"
+
 //==============================================================================
 /**
     Interface for receiving callbacks from AudioBuffer events
@@ -110,6 +112,10 @@ public:
     void setLooping(bool shouldLoop);
     void resetToBeginning();
     void resetToDefaults();
+
+    // Time-stretch (tempo only, no pitch). 1.0 = normal.
+    void setStretchRatio(double ratio);
+    double getStretchRatio() const { return stretchRatio.load(); }
     
     //==============================================================================
     // Slicing functionality
@@ -171,8 +177,19 @@ private:
     juce::SmoothedValue<double> speedSmoother;
 
     std::atomic<double> tempoMultiplier { 1.0 };
+    std::atomic<double> stretchRatio { 1.0 }; // 1.0 = normal; <1 slower/longer; >1 faster/shorter
 
     double getEffectiveSpeed() const { return params.speed * tempoMultiplier.load(); }
+
+    // Time-stretch engine + scratch buffers (used when stretchRatio != 1.0)
+    TimeStretchSoundTouch stretcher;
+    bool stretcherPrepared = false;
+    double stretcherPreparedSampleRate = 0.0;
+    int stretcherPreparedChannels = 0;
+    juce::AudioBuffer<float> stretchInScratch;
+    juce::AudioBuffer<float> stretchOutScratch;
+    juce::AudioBuffer<float> stretchInterleavedIn;
+    juce::AudioBuffer<float> stretchInterleavedOut;
     
     // Parameters
     AudioBufferParams params;
@@ -213,6 +230,7 @@ private:
     //==============================================================================
     // Internal processing methods
     void processWithRepitching(juce::AudioBuffer<float>& outputBuffer);
+    void processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer);
     void handleSlicePlayback(double& currentPos, int fileLengthSamples);
     void applyCrossfadeToSliceTransition(const juce::AudioBuffer<float>& sourceBuffer,
                                          int fileLengthSamples,

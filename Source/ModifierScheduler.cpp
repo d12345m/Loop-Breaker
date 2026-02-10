@@ -344,6 +344,13 @@ void ModifierScheduler::forceUpcomingVariant(ModifierType type, const juce::Stri
                 base.plannedSpeed = val;
                 base.description = base.description + " -> " + juce::String(val, 2) + "x";
             }
+            else if (type == ModifierType::Stretch)
+            {
+                double val = variant.getDoubleValue();
+                if (val <= 0.0) val = 1.0;
+                base.plannedStretch = val;
+                base.description = base.description + " -> " + juce::String(val, 2) + "x";
+            }
             else if (type == ModifierType::BufferReverbOn)
             {
                 double wet = variant.getDoubleValue();
@@ -429,6 +436,7 @@ ModifierDescriptor ModifierScheduler::pickRandomDescriptor() const
             // Base implemented list
             bool allowed = (t == ModifierType::Reverse
                 || t == ModifierType::Speed
+                || t == ModifierType::Stretch
                 || t == ModifierType::ResetAll
                 || t == ModifierType::BeatSliceRandom
                 || t == ModifierType::BufferReverbOn
@@ -471,6 +479,14 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
         const juce::SpinLock::ScopedLockType lock(rngLock);
         double chosen = speeds[rng.nextInt((int)std::size(speeds))];
         modified.plannedSpeed = chosen;
+        modified.description = base.description + " -> " + juce::String(chosen, 2) + "x";
+    }
+    else if (base.type == ModifierType::Stretch)
+    {
+        static const double ratios[] { 0.25, 0.5, 2.0 };
+        const juce::SpinLock::ScopedLockType lock(rngLock);
+        double chosen = ratios[rng.nextInt((int)std::size(ratios))];
+        modified.plannedStretch = chosen;
         modified.description = base.description + " -> " + juce::String(chosen, 2) + "x";
     }
     else if (base.type == ModifierType::BeatSliceRandom)

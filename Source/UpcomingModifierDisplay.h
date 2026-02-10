@@ -24,6 +24,8 @@ public:
             upcomingVariant.clear();
             if (desc->plannedSpeed.has_value())
                 upcomingVariant = juce::String(desc->plannedSpeed.value(), 2) + "x";
+            else if (desc->plannedStretch.has_value())
+                upcomingVariant = juce::String(desc->plannedStretch.value(), 2) + "x";
             else if (desc->plannedSliceDivision.isNotEmpty())
                 upcomingVariant = desc->plannedSliceDivision;
             else if (desc->plannedWet.has_value())

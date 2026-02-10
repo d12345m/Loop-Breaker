@@ -62,6 +62,7 @@ juce::OwnedArray<IModifier> ModifierFactory::createAllPrototypes()
     // Buffer modifiers
     add(ModifierType::Reverse, ModifierCategory::BufferTransform, "Reverse", "Reverse playback direction");
     add(ModifierType::Speed, ModifierCategory::BufferTransform, "Speed", "Change playback speed (rate/pitch)");
+    add(ModifierType::Stretch, ModifierCategory::BufferTransform, "Stretch", "Time-stretch (tempo only)");
     add(ModifierType::PitchUpOctave, ModifierCategory::BufferTransform, "+Oct", "Pitch up one octave");
     add(ModifierType::PitchDownOctave, ModifierCategory::BufferTransform, "-Oct", "Pitch down one octave");
     add(ModifierType::BeatSliceRandom, ModifierCategory::BufferTransform, "Slice", "Random beat slicing");

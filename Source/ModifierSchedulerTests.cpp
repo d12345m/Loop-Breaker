@@ -76,6 +76,22 @@ public:
             }
         }
 
+        beginTest("forceUpcomingVariant sets structured fields (Stretch)");
+        {
+            SessionSettings settings;
+            ModifierScheduler scheduler(settings);
+            scheduler.setRestrictToImplemented(true);
+            scheduler.forceUpcomingVariant(ModifierType::Stretch, "0.5");
+            auto upcoming = scheduler.getUpcomingModifier();
+            expect(upcoming.has_value(), "No upcoming after forceUpcomingVariant");
+            if (upcoming.has_value()) {
+                expectEquals((int)upcoming->type, (int)ModifierType::Stretch, "Type mismatch");
+                expect(upcoming->plannedStretch.has_value(), "plannedStretch not set");
+                if (upcoming->plannedStretch.has_value())
+                    expectWithinAbsoluteError(upcoming->plannedStretch.value(), 0.5, 1e-9, "plannedStretch value incorrect");
+            }
+        }
+
         beginTest("forceUpcomingVariant sets structured fields (BeatSliceRandom)");
         {
             SessionSettings settings;
@@ -100,14 +116,17 @@ public:
             scheduler.setRestrictToImplemented(true);
             scheduler.setRandomSeed(42);
             scheduler.start();
-            // Try a few rounds to encounter both Speed and BeatSliceRandom
+            // Try a few rounds to encounter Speed, Stretch, and BeatSliceRandom
             bool sawSpeedWithPlanned = false;
+            bool sawStretchWithPlanned = false;
             bool sawSliceWithPlanned = false;
-            for (int i = 0; i < 20 && (!sawSpeedWithPlanned || !sawSliceWithPlanned); ++i) {
+            for (int i = 0; i < 40 && (!sawSpeedWithPlanned || !sawStretchWithPlanned || !sawSliceWithPlanned); ++i) {
                 auto up = scheduler.getUpcomingModifier();
                 if (up.has_value()) {
                     if (up->type == ModifierType::Speed)
                         sawSpeedWithPlanned |= up->plannedSpeed.has_value();
+                    else if (up->type == ModifierType::Stretch)
+                        sawStretchWithPlanned |= up->plannedStretch.has_value();
                     else if (up->type == ModifierType::BeatSliceRandom)
                         sawSliceWithPlanned |= up->plannedSliceDivision.isNotEmpty();
                 }
@@ -115,6 +134,7 @@ public:
                 scheduler.updateTime(settings.getSecondsBetweenModifiers() + 0.001);
             }
             expect(sawSpeedWithPlanned, "Did not encounter Speed with plannedSpeed set");
+            expect(sawStretchWithPlanned, "Did not encounter Stretch with plannedStretch set");
             expect(sawSliceWithPlanned, "Did not encounter BeatSliceRandom with plannedSliceDivision set");
         }
     }
@@ -144,6 +164,13 @@ public:
         speedDesc.shortName = "Speed";
         speedDesc.plannedSpeed = 2.0;
         app.modifierTriggered(speedDesc, targets);
+
+        // Stretch with planned value
+        ModifierDescriptor stretchDesc;
+        stretchDesc.type = ModifierType::Stretch;
+        stretchDesc.shortName = "Stretch";
+        stretchDesc.plannedStretch = 0.5;
+        app.modifierTriggered(stretchDesc, targets);
 
         // If we reached here, consider it pass (no assertions to check engine state without audio loaded)
         expect(true);

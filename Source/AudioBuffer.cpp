@@ -43,12 +43,20 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
         outputBuffer.clear();
         return;
     }
-    
-    // Smooth speed changes to avoid artifacts
-    speedSmoother.setTargetValue(getEffectiveSpeed());
-    
-    // Process with repitching (speed and pitch change together)
-    processWithRepitching(outputBuffer);
+
+    const double stretch = stretchRatio.load();
+    if (std::abs(stretch - 1.0) > 1.0e-6)
+    {
+        processWithTimeStretch(outputBuffer);
+    }
+    else
+    {
+        // Smooth speed changes to avoid artifacts
+        speedSmoother.setTargetValue(getEffectiveSpeed());
+
+        // Process with repitching (speed and pitch change together)
+        processWithRepitching(outputBuffer);
+    }
     
     // Check for state changes and notify listeners
     notifyPlaybackStateChanged();
@@ -258,6 +266,11 @@ void AudioBuffer::setLoadedAudioData(LoadedAudioData::Ptr newData)
     isInCrossfade = false;
     crossfadePosition = 0;
     previousSliceIndex = -1;
+
+    // Reset time-stretch state for a clean start.
+    stretchRatio.store(1.0);
+    stretcherPrepared = false;
+    stretcher.reset();
 }
 
 void AudioBuffer::clearAudioData()
@@ -300,6 +313,17 @@ void AudioBuffer::setSpeed(double newSpeed)
     params.speed = newSpeed;
 }
 
+void AudioBuffer::setStretchRatio(double ratio)
+{
+    if (ratio <= 0.0)
+        ratio = 1.0;
+
+    // Clamp to reasonable range (matches TimeStretchSoundTouch)
+    ratio = juce::jlimit(0.25, 4.0, ratio);
+
+    stretchRatio.store(ratio);
+}
+
 void AudioBuffer::setLooping(bool shouldLoop)
 {
     params.isLooping = shouldLoop;
@@ -318,11 +342,216 @@ void AudioBuffer::resetToDefaults()
 {
     resetToBeginning();
     params.reset();
+
+    stretchRatio.store(1.0);
+    stretcherPrepared = false;
+    stretcher.reset();
     
     // Reset crossfade state
     isInCrossfade = false;
     crossfadePosition = 0;
     previousSliceIndex = -1;
+}
+
+void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
+{
+    const int numOutputSamples = outputBuffer.getNumSamples();
+
+    auto data = getAudioDataSnapshot();
+    if (data == nullptr || data->buffer.getNumSamples() <= 0 || data->sampleRate <= 0.0)
+    {
+        outputBuffer.clear();
+        return;
+    }
+
+    const auto& sourceBuffer = data->buffer;
+    const int fileLengthSamples = sourceBuffer.getNumSamples();
+    const double fileSampleRate = data->sampleRate;
+    const int numChannels = juce::jmin(outputBuffer.getNumChannels(), sourceBuffer.getNumChannels());
+    if (numChannels <= 0)
+    {
+        outputBuffer.clear();
+        return;
+    }
+
+    const double ratio = stretchRatio.load();
+    // When time-stretching, SoundTouch changes the output tempo. We should NOT also scale
+    // the source read speed by ratio (that would double-apply the effect).
+    // We do, however, still apply host tempo-following so Stretch remains relative to the DAW tempo.
+    const double direction = (params.speed < 0.0 ? -1.0 : 1.0);
+    const double inputSpeed = direction * tempoMultiplier.load();
+
+    // Ensure scratch buffers are appropriately sized without per-sample allocation.
+    // We intentionally keep these buffers around; setSize may allocate but only when capacity grows.
+    // For time-stretch we may need to feed more input than output; size input scratch accordingly.
+    const double clampedRatio = juce::jlimit (0.25, 4.0, ratio);
+    const int maxInputChunkFrames = juce::jmax (512, (int) std::ceil (numOutputSamples * clampedRatio) + 512);
+    if (stretchInScratch.getNumChannels() != numChannels || stretchInScratch.getNumSamples() < maxInputChunkFrames)
+        stretchInScratch.setSize (numChannels, maxInputChunkFrames, false, false, true);
+
+    // Prepare SoundTouch when needed.
+    if (!stretcherPrepared || stretcherPreparedSampleRate != hostSampleRate || stretcherPreparedChannels != numChannels)
+    {
+        stretcher.prepare(hostSampleRate, numChannels);
+        stretcher.setTempoRatio ((float) clampedRatio);
+        stretcherPrepared = true;
+        stretcherPreparedSampleRate = hostSampleRate;
+        stretcherPreparedChannels = numChannels;
+    }
+    else
+    {
+        // Ratio can change without channel/sr changing; keep tempo updated.
+        stretcher.setTempoRatio ((float) clampedRatio);
+    }
+
+    // Fill / pull in a loop so we always output a full block.
+    // Key idea: try to drain existing SoundTouch output first; if insufficient, feed more input and retry.
+    // This avoids the periodic underruns (silence tail) that sound like crackles.
+    outputBuffer.clear();
+
+    auto fillInputScratch = [&] (int framesToGenerate) -> int
+    {
+        jassert (framesToGenerate >= 0);
+        if (framesToGenerate == 0)
+            return 0;
+
+        // Zero the region we are going to fill.
+        stretchInScratch.clear (0, framesToGenerate);
+
+        int framesFilled = 0;
+        for (int sample = 0; sample < framesToGenerate; ++sample)
+        {
+            double currentPos = playheadPosition.load();
+
+            handleSlicePlayback (currentPos, fileLengthSamples);
+            currentPos = playheadPosition.load();
+
+            // If no custom loop window is active, respect file boundaries + looping similar to repitch mode.
+            if (! loopWindowEnabled.load() && ! slicingModeActive.load())
+            {
+                if (inputSpeed > 0.0) // forward
+                {
+                    if (currentPos >= fileLengthSamples - 1)
+                    {
+                        if (params.isLooping)
+                        {
+                            startBoundaryCrossfade (0.0);
+                            currentPos = 0.0;
+                        }
+                        else
+                        {
+                            params.isPlaying = false;
+                            break;
+                        }
+                    }
+                }
+                else if (inputSpeed < 0.0) // reverse
+                {
+                    if (currentPos <= 0.0)
+                    {
+                        if (params.isLooping)
+                        {
+                            startBoundaryCrossfade ((double) (fileLengthSamples - 1));
+                            currentPos = (double) (fileLengthSamples - 1);
+                        }
+                        else
+                        {
+                            params.isPlaying = false;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Enforce loop window boundaries similarly to repitch path.
+            if (loopWindowEnabled.load())
+            {
+                const int64_t start = loopStartSamples.load();
+                const int64_t end   = loopEndSamples.load();
+                if (inputSpeed >= 0.0)
+                {
+                    if (currentPos >= (double) end)
+                    {
+                        startBoundaryCrossfade ((double) start);
+                        currentPos = (double) start;
+                    }
+                    else if (currentPos < (double) start)
+                        currentPos = (double) start;
+                }
+                else
+                {
+                    if (currentPos < (double) start)
+                    {
+                        startBoundaryCrossfade ((double) end);
+                        currentPos = (double) end;
+                    }
+                    else if (currentPos > (double) end)
+                        currentPos = (double) end;
+                }
+            }
+
+            currentPos = juce::jlimit (0.0, static_cast<double> (fileLengthSamples - 1), currentPos);
+            const int pos1 = (int) currentPos;
+            const int pos2 = juce::jmin (pos1 + 1, fileLengthSamples - 1);
+            const double frac = currentPos - (double) pos1;
+
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                const float s1 = sourceBuffer.getSample (ch, pos1);
+                const float s2 = sourceBuffer.getSample (ch, pos2);
+                const float s = s1 + (float) frac * (s2 - s1);
+                stretchInScratch.setSample (ch, sample, s);
+            }
+
+            if (isInCrossfade)
+                applyCrossfadeToSliceTransition (sourceBuffer, fileLengthSamples, fileSampleRate, stretchInScratch, sample, 1);
+
+            currentPos += inputSpeed * (fileSampleRate / hostSampleRate);
+            playheadPosition.store (currentPos);
+
+            ++framesFilled;
+        }
+
+        return framesFilled;
+    };
+
+    int framesWritten = 0;
+    int safetyIters = 0;
+    while (framesWritten < numOutputSamples && safetyIters++ < 32)
+    {
+        const int remaining = numOutputSamples - framesWritten;
+
+        float* outPtrs[2] { nullptr, nullptr };
+        for (int ch = 0; ch < numChannels; ++ch)
+            outPtrs[ch] = outputBuffer.getWritePointer (ch) + framesWritten;
+
+        // 1) Drain any already-buffered output without consuming input.
+        const int drained = stretcher.processNonInterleaved (nullptr, 0, outPtrs, remaining, false,
+                                                            stretchInterleavedIn, stretchInterleavedOut);
+        if (drained > 0)
+        {
+            framesWritten += drained;
+            continue;
+        }
+
+        // 2) Feed more input and try again.
+        // Keep chunks modest to avoid huge lookahead; SoundTouch can buffer internally.
+        const int desiredInputChunk = (int) std::ceil (remaining * clampedRatio);
+        const int inputChunkFrames = juce::jlimit (512, maxInputChunkFrames, desiredInputChunk);
+
+        const int framesFilled = fillInputScratch (inputChunkFrames);
+        if (framesFilled <= 0)
+            break;
+
+        const float* inPtrs[2] { nullptr, nullptr };
+        for (int ch = 0; ch < numChannels; ++ch)
+            inPtrs[ch] = stretchInScratch.getReadPointer (ch);
+
+        const int produced = stretcher.processNonInterleaved (inPtrs, framesFilled, outPtrs, remaining, false,
+                                                             stretchInterleavedIn, stretchInterleavedOut);
+        if (produced > 0)
+            framesWritten += produced;
+    }
 }
 
 //==============================================================================

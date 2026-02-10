@@ -131,6 +131,9 @@ struct AppState : public ModifierSchedulerListener
             case ModifierType::Speed:
                 applySpeed(desc, targets);
                 break;
+            case ModifierType::Stretch:
+                applyStretch(desc, targets);
+                break;
             case ModifierType::ResetAll:
                 applyReset(targets);
                 break;
@@ -261,6 +264,20 @@ private:
             if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
             {
                 b->setSpeed(speedVal);
+                if (!b->isPlaying()) b->play();
+            }
+        }
+    }
+
+    void applyStretch(const ModifierDescriptor& desc, const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        const double ratioVal = desc.plannedStretch.has_value() ? desc.plannedStretch.value() : 1.0;
+        for (int idx : targets)
+        {
+            if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
+            {
+                b->setStretchRatio(ratioVal);
                 if (!b->isPlaying()) b->play();
             }
         }

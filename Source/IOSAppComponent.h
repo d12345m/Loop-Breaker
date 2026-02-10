@@ -38,7 +38,7 @@ public:
     playAllButton.onClick = [this]{ playAllClicked(); };
         stopAllButton.onClick = [this]{ stopAllClicked(); };
 
-    // Settings screen contents: Modifiers toggle, BPM, Quantize, Part selector, Load/Save/LoadProj, and Sample Slot selector
+    // Settings screen contents: Modifiers toggle, BPM, Part selector, Load/Save/LoadProj, and Sample Slot selector
     settingsContainer.addAndMakeVisible(modifiersToggle);
     settingsContainer.addAndMakeVisible(loadButton);
     settingsContainer.addAndMakeVisible(saveButton);
@@ -82,13 +82,6 @@ public:
     bpmSlider.setValue(app.settings.bpm);
     bpmSlider.setSliderStyle(juce::Slider::LinearHorizontal);
     bpmSlider.onValueChange = [this]{ app.settings.bpm = bpmSlider.getValue(); refreshStatus(); };
-
-    settingsContainer.addAndMakeVisible(quantizeToggle);
-    quantizeToggle.setButtonText("Quantize Triggers");
-    quantizeToggle.setToggleState(app.settings.quantizeEnabled, juce::dontSendNotification);
-    quantizeToggle.onClick = [this]{ app.settings.quantizeEnabled = quantizeToggle.getToggleState(); app.scheduler.setQuantizationEnabled(app.settings.quantizeEnabled); refreshStatus(); };
-
-    // Subdivision removed for now
 
         settingsContainer.addAndMakeVisible(partLabel);
         partLabel.setText("Parts", juce::dontSendNotification);
@@ -222,15 +215,12 @@ public:
             bpmSlider.setBounds(row2.reduced(4));
 
             auto row3 = sb.removeFromTop(32);
-            quantizeToggle.setBounds(row3.reduced(4));
+            partLabel.setBounds(row3.removeFromLeft(60));
+            partBox.setBounds(row3.reduced(4));
 
             auto row4 = sb.removeFromTop(32);
-            partLabel.setBounds(row4.removeFromLeft(60));
-            partBox.setBounds(row4.reduced(4));
-
-            auto row5 = sb.removeFromTop(32);
-            slotLabel.setBounds(row5.removeFromLeft(80));
-            slotBox.setBounds(row5.reduced(4));
+            slotLabel.setBounds(row4.removeFromLeft(80));
+            slotBox.setBounds(row4.reduced(4));
         }
 
         // Logs layout
@@ -544,7 +534,6 @@ private:
 
                 // Apply loaded settings to UI & scheduler
                 self->bpmSlider.setValue(self->app.settings.bpm, juce::dontSendNotification);
-                self->quantizeToggle.setToggleState(self->app.settings.quantizeEnabled, juce::dontSendNotification);
 
                 bool running = self->app.scheduler.isRunning();
                 if (running) self->app.scheduler.stop();
@@ -702,7 +691,6 @@ private:
     // Settings controls
     juce::Label bpmLabel;
     juce::Slider bpmSlider;
-    juce::ToggleButton quantizeToggle;
     juce::Label partLabel;
     juce::ComboBox partBox;
     juce::Label slotLabel;

@@ -35,23 +35,6 @@ public:
         implementedOnlyToggle.setToggleState(true, juce::dontSendNotification);
         implementedOnlyToggle.onClick = [this]{ implementedOnlyToggled(); };
 
-        addAndMakeVisible(quantizeToggle);
-        quantizeToggle.setToggleState(app.settings.quantizeEnabled, juce::dontSendNotification);
-        quantizeToggle.onClick = [this]{ quantizeToggled(); };
-
-        quantizeSubdivisionBox.addItem("Bar", 1);
-        quantizeSubdivisionBox.addItem("1/2", 2);
-        quantizeSubdivisionBox.addItem("1/4 (Beat)", 3);
-        quantizeSubdivisionBox.addItem("1/8", 4);
-        quantizeSubdivisionBox.addItem("1/16", 5);
-        quantizeSubdivisionBox.onChange = [this]{ quantizeSubdivisionChanged(); };
-        addAndMakeVisible(quantizeSubdivisionBox);
-
-        auto subdivisionToId = [](int subdiv)->int{
-            switch (subdiv) { case 1: return 1; case 2: return 2; case 4: return 3; case 8: return 4; case 16: return 5; default: return 3; }
-        };
-        quantizeSubdivisionBox.setSelectedId(subdivisionToId(app.settings.quantizeSubdivision), juce::dontSendNotification);
-
         addAndMakeVisible(padSelectForLoad);
         for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
             padSelectForLoad.addItem("Pad " + juce::String(i+1), i+1);
@@ -118,8 +101,6 @@ public:
 
         auto rightRegion = controlBar;
         implementedOnlyToggle.setBounds(rightRegion.removeFromRight(150).reduced(2));
-        quantizeSubdivisionBox.setBounds(rightRegion.removeFromRight(110).reduced(2));
-        quantizeToggle.setBounds(rightRegion.removeFromRight(100).reduced(2));
 
         auto row2 = area.removeFromTop(28).reduced(2);
         padSelectForLoad.setBounds(row2.removeFromLeft(110).reduced(2));
@@ -180,8 +161,6 @@ private:
     juce::ToggleButton modifiersToggle { "Modifiers" };
 
     juce::ToggleButton implementedOnlyToggle { "Implemented Only" };
-    juce::ToggleButton quantizeToggle { "Quantize" };
-    juce::ComboBox quantizeSubdivisionBox;
 
     juce::ComboBox padSelectForLoad;
     juce::TextButton loadFileButton { "Load File To Pad..." };
@@ -266,6 +245,21 @@ private:
         refreshHostTransportReadout();
         padGrid.setPlayingStates(app.bufferManager.getPlayingBufferIndices());
 
+        // Update modifier countdown/progress (driven by scheduler host timeline when available).
+        if (app.scheduler.isRunning())
+        {
+            modifierDisplay.setCountdown(app.scheduler.getSecondsUntilNextTrigger(),
+                                         app.scheduler.getBarsUntilNextTrigger(),
+                                         app.scheduler.getProgressToNextTrigger());
+        }
+        else
+        {
+            modifierDisplay.setCountdown(0.0, 0.0, 0.0);
+        }
+
+        // Show paused styling when modifiers are disabled.
+        modifierDisplay.setSuppressed((! app.settings.modifiersEnabled) || app.scheduler.isSuppressed());
+
         // Update playhead positions for waveform display.
         for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
         {
@@ -314,29 +308,6 @@ private:
     void implementedOnlyToggled()
     {
         app.scheduler.setRestrictToImplemented(implementedOnlyToggle.getToggleState());
-    }
-
-    void quantizeToggled()
-    {
-        app.settings.quantizeEnabled = quantizeToggle.getToggleState();
-        app.scheduler.setQuantizationEnabled(app.settings.quantizeEnabled);
-    }
-
-    void quantizeSubdivisionChanged()
-    {
-        int id = quantizeSubdivisionBox.getSelectedId();
-        int subdiv = 4;
-        switch (id)
-        {
-            case 1: subdiv = 1; break;
-            case 2: subdiv = 2; break;
-            case 3: subdiv = 4; break;
-            case 4: subdiv = 8; break;
-            case 5: subdiv = 16; break;
-            default: subdiv = 4; break;
-        }
-        app.settings.quantizeSubdivision = subdiv;
-        app.scheduler.setQuantizationSubdivision(subdiv);
     }
 
     void loadFileClicked()

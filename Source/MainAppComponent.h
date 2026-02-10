@@ -60,8 +60,6 @@ private:
     juce::ComboBox padSelectForLoad;
     juce::Label statusLabel { {}, "Status: Idle" };
   juce::ToggleButton implementedOnlyToggle { "Implemented Only" };
-  juce::ToggleButton quantizeToggle { "Quantize" };
-  juce::ComboBox quantizeSubdivisionBox; // values: 1,2,4,8,16
   juce::Slider bpmSlider; // horizontal BPM control
   juce::Label bpmLabel { {}, "BPM" };
   // Parts count selector (1–4)
@@ -88,8 +86,6 @@ private:
   void implementedOnlyToggled();
   void bpmChanged();
   void updatePlaybackModifierLink();
-  void quantizeToggled();
-  void quantizeSubdivisionChanged();
   void partsCountChanged();
   void saveProjectClicked();
   void loadProjectClicked();

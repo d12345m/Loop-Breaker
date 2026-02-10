@@ -30,6 +30,10 @@ public:
             btn->setLookAndFeel(&invisibleToggleLF);
             btn->setClickingTogglesState(true);
             btn->onClick = [this]{ if (selectionChanged) selectionChanged(); };
+            
+            // Add mouse listener for MIDI learn (Shift+Click) and clear (Cmd+Click)
+            btn->addMouseListener(this, false);
+            
             addAndMakeVisible(btn);
 
             auto* label = padFileLabels.add(new juce::Label());
@@ -96,7 +100,6 @@ public:
     }
 
     std::function<void(int padIndex)> onMidiLearnRequest;
-    std::function<void(int padIndex)> onClearMidiNote;
 
     // Provide an AudioFormatManager to use for reading files (prepared by the app)
     void setAudioFormatManager(juce::AudioFormatManager* afm)
@@ -589,32 +592,29 @@ private:
 
     void mouseDown(const juce::MouseEvent& e) override
     {
-        // Shift+click to enter MIDI learn mode for a pad
-        if (e.mods.isShiftDown())
+        // Check which pad button was clicked
+        auto* clickedComponent = e.eventComponent;
+        int clickedPadIndex = -1;
+        
+        for (int i = 0; i < numPads; ++i)
         {
-            const auto p = e.getPosition();
-            for (int i = 0; i < numPads; ++i)
+            if (clickedComponent == padButtons[i])
             {
-                if (padButtons[i] != nullptr && padButtons[i]->getBounds().contains(p))
-                {
-                    if (onMidiLearnRequest)
-                        onMidiLearnRequest(i);
-                    return;
-                }
+                clickedPadIndex = i;
+                break;
             }
         }
-        // Alt/Cmd+click to clear MIDI assignment
-        else if (e.mods.isCommandDown() || e.mods.isAltDown())
+        
+        if (clickedPadIndex < 0)
+            return;
+        
+        // Shift+click to enter MIDI learn mode (replaces existing assignment)
+        if (e.mods.isShiftDown())
         {
-            const auto p = e.getPosition();
-            for (int i = 0; i < numPads; ++i)
+            if (onMidiLearnRequest)
             {
-                if (padButtons[i] != nullptr && padButtons[i]->getBounds().contains(p))
-                {
-                    if (onClearMidiNote)
-                        onClearMidiNote(i);
-                    return;
-                }
+                onMidiLearnRequest(clickedPadIndex);
+                e.eventComponent->setMouseCursor(juce::MouseCursor::WaitCursor);
             }
         }
     }

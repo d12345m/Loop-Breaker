@@ -14,11 +14,11 @@ public:
 
     void paint(juce::Graphics& g) override
     {
-        auto bounds = getLocalBounds().toFloat();
+        auto bounds = getLocalBounds();
         g.setColour(Theme::panel());
-        g.fillRoundedRectangle(bounds.reduced(1.0f), 10.0f);
+        g.fillRect(bounds);
         g.setColour(Theme::border());
-        g.drawRoundedRectangle(bounds.reduced(1.0f), 10.0f, 1.0f);
+        g.drawRect(bounds, 1);
 
         g.setColour(Theme::text());
         auto area = getLocalBounds().reduced(4);

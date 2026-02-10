@@ -148,11 +148,8 @@ void MainAppComponent::paint(juce::Graphics& g)
 {
     g.fillAll(Theme::bg());
 
-    auto card = getLocalBounds().toFloat().reduced(6.0f);
-    g.setColour(Theme::panel());
-    g.fillRoundedRectangle(card, 12.0f);
     g.setColour(Theme::border());
-    g.drawRoundedRectangle(card, 12.0f, 1.0f);
+    g.drawRect(getLocalBounds(), 1);
 }
 
 void MainAppComponent::resized()

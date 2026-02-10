@@ -6,9 +6,9 @@ namespace Theme
 {
 inline juce::Colour bg()            { return juce::Colour::fromRGB(245, 247, 250); } // app background
 inline juce::Colour panel()         { return juce::Colour::fromRGB(255, 255, 255); } // cards
-inline juce::Colour panelAlt()      { return juce::Colour::fromRGB(250, 251, 253); }
-inline juce::Colour border()        { return juce::Colour::fromRGB(220, 226, 234); }
-inline juce::Colour borderStrong()  { return juce::Colour::fromRGB(200, 208, 218); }
+inline juce::Colour panelAlt()      { return juce::Colour::fromRGB(247, 249, 252); }
+inline juce::Colour border()        { return juce::Colour::fromRGB(224, 230, 238); }
+inline juce::Colour borderStrong()  { return juce::Colour::fromRGB(210, 218, 228); }
 
 inline juce::Colour text()          { return juce::Colour::fromRGB(28, 32, 38); }
 inline juce::Colour textSubtle()    { return juce::Colour::fromRGB(92, 100, 112); }

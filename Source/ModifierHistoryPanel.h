@@ -44,6 +44,15 @@ public:
         addAndMakeVisible(list);
     }
 
+    void paint(juce::Graphics& g) override
+    {
+        auto bounds = getLocalBounds();
+        g.setColour(Theme::panel());
+        g.fillRect(bounds);
+        g.setColour(Theme::border());
+        g.drawRect(bounds, 1);
+    }
+
     void resized() override
     {
         auto area = getLocalBounds().reduced(2);
@@ -85,7 +94,7 @@ public:
         if (rowIsSelected)
             g.fillAll(Theme::accent().withAlpha(0.12f));
         else if (rowNumber % 2 == 1)
-            g.fillAll(Theme::panel());
+            g.fillAll(Theme::panelAlt());
         if (rowNumber < 0 || rowNumber >= entries.size()) return;
         const auto& e = entries.getReference(rowNumber);
 

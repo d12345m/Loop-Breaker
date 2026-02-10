@@ -103,11 +103,11 @@ public:
 
     void paint(juce::Graphics& g) override
     {
-        auto bounds = getLocalBounds().toFloat();
+        auto bounds = getLocalBounds();
         g.setColour(Theme::panel());
-        g.fillRoundedRectangle(bounds.reduced(1.0f), 10.0f);
+        g.fillRect(bounds);
         g.setColour(Theme::border());
-        g.drawRoundedRectangle(bounds.reduced(1.0f), 10.0f, 1.0f);
+        g.drawRect(bounds, 1);
 
         g.setColour(Theme::text());
         {
@@ -122,13 +122,13 @@ public:
 
         // Simple horizontal progress bar at the right side of top half
         auto barArea = topHalf.removeFromRight(160).reduced(4);
-        g.setColour(Theme::border().withAlpha(0.8f));
-        g.fillRoundedRectangle(barArea.toFloat(), 4.0f);
+        g.setColour(Theme::panelAlt());
+        g.fillRect(barArea);
         auto fill = barArea.withWidth(int(barArea.getWidth() * progress));
-        g.setColour((suppressed ? Theme::warn() : Theme::accent2()).withAlpha(0.75f));
-        g.fillRoundedRectangle(fill.toFloat(), 4.0f);
+        g.setColour((suppressed ? Theme::warn() : Theme::accent2()).withAlpha(0.70f));
+        g.fillRect(fill);
         g.setColour(Theme::borderStrong());
-        g.drawRoundedRectangle(barArea.toFloat(), 4.0f, 1.0f);
+        g.drawRect(barArea, 1);
         if (suppressed)
         {
             g.setColour(Theme::warn());

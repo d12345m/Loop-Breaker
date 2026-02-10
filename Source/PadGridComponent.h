@@ -385,9 +385,9 @@ private:
 
                 // Background
                 g.setColour(Theme::panelAlt());
-                g.fillRoundedRectangle(r, 8.f);
+                g.fillRoundedRectangle(r, 3.f);
                 g.setColour(Theme::border());
-                g.drawRoundedRectangle(r, 8.f, 1.0f);
+                g.drawRoundedRectangle(r, 3.f, 1.0f);
 
                 // Waveform rendering region
                 auto inner = r.reduced(6.f, 6.f);
@@ -395,11 +395,11 @@ private:
                 {
                     const bool hasWave = thumb->getTotalLength() > 0.0;
                     g.setColour(hasWave ? Theme::borderStrong() : Theme::border());
-                    g.drawRoundedRectangle(r, 8.f, 1.0f);
+                    g.drawRoundedRectangle(r, 3.f, 1.0f);
 
                     if (hasWave)
                     {
-                        g.setColour(Theme::accent2().withAlpha(0.85f));
+                        g.setColour(Theme::textSubtle().withAlpha(0.75f));
                         thumb->drawChannels(g, inner.toNearestInt(), 0.0, thumb->getTotalLength(), 1.0f);
 
                         // Loop overlay (proportional across full file waveform)
@@ -439,23 +439,23 @@ private:
                 if (padButtons[i]->getToggleState())
                 {
                     g.setColour(Theme::accent().withAlpha(0.10f));
-                    g.fillRoundedRectangle(r, 8.f);
+                    g.fillRoundedRectangle(r, 3.f);
                     g.setColour(Theme::accent().withAlpha(0.85f));
-                    g.drawRoundedRectangle(r.expanded(1.5f), 8.f, 2.0f);
+                    g.drawRoundedRectangle(r.expanded(1.5f), 3.f, 1.8f);
                 }
 
                 // Playing state outline
                 if (playingStates[(size_t)i])
                 {
                     g.setColour(Theme::good().withAlpha(0.85f));
-                    g.drawRoundedRectangle(r.expanded(2.f), 8.f, 2.2f);
+                    g.drawRoundedRectangle(r.expanded(2.f), 3.f, 2.0f);
                 }
 
                 // Flash overlay
                 if (flashCounters[(size_t)i] > 0)
                 {
                     g.setColour(Theme::warn().withAlpha(0.18f));
-                    g.fillRoundedRectangle(r.expanded(2.f), 8.f);
+                    g.fillRoundedRectangle(r.expanded(2.f), 3.f);
                 }
 
                 // File-drag hover overlay + hint
@@ -469,9 +469,9 @@ private:
                     {
                         const bool isHovered = (hoveredPadIndex == i);
                         g.setColour(Theme::accent().withAlpha(isHovered ? 0.10f : 0.06f));
-                        g.fillRoundedRectangle(r.expanded(2.f), 8.f);
+                        g.fillRoundedRectangle(r.expanded(2.f), 3.f);
                         g.setColour(Theme::accent().withAlpha(isHovered ? 0.85f : 0.45f));
-                        g.drawRoundedRectangle(r.expanded(2.f), 8.f, isHovered ? 2.0f : 1.2f);
+                        g.drawRoundedRectangle(r.expanded(2.f), 3.f, isHovered ? 2.0f : 1.2f);
 
                         if (isHovered)
                         {

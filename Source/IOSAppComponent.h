@@ -43,8 +43,6 @@ public:
     settingsContainer.addAndMakeVisible(loadButton);
     settingsContainer.addAndMakeVisible(saveButton);
     settingsContainer.addAndMakeVisible(loadProjectButton);
-    settingsContainer.addAndMakeVisible(slotLabel);
-    settingsContainer.addAndMakeVisible(slotBox);
     loadButton.setButtonText("Load Audio");
     saveButton.setButtonText("Save Project");
     loadProjectButton.setButtonText("Load Project");
@@ -52,23 +50,6 @@ public:
     saveButton.onClick = [this]{ saveClicked(); };
     loadProjectButton.onClick = [this]{ loadProjectClicked(); };
     modifiersToggle.setButtonText("Modifiers Enabled");
-        // Slot selector (which pad to load the sample into)
-        slotLabel.setText("Load to Pad", juce::dontSendNotification);
-        slotLabel.setJustificationType(juce::Justification::centredLeft);
-        // JUCE ComboBox item IDs must be non-zero; reserve a high ID for "First Empty"
-        constexpr int kFirstEmptyId = 100;
-        slotBox.addItem("First Empty", kFirstEmptyId);
-        for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
-            slotBox.addItem("Pad " + juce::String(i+1), i+1);
-        // Default to First Empty
-        slotBox.setSelectedId(kFirstEmptyId, juce::dontSendNotification);
-        selectedLoadSlot = -1; // -1 means First Empty
-        slotBox.onChange = [this]
-        {
-            int id = slotBox.getSelectedId();
-            if (id == kFirstEmptyId) selectedLoadSlot = -1; // First Empty
-            else selectedLoadSlot = juce::jlimit(0, AudioBufferManager::MAX_BUFFERS-1, id-1);
-        };
 
     // Default ON at launch: modifiers enabled
     modifiersToggle.setToggleState(true, juce::dontSendNotification);
@@ -217,10 +198,6 @@ public:
             auto row3 = sb.removeFromTop(32);
             partLabel.setBounds(row3.removeFromLeft(60));
             partBox.setBounds(row3.reduced(4));
-
-            auto row4 = sb.removeFromTop(32);
-            slotLabel.setBounds(row4.removeFromLeft(80));
-            slotBox.setBounds(row4.reduced(4));
         }
 
         // Logs layout
@@ -418,20 +395,14 @@ private:
                             juce::Logger::outputDebugString("UI Update: Copy OK");
                             
                             int targetPad = 0;
-                            if (s->selectedLoadSlot < 0)
+                            // Always find first empty slot
+                            auto loaded = s->app.bufferManager.getLoadedBufferIndices();
+                            bool found = false;
+                            for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
                             {
-                                auto loaded = s->app.bufferManager.getLoadedBufferIndices();
-                                bool found = false;
-                                for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
-                                {
-                                    if (! loaded.contains(i)) { targetPad = i; found = true; break; }
-                                }
-                                if (!found) targetPad = 0;
+                                if (! loaded.contains(i)) { targetPad = i; found = true; break; }
                             }
-                            else
-                            {
-                                targetPad = juce::jlimit(0, AudioBufferManager::MAX_BUFFERS-1, s->selectedLoadSlot);
-                            }
+                            if (!found) targetPad = 0;
 
                             if (s->app.bufferManager.loadAudioFile(targetPad, dest, s->formatManager))
                             {
@@ -693,11 +664,8 @@ private:
     juce::Slider bpmSlider;
     juce::Label partLabel;
     juce::ComboBox partBox;
-    juce::Label slotLabel;
-    juce::ComboBox slotBox;
     juce::TextButton saveButton;
     juce::TextButton loadProjectButton;
-    int selectedLoadSlot = -1; // -1 means first empty, otherwise 0-based index
 
     void appendLog(const juce::String& msg)
     {

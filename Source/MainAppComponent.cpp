@@ -29,7 +29,6 @@ MainAppComponent::MainAppComponent()
         addAndMakeVisible(modifiersToggle);
         modifiersToggle.setToggleState(true, juce::dontSendNotification);
         modifiersToggle.onClick = [this]{ modifiersToggleChanged(); };
-    addAndMakeVisible(loadFileButton); loadFileButton.onClick = [this]{ loadFileClicked(); };
     // Project name controls
     projectNameLabel.attachToComponent(&projectNameEditor, true);
     addAndMakeVisible(projectNameEditor);
@@ -39,11 +38,6 @@ MainAppComponent::MainAppComponent()
     addAndMakeVisible(saveProjectButton); saveProjectButton.onClick = [this]{ saveProjectClicked(); };
     addAndMakeVisible(loadProjectButton); loadProjectButton.onClick = [this]{ loadProjectClicked(); };
     // Parts UI buttons removed; use partsCountBox + status only.
-
-    addAndMakeVisible(padSelectForLoad);
-    for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
-        padSelectForLoad.addItem("Pad " + juce::String(i+1), i+1);
-    padSelectForLoad.setSelectedId(1);
 
     addAndMakeVisible(statusLabel);
     statusLabel.setJustificationType(juce::Justification::centredLeft);
@@ -195,9 +189,6 @@ void MainAppComponent::resized()
     partsCountBox.setBounds(projArea.removeFromLeft(160).reduced(2));
     // Label is attached to partsCountBox; no explicit bounds needed
     // Parts buttons removed; reclaim space for other controls.
-    // Right: Pad selector and Load File
-    padSelectForLoad.setBounds(projArea.removeFromLeft(110).reduced(2));
-    loadFileButton.setBounds(projArea.removeFromLeft(150).reduced(2));
     // Status label occupies the remaining right-side space on this row
     statusLabel.setBounds(projArea.reduced(2));
     area.removeFromTop(6);
@@ -326,34 +317,6 @@ void MainAppComponent::stopAllClicked()
 void MainAppComponent::modifiersToggleChanged()
 {
     updatePlaybackModifierLink();
-}
-
-void MainAppComponent::loadFileClicked()
-{
-    int padIndex = padSelectForLoad.getSelectedId() - 1;
-    if (padIndex < 0) return;
-
-    fileChooser = std::make_unique<juce::FileChooser>("Select audio file...", juce::File(), "*.wav;*.mp3;*.aif;*.aiff;*.flac");
-    auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
-    juce::Component::SafePointer<MainAppComponent> safeThis(this);
-    fileChooser->launchAsync(flags, [safeThis, padIndex](const juce::FileChooser& fc){
-        if (safeThis == nullptr) return; // component destroyed; ignore callback
-        auto& self = *safeThis.getComponent();
-        auto f = fc.getResult();
-        if (f == juce::File()) return;
-        if (self.app.bufferManager.loadAudioFile(padIndex, f, self.formatManager))
-        {
-            self.statusLabel.setText("Loaded to Pad " + juce::String(padIndex+1) + ": " + f.getFileName(), juce::dontSendNotification);
-            self.padGrid.setPadFileName(padIndex, f.getFileNameWithoutExtension());
-            while (self.app.settings.padFilePaths.size() < AudioBufferManager::MAX_BUFFERS)
-                self.app.settings.padFilePaths.add(juce::String());
-            self.app.settings.padFilePaths.set(padIndex, f.getFullPathName());
-            // Update thumbnail on this pad
-            self.padGrid.setPadFilePath(padIndex, f.getFullPathName());
-        } else {
-            juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Load Failed", "Could not load file.");
-        }
-    });
 }
 
 void MainAppComponent::updatePadSelectionTargets()

@@ -52,12 +52,10 @@ private:
     juce::TextButton playAllButton { "Play All" };
     juce::TextButton stopAllButton { "Stop All" };
   juce::ToggleButton modifiersToggle { "Modifiers" }; // Links playback to scheduler when ON
-    juce::TextButton loadFileButton { "Load File To Pad..." };
     juce::TextButton saveProjectButton { "Save Project" };
     juce::TextButton loadProjectButton { "Load Project" };
     juce::Label projectNameLabel { {}, "Project" };
     juce::TextEditor projectNameEditor;
-    juce::ComboBox padSelectForLoad;
     juce::Label statusLabel { {}, "Status: Idle" };
   juce::ToggleButton implementedOnlyToggle { "Implemented Only" };
   juce::Slider bpmSlider; // horizontal BPM control
@@ -80,7 +78,7 @@ private:
     void playAllClicked();
     void stopAllClicked();
   void modifiersToggleChanged();
-    void loadFileClicked();
+
     void updatePadSelectionTargets();
     void refreshStatus();
   void implementedOnlyToggled();

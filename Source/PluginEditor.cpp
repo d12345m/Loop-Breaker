@@ -35,13 +35,18 @@ public:
         implementedOnlyToggle.setToggleState(true, juce::dontSendNotification);
         implementedOnlyToggle.onClick = [this]{ implementedOnlyToggled(); };
 
-        addAndMakeVisible(padSelectForLoad);
-        for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
-            padSelectForLoad.addItem("Pad " + juce::String(i+1), i+1);
-        padSelectForLoad.setSelectedId(1);
-
-        addAndMakeVisible(loadFileButton);
-        loadFileButton.onClick = [this]{ loadFileClicked(); };
+        // Parts count selector
+        addAndMakeVisible(partsCountBox);
+        partsCountBox.addItem("1 part", 1);
+        partsCountBox.addItem("2 parts", 2);
+        partsCountBox.addItem("3 parts", 3);
+        partsCountBox.addItem("4 parts", 4);
+        {
+            int initialParts = app.settings.parts.getNumParts();
+            if (initialParts < 1 || initialParts > 4) initialParts = 1;
+            partsCountBox.setSelectedId(initialParts, juce::dontSendNotification);
+        }
+        partsCountBox.onChange = [this]{ partsCountChanged(); };
 
         addAndMakeVisible(statusLabel);
         statusLabel.setJustificationType(juce::Justification::centredLeft);
@@ -98,13 +103,12 @@ public:
 
         auto controlBar = topBar;
         modifiersToggle.setBounds(controlBar.removeFromLeft(120).reduced(2));
+        partsCountBox.setBounds(controlBar.removeFromLeft(120).reduced(2));
 
         auto rightRegion = controlBar;
         implementedOnlyToggle.setBounds(rightRegion.removeFromRight(150).reduced(2));
 
         auto row2 = area.removeFromTop(28).reduced(2);
-        padSelectForLoad.setBounds(row2.removeFromLeft(110).reduced(2));
-        loadFileButton.setBounds(row2.removeFromLeft(170).reduced(2));
         hostTransportLabel.setBounds(row2.removeFromRight(240).reduced(2));
         statusLabel.setBounds(row2.reduced(2));
 
@@ -162,8 +166,7 @@ private:
 
     juce::ToggleButton implementedOnlyToggle { "Implemented Only" };
 
-    juce::ComboBox padSelectForLoad;
-    juce::TextButton loadFileButton { "Load File To Pad..." };
+    juce::ComboBox partsCountBox;
     juce::Label statusLabel { {}, "Status: Idle" };
     juce::Label hostTransportLabel { {}, "Host: Unknown" };
 
@@ -310,28 +313,16 @@ private:
         app.scheduler.setRestrictToImplemented(implementedOnlyToggle.getToggleState());
     }
 
-    void loadFileClicked()
+    void partsCountChanged()
     {
-        const int padIndex = padSelectForLoad.getSelectedId() - 1;
-        if (! juce::isPositiveAndBelow(padIndex, AudioBufferManager::MAX_BUFFERS))
-            return;
-
-        fileChooser = std::make_unique<juce::FileChooser>(
-            "Select an audio file...",
-            juce::File{},
-            "*.wav;*.aiff;*.aif;*.flac;*.mp3");
-
-        fileChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
-            [this, padIndex] (const juce::FileChooser& chooser)
-            {
-                auto file = chooser.getResult();
-                if (file.existsAsFile())
-                {
-                    loadFileIntoPad(padIndex, file);
-                }
-                fileChooser.reset();
-            });
+        int n = juce::jlimit(1, 4, partsCountBox.getSelectedId());
+        app.settings.parts.numParts = n;
+        // Clamp active part within new range
+        if (app.getActivePart() >= n)
+            app.setActivePart(n - 1);
     }
+
+
 
     void refreshStatus()
     {

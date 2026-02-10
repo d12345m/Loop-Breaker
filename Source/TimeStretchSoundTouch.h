@@ -110,6 +110,9 @@ public:
         if (flush)
             st.flush();
 
+        if (maxOutputSamples <= 0 || output == nullptr)
+            return 0;
+
         const int totalOut = maxOutputSamples * channels;
         if (interleavedOut.getNumChannels() != 1 || interleavedOut.getNumSamples() < totalOut)
             interleavedOut.setSize (1, totalOut, false, false, true);

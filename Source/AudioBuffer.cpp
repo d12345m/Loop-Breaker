@@ -403,8 +403,6 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
     // was previously causing CPU spikes every processBlock call.
     const int marginFrames = 64;
     const int maxInputChunkFrames = juce::jmax (numOutputSamples, (int) std::ceil (numOutputSamples * clampedRatio) + marginFrames);
-    if (stretchInScratch.getNumChannels() != numChannels || stretchInScratch.getNumSamples() < maxInputChunkFrames)
-        stretchInScratch.setSize (numChannels, maxInputChunkFrames, false, false, true);
 
     // Prepare SoundTouch when needed.
     if (!stretcherPrepared || stretcherPreparedSampleRate != hostSampleRate || stretcherPreparedChannels != numChannels)
@@ -420,6 +418,14 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
     {
         // Ratio can change without channel/sr changing; keep tempo updated.
         stretcher.setTempoRatio ((float) clampedRatio);
+    }
+
+    // Ensure scratch buffers are large enough for priming too.
+    const int stretcherLatency = juce::jmax (0, stretcher.getLatencySamples());
+    {
+        const int neededScratch = juce::jmax (maxInputChunkFrames, stretcherLatency + marginFrames);
+        if (stretchInScratch.getNumChannels() != numChannels || stretchInScratch.getNumSamples() < neededScratch)
+            stretchInScratch.setSize (numChannels, neededScratch, false, false, true);
     }
 
     // Fill / pull in a loop so we always output a full block.
@@ -671,7 +677,38 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
         return framesFilled;
     };
 
-    const int stretcherLatency = juce::jmax (0, stretcher.getLatencySamples());
+    // ──── Prime SoundTouch on first use after a reset ────
+    // Feed stretcherLatency worth of real audio and discard the output so the
+    // first frames the main loop drains are fully warmed up (no initial crackle).
+    if (! stretcherPrimed && stretcherLatency > 0)
+    {
+        const int primeSamples = juce::jmin (stretcherLatency + marginFrames, maxInputChunkFrames);
+        const int filled = fillInputScratch (primeSamples);
+        if (filled > 0)
+        {
+            std::vector<const float*> primeIn (numChannels, nullptr);
+            for (int ch = 0; ch < numChannels; ++ch)
+                primeIn[ch] = stretchInScratch.getReadPointer (ch);
+
+            // Feed the audio; any output produced is latency artefact — discard it.
+            stretcher.processNonInterleaved (primeIn.data(), filled, nullptr, 0, false,
+                                            stretchInterleavedIn, stretchInterleavedOut);
+
+            // Drain and throw away whatever SoundTouch buffered.
+            if (stretcher.numSamplesAvailable() > 0)
+            {
+                // Use stretchInScratch as a throwaway drain target (it was just consumed).
+                std::vector<float*> discardPtrs (numChannels, nullptr);
+                for (int ch = 0; ch < numChannels; ++ch)
+                    discardPtrs[ch] = stretchInScratch.getWritePointer (ch);
+
+                stretcher.processNonInterleaved (nullptr, 0, discardPtrs.data(),
+                                                stretcher.numSamplesAvailable(), false,
+                                                stretchInterleavedIn, stretchInterleavedOut);
+            }
+        }
+        stretcherPrimed = true;
+    }
 
     int framesWritten = 0;
     int safetyIters = 0;
@@ -701,18 +738,12 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
 
         // 2) Feed more input and try again.
         //    Feed just enough to produce `remaining` output frames, plus a small margin.
-        //    On the very first feed after a reset, also ensure we cover SoundTouch's initial latency.
-        const int desiredInputChunk = (int) std::ceil (remaining * clampedRatio) + marginFrames;
-        const int primeTarget = stretcherPrimed ? desiredInputChunk
-                                                : juce::jmax (desiredInputChunk, stretcherLatency);
-        const int inputChunkFrames = juce::jlimit (1, maxInputChunkFrames, primeTarget);
+        const int inputChunkFrames = juce::jlimit (1, maxInputChunkFrames,
+                                                    (int) std::ceil (remaining * clampedRatio) + marginFrames);
 
         const int framesFilled = fillInputScratch (inputChunkFrames);
         if (framesFilled <= 0)
             break;
-
-        // Mark primed once we've generated any input after a reset.
-        stretcherPrimed = true;
 
         for (int ch = 0; ch < numChannels; ++ch)
             inPtrs[ch] = stretchInScratch.getReadPointer (ch);

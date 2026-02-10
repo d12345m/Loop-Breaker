@@ -6,9 +6,38 @@
 #include "ModifierHistoryPanel.h"
 #include "ModifierSelectionPanel.h"
 #include "FxStatusPanel.h"
+#include "Theme.h"
 
 namespace
 {
+class HipLookAndFeel final : public juce::LookAndFeel_V4
+{
+public:
+    HipLookAndFeel()
+    {
+        setColour(juce::ResizableWindow::backgroundColourId, Theme::bg());
+        setColour(juce::ComboBox::backgroundColourId, Theme::panel());
+        setColour(juce::ComboBox::outlineColourId, Theme::borderStrong());
+        setColour(juce::ComboBox::textColourId, Theme::text());
+        setColour(juce::ComboBox::arrowColourId, Theme::textSubtle());
+
+        setColour(juce::TextButton::buttonColourId, Theme::panelAlt());
+        setColour(juce::TextButton::buttonOnColourId, Theme::panelAlt());
+        setColour(juce::TextButton::textColourOffId, Theme::text());
+        setColour(juce::TextButton::textColourOnId, Theme::text());
+
+        setColour(juce::ToggleButton::textColourId, Theme::text());
+        setColour(juce::ToggleButton::tickColourId, Theme::accent());
+        setColour(juce::ToggleButton::tickDisabledColourId, Theme::borderStrong());
+
+        setColour(juce::ScrollBar::thumbColourId, Theme::borderStrong());
+        setColour(juce::PopupMenu::backgroundColourId, Theme::panel());
+        setColour(juce::PopupMenu::highlightedBackgroundColourId, Theme::accent().withAlpha(0.12f));
+        setColour(juce::PopupMenu::textColourId, Theme::text());
+        setColour(juce::PopupMenu::highlightedTextColourId, Theme::text());
+    }
+};
+
 class PluginEditorContent final : public juce::Component,
                                  public ModifierSchedulerListener,
                                  private juce::Timer
@@ -19,6 +48,8 @@ public:
           app(p.getAppState()),
           fxStatusPanel(app)
     {
+        setLookAndFeel(&hipLnf);
+
         addAndMakeVisible(modifierDisplay);
         addAndMakeVisible(padGrid);
         addAndMakeVisible(modifierHistory);
@@ -50,9 +81,11 @@ public:
 
         addAndMakeVisible(statusLabel);
         statusLabel.setJustificationType(juce::Justification::centredLeft);
+        statusLabel.setColour(juce::Label::textColourId, Theme::textSubtle());
 
         addAndMakeVisible(hostTransportLabel);
         hostTransportLabel.setJustificationType(juce::Justification::centredRight);
+        hostTransportLabel.setColour(juce::Label::textColourId, Theme::textSubtle());
 
         padGrid.setAudioFormatManager(&processor.getFormatManager());
         attachPadCallbacks();
@@ -86,13 +119,18 @@ public:
     {
         stopTimer();
         app.scheduler.removeListener(this);
+        setLookAndFeel(nullptr);
     }
 
     void paint(juce::Graphics& g) override
     {
-        g.fillAll(juce::Colours::darkgrey.darker());
-        g.setColour(juce::Colours::grey);
-        g.drawRect(getLocalBounds());
+        g.fillAll(Theme::bg());
+
+        auto card = getLocalBounds().toFloat().reduced(6.0f);
+        g.setColour(Theme::panel());
+        g.fillRoundedRectangle(card, 12.0f);
+        g.setColour(Theme::border());
+        g.drawRoundedRectangle(card, 12.0f, 1.0f);
     }
 
     void resized() override
@@ -153,6 +191,8 @@ public:
 private:
     BufferTestAudioProcessor& processor;
     AppState& app;
+
+    HipLookAndFeel hipLnf;
 
     UpcomingModifierDisplay modifierDisplay;
     ModifierHistoryPanel modifierHistory;
@@ -350,7 +390,7 @@ BufferTestAudioProcessorEditor::~BufferTestAudioProcessorEditor() = default;
 
 void BufferTestAudioProcessorEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (juce::Colours::black);
+    g.fillAll(Theme::bg());
 }
 
 void BufferTestAudioProcessorEditor::resized()

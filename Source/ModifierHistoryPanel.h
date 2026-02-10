@@ -11,6 +11,7 @@
 
 #include <JuceHeader.h>
 #include "Modifier.h"
+#include "Theme.h"
 
 class ModifierHistoryPanel : public juce::Component, public juce::ListBoxModel
 {
@@ -35,11 +36,11 @@ public:
         clearButton.onClick = [this]{ clear(); };
         addAndMakeVisible(countLabel);
         countLabel.setJustificationType(juce::Justification::centredRight);
-        countLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+        countLabel.setColour(juce::Label::textColourId, Theme::textSubtle());
 
         list.setModel(this);
         list.setRowHeight(18);
-        list.setColour(juce::ListBox::backgroundColourId, juce::Colours::black.withAlpha(0.25f));
+        list.setColour(juce::ListBox::backgroundColourId, Theme::panelAlt());
         addAndMakeVisible(list);
     }
 
@@ -81,19 +82,21 @@ public:
 
     void paintListBoxItem (int rowNumber, juce::Graphics& g, int width, int height, bool rowIsSelected) override
     {
-        g.fillAll(rowIsSelected ? juce::Colours::darkgrey.withAlpha(0.4f)
-                                 : ((rowNumber % 2 == 0) ? juce::Colours::transparentBlack : juce::Colours::black.withAlpha(0.15f)));
+        if (rowIsSelected)
+            g.fillAll(Theme::accent().withAlpha(0.12f));
+        else if (rowNumber % 2 == 1)
+            g.fillAll(Theme::panel());
         if (rowNumber < 0 || rowNumber >= entries.size()) return;
         const auto& e = entries.getReference(rowNumber);
 
-        juce::Colour typeColour = juce::Colours::lightgrey;
+        juce::Colour typeColour = Theme::textSubtle();
         switch (e.type)
         {
-            case ModifierType::Reverse:         typeColour = juce::Colours::cyan; break;
-            case ModifierType::Speed:           typeColour = juce::Colours::yellow; break;
-            case ModifierType::ResetAll:        typeColour = juce::Colours::orange; break;
-            case ModifierType::BeatSliceRandom: typeColour = juce::Colours::magenta; break;
-            default:                            typeColour = juce::Colours::lightgrey; break;
+            case ModifierType::Reverse:         typeColour = Theme::accent2(); break;
+            case ModifierType::Speed:           typeColour = Theme::accent(); break;
+            case ModifierType::ResetAll:        typeColour = Theme::warn(); break;
+            case ModifierType::BeatSliceRandom: typeColour = Theme::good(); break;
+            default:                            typeColour = Theme::textSubtle(); break;
         }
 
     juce::String extra = e.details.isNotEmpty() ? ("  |  " + e.details) : juce::String();

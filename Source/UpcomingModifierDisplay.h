@@ -10,6 +10,7 @@
 
 #include <JuceHeader.h>
 #include "Modifier.h"
+#include "Theme.h"
 
 class UpcomingModifierDisplay : public juce::Component
 {
@@ -102,8 +103,13 @@ public:
 
     void paint(juce::Graphics& g) override
     {
-        g.fillAll(juce::Colours::black.withAlpha(0.2f));
-        g.setColour(juce::Colours::white);
+        auto bounds = getLocalBounds().toFloat();
+        g.setColour(Theme::panel());
+        g.fillRoundedRectangle(bounds.reduced(1.0f), 10.0f);
+        g.setColour(Theme::border());
+        g.drawRoundedRectangle(bounds.reduced(1.0f), 10.0f, 1.0f);
+
+        g.setColour(Theme::text());
         {
             auto f = juce::Font(juce::FontOptions().withHeight(18.0f));
             f.setBold(true);
@@ -116,16 +122,16 @@ public:
 
         // Simple horizontal progress bar at the right side of top half
         auto barArea = topHalf.removeFromRight(160).reduced(4);
-        g.setColour(juce::Colours::white.withAlpha(0.12f));
-        g.fillRect(barArea);
+        g.setColour(Theme::border().withAlpha(0.8f));
+        g.fillRoundedRectangle(barArea.toFloat(), 4.0f);
         auto fill = barArea.withWidth(int(barArea.getWidth() * progress));
-        g.setColour((suppressed ? juce::Colours::orange : juce::Colours::lime).withAlpha(0.6f));
-        g.fillRect(fill);
-        g.setColour(juce::Colours::white);
-        g.drawRect(barArea);
+        g.setColour((suppressed ? Theme::warn() : Theme::accent2()).withAlpha(0.75f));
+        g.fillRoundedRectangle(fill.toFloat(), 4.0f);
+        g.setColour(Theme::borderStrong());
+        g.drawRoundedRectangle(barArea.toFloat(), 4.0f, 1.0f);
         if (suppressed)
         {
-            g.setColour(juce::Colours::orange.withAlpha(0.8f));
+            g.setColour(Theme::warn());
             auto pausedFont = juce::Font(juce::FontOptions().withHeight(11.0f));
             pausedFont.setBold(true);
             g.setFont(pausedFont);
@@ -133,7 +139,7 @@ public:
         }
 
         g.setFont(juce::Font(juce::FontOptions().withHeight(12.0f)));
-        g.setColour(juce::Colours::lightgrey);
+        g.setColour(Theme::textSubtle());
         auto bottom = getLocalBounds();
         juce::String timeStr = juce::String(secondsRemaining, 1) + "s | " + juce::String(barsRemaining, 2) + " bars";
         juce::String suffix = suppressed ? " [modifiers off]" : "";

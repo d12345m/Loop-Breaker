@@ -8,6 +8,7 @@
 */
 
 #include "MainAppComponent.h"
+#include "Theme.h"
 
 MainAppComponent::MainAppComponent()
 {
@@ -145,9 +146,13 @@ void MainAppComponent::releaseResources()
 
 void MainAppComponent::paint(juce::Graphics& g)
 {
-    g.fillAll(juce::Colours::darkgrey.darker());
-    g.setColour(juce::Colours::grey);
-    g.drawRect(getLocalBounds());
+    g.fillAll(Theme::bg());
+
+    auto card = getLocalBounds().toFloat().reduced(6.0f);
+    g.setColour(Theme::panel());
+    g.fillRoundedRectangle(card, 12.0f);
+    g.setColour(Theme::border());
+    g.drawRoundedRectangle(card, 12.0f, 1.0f);
 }
 
 void MainAppComponent::resized()

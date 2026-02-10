@@ -10,6 +10,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "Theme.h"
 
 // Simple 2x4 pad grid showing selectable pads and (new) filename indicators.
 class PadGridComponent : public juce::Component,
@@ -35,7 +36,7 @@ public:
             label->setJustificationType(juce::Justification::centred);
             label->setFont(juce::Font(juce::FontOptions().withHeight(12.0f)));
             label->setInterceptsMouseClicks(false, false);
-            label->setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+            label->setColour(juce::Label::textColourId, Theme::textSubtle());
             addAndMakeVisible(label);
             label->setText("", juce::dontSendNotification);
 
@@ -356,7 +357,7 @@ private:
         if (name.length() > maxChars)
             name = name.substring(0, maxChars - 1) + "…";
         // Colour-code missing pads to draw attention
-        padFileLabels[padIndex]->setColour(juce::Label::textColourId, isMissing ? juce::Colours::orangered : juce::Colours::lightgrey);
+        padFileLabels[padIndex]->setColour(juce::Label::textColourId, isMissing ? Theme::bad() : Theme::textSubtle());
         padFileLabels[padIndex]->setText(name, juce::dontSendNotification);
     }
 
@@ -383,20 +384,22 @@ private:
                 auto r = btn->getBounds().toFloat();
 
                 // Background
-                g.setColour(juce::Colours::black.withAlpha(0.85f));
-                g.fillRoundedRectangle(r, 6.f);
+                g.setColour(Theme::panelAlt());
+                g.fillRoundedRectangle(r, 8.f);
+                g.setColour(Theme::border());
+                g.drawRoundedRectangle(r, 8.f, 1.0f);
 
                 // Waveform rendering region
                 auto inner = r.reduced(6.f, 6.f);
                 if (auto* thumb = thumbnails[i])
                 {
                     const bool hasWave = thumb->getTotalLength() > 0.0;
-                    g.setColour(hasWave ? juce::Colours::darkgrey : juce::Colours::dimgrey);
-                    g.drawRoundedRectangle(r, 6.f, 1.0f);
+                    g.setColour(hasWave ? Theme::borderStrong() : Theme::border());
+                    g.drawRoundedRectangle(r, 8.f, 1.0f);
 
                     if (hasWave)
                     {
-                        g.setColour(juce::Colours::lightsteelblue);
+                        g.setColour(Theme::accent2().withAlpha(0.85f));
                         thumb->drawChannels(g, inner.toNearestInt(), 0.0, thumb->getTotalLength(), 1.0f);
 
                         // Loop overlay (proportional across full file waveform)
@@ -408,9 +411,9 @@ private:
                             const float x1 = inner.getX() + (float)(inner.getWidth() * startProp);
                             const float x2 = inner.getX() + (float)(inner.getWidth() * endProp);
                             juce::Rectangle<float> loopRect(x1, inner.getY(), juce::jmax(1.0f, x2 - x1), inner.getHeight());
-                            g.setColour(juce::Colours::orange.withAlpha(0.18f));
+                            g.setColour(Theme::warn().withAlpha(0.14f));
                             g.fillRect(loopRect);
-                            g.setColour(juce::Colours::orange.withAlpha(0.8f));
+                            g.setColour(Theme::warn().withAlpha(0.85f));
                             g.drawLine(x1, inner.getY(), x1, inner.getBottom(), 1.5f);
                             g.drawLine(x2, inner.getY(), x2, inner.getBottom(), 1.5f);
                         }
@@ -419,15 +422,15 @@ private:
                         const double phDenom = juce::jmax(1.0, totalFileSamples[(size_t)i]);
                         const double phProp  = juce::jlimit(0.0, 1.0, playheadSamples[(size_t)i] / phDenom);
                         const float phx = inner.getX() + (float)(inner.getWidth() * phProp);
-                        g.setColour(juce::Colours::aqua);
+                        g.setColour(Theme::accent());
                         g.drawLine(phx, inner.getY(), phx, inner.getBottom(), 2.0f);
                     }
                     else
                     {
                         // Empty pad visual
-                        g.setColour(juce::Colours::darkred.withAlpha(0.35f));
-                        g.fillRect(inner);
-                        g.setColour(juce::Colours::grey);
+                        g.setColour(Theme::border().withAlpha(0.35f));
+                        g.fillRoundedRectangle(inner, 6.0f);
+                        g.setColour(Theme::textSubtle());
                         g.drawText("(empty)", inner.toNearestInt(), juce::Justification::centred);
                     }
                 }
@@ -435,24 +438,24 @@ private:
                 // Selection overlay (tinted) to replace checkbox visuals
                 if (padButtons[i]->getToggleState())
                 {
-                    g.setColour(juce::Colours::cornflowerblue.withAlpha(0.20f));
-                    g.fillRoundedRectangle(r, 6.f);
-                    g.setColour(juce::Colours::cornflowerblue.withAlpha(0.8f));
-                    g.drawRoundedRectangle(r.expanded(1.5f), 6.f, 2.0f);
+                    g.setColour(Theme::accent().withAlpha(0.10f));
+                    g.fillRoundedRectangle(r, 8.f);
+                    g.setColour(Theme::accent().withAlpha(0.85f));
+                    g.drawRoundedRectangle(r.expanded(1.5f), 8.f, 2.0f);
                 }
 
                 // Playing state outline
                 if (playingStates[(size_t)i])
                 {
-                    g.setColour(juce::Colours::lime.withAlpha(0.9f));
-                    g.drawRoundedRectangle(r.expanded(2.f), 6.f, 2.2f);
+                    g.setColour(Theme::good().withAlpha(0.85f));
+                    g.drawRoundedRectangle(r.expanded(2.f), 8.f, 2.2f);
                 }
 
                 // Flash overlay
                 if (flashCounters[(size_t)i] > 0)
                 {
-                    g.setColour(juce::Colours::yellow.withAlpha(0.35f));
-                    g.fillRoundedRectangle(r.expanded(2.f), 6.f);
+                    g.setColour(Theme::warn().withAlpha(0.18f));
+                    g.fillRoundedRectangle(r.expanded(2.f), 8.f);
                 }
 
                 // File-drag hover overlay + hint
@@ -465,16 +468,16 @@ private:
                     if (inPreviewRange)
                     {
                         const bool isHovered = (hoveredPadIndex == i);
-                        g.setColour(juce::Colours::cornflowerblue.withAlpha(isHovered ? 0.18f : 0.10f));
-                        g.fillRoundedRectangle(r.expanded(2.f), 6.f);
-                        g.setColour(juce::Colours::cornflowerblue.withAlpha(isHovered ? 0.9f : 0.55f));
-                        g.drawRoundedRectangle(r.expanded(2.f), 6.f, isHovered ? 2.0f : 1.2f);
+                        g.setColour(Theme::accent().withAlpha(isHovered ? 0.10f : 0.06f));
+                        g.fillRoundedRectangle(r.expanded(2.f), 8.f);
+                        g.setColour(Theme::accent().withAlpha(isHovered ? 0.85f : 0.45f));
+                        g.drawRoundedRectangle(r.expanded(2.f), 8.f, isHovered ? 2.0f : 1.2f);
 
                         if (isHovered)
                         {
                             auto hintArea = r.reduced(10.f).toNearestInt();
                             hintArea.removeFromBottom(18); // keep clear of filename label region
-                            g.setColour(juce::Colours::lightgrey.withAlpha(0.9f));
+                            g.setColour(Theme::text().withAlpha(0.9f));
                             g.setFont(juce::Font(juce::FontOptions().withHeight(13.0f)));
                             const auto hint = (count > 1) ? ("Drop to load " + juce::String(count))
                                                          : juce::String("Drop to load");

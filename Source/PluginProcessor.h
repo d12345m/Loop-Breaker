@@ -58,6 +58,22 @@ public:
         return midiPadToggleRequests[padIndex].exchange(false);
     }
 
+    // MIDI learn mode
+    void setMidiLearnMode(bool enabled, int padIndex = -1)
+    {
+        midiLearnEnabled.store(enabled);
+        midiLearnPadIndex.store(padIndex);
+    }
+
+    int getMidiLearnPadIndex() const { return midiLearnPadIndex.load(); }
+    bool isMidiLearnEnabled() const { return midiLearnEnabled.load(); }
+
+    // Check if a MIDI note was learned (call from UI thread)
+    int checkAndClearLearnedNote()
+    {
+        return learnedMidiNote.exchange(-1);
+    }
+
     enum class HostTransportState : int
     {
         Unknown = 0,
@@ -116,6 +132,11 @@ private:
 
     // MIDI pad control: atomic flags for toggle requests (written on audio thread, read/cleared on UI thread)
     std::atomic<bool> midiPadToggleRequests[8] { {false}, {false}, {false}, {false}, {false}, {false}, {false}, {false} };
+
+    // MIDI learn mode (written on audio thread, read/written on UI thread)
+    std::atomic<bool> midiLearnEnabled { false };
+    std::atomic<int> midiLearnPadIndex { -1 };
+    std::atomic<int> learnedMidiNote { -1 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BufferTestAudioProcessor)
 };

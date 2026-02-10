@@ -190,26 +190,36 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
 {
     juce::ScopedNoDenormals noDenormals;
 
-    // Process MIDI input: General MIDI drum map (notes 36-43 map to pads 0-7)
-    // Toggle mode: note-on toggles pad selection, note-off ignored
+    // Process MIDI input
     if (!midi.isEmpty())
     {
+        const bool learnMode = midiLearnEnabled.load();
+        const int learnPad = midiLearnPadIndex.load();
+        
         for (const auto metadata : midi)
         {
             const auto msg = metadata.getMessage();
-            DBG("MIDI message: " << msg.getDescription());
             
             if (msg.isNoteOn())
             {
                 const int note = msg.getNoteNumber();
-                const int padIndex = note - 36; // MIDI notes 36-43 → pads 0-7
-                DBG("Note-on received: note=" << note << ", padIndex=" << padIndex);
                 
-                if (padIndex >= 0 && padIndex < 8)
+                // MIDI learn mode: capture note for assignment
+                if (learnMode && learnPad >= 0 && learnPad < 8)
                 {
-                    // Request toggle on UI thread (atomic flag ensures thread safety)
-                    midiPadToggleRequests[padIndex].store(true);
-                    DBG("Pad " << padIndex << " toggle requested");
+                    learnedMidiNote.store(note);
+                    continue;
+                }
+                
+                // Normal mode: check if note matches any pad mapping
+                const auto& noteMap = app.settings.midiNoteMap;
+                for (int i = 0; i < 8; ++i)
+                {
+                    if (noteMap[i] == note)
+                    {
+                        midiPadToggleRequests[i].store(true);
+                        break;
+                    }
                 }
             }
             // Note-off is ignored in toggle mode

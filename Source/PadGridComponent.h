@@ -72,6 +72,32 @@ public:
         btn->setToggleState(!btn->getToggleState(), juce::sendNotification);
     }
 
+    // Set MIDI note for a pad
+    void setMidiNoteForPad(int padIndex, int midiNote)
+    {
+        if (!juce::isPositiveAndBelow(padIndex, numPads)) return;
+        midiNotes[(size_t)padIndex] = midiNote;
+        repaint();
+    }
+
+    // Get MIDI note for a pad
+    int getMidiNoteForPad(int padIndex) const
+    {
+        if (!juce::isPositiveAndBelow(padIndex, numPads)) return -1;
+        return midiNotes[(size_t)padIndex];
+    }
+
+    // Set MIDI learn mode for a pad
+    void setMidiLearnForPad(int padIndex, bool learning)
+    {
+        if (!juce::isPositiveAndBelow(padIndex, numPads)) return;
+        midiLearnActive[(size_t)padIndex] = learning;
+        repaint();
+    }
+
+    std::function<void(int padIndex)> onMidiLearnRequest;
+    std::function<void(int padIndex)> onClearMidiNote;
+
     // Provide an AudioFormatManager to use for reading files (prepared by the app)
     void setAudioFormatManager(juce::AudioFormatManager* afm)
     {
@@ -205,6 +231,8 @@ private:
     juce::StringArray padFileNames { "", "", "", "", "", "", "", "" };
     std::array<int, numPads> flashCounters { {0,0,0,0,0,0,0,0} };
     std::array<bool, numPads> playingStates { {false,false,false,false,false,false,false,false} };
+    std::array<int, numPads> midiNotes { {36, 37, 38, 39, 40, 41, 42, 43} };
+    std::array<bool, numPads> midiLearnActive { {false,false,false,false,false,false,false,false} };
 
     // Waveform state
     juce::AudioFormatManager formatManager;
@@ -453,6 +481,27 @@ private:
                     g.drawRoundedRectangle(r.expanded(1.5f), 3.f, 1.8f);
                 }
 
+                // MIDI learn indicator
+                if (midiLearnActive[(size_t)i])
+                {
+                    g.setColour(Theme::warn());
+                    g.drawRoundedRectangle(r.expanded(2.0f), 3.f, 2.5f);
+                    auto learnRect = r.removeFromTop(20).reduced(4);
+                    g.fillRoundedRectangle(learnRect, 2.0f);
+                    g.setColour(Theme::bg());
+                    g.drawText("LEARN", learnRect, juce::Justification::centred);
+                }
+                // MIDI note display (top-right corner)
+                else if (midiNotes[(size_t)i] >= 0)
+                {
+                    auto noteRect = r.removeFromTop(18).removeFromRight(40).reduced(2);
+                    g.setColour(Theme::panel());
+                    g.fillRoundedRectangle(noteRect.toFloat(), 2.0f);
+                    g.setColour(Theme::textSubtle());
+                    g.setFont(juce::Font(juce::FontOptions().withHeight(10.0f)));
+                    g.drawText(juce::String(midiNotes[(size_t)i]), noteRect, juce::Justification::centred);
+                }
+
                 // Playing state outline
                 if (playingStates[(size_t)i])
                 {
@@ -534,6 +583,38 @@ private:
             {
                 repaint();
                 break;
+            }
+        }
+    }
+
+    void mouseDown(const juce::MouseEvent& e) override
+    {
+        // Shift+click to enter MIDI learn mode for a pad
+        if (e.mods.isShiftDown())
+        {
+            const auto p = e.getPosition();
+            for (int i = 0; i < numPads; ++i)
+            {
+                if (padButtons[i] != nullptr && padButtons[i]->getBounds().contains(p))
+                {
+                    if (onMidiLearnRequest)
+                        onMidiLearnRequest(i);
+                    return;
+                }
+            }
+        }
+        // Alt/Cmd+click to clear MIDI assignment
+        else if (e.mods.isCommandDown() || e.mods.isAltDown())
+        {
+            const auto p = e.getPosition();
+            for (int i = 0; i < numPads; ++i)
+            {
+                if (padButtons[i] != nullptr && padButtons[i]->getBounds().contains(p))
+                {
+                    if (onClearMidiNote)
+                        onClearMidiNote(i);
+                    return;
+                }
             }
         }
     }

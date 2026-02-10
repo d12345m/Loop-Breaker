@@ -95,6 +95,23 @@ public:
             loadDroppedFiles(startPadIndex, files);
         });
 
+        // MIDI learn callbacks
+        padGrid.onMidiLearnRequest = [this](int padIndex)
+        {
+            processor.setMidiLearnMode(true, padIndex);
+            padGrid.setMidiLearnForPad(padIndex, true);
+        };
+
+        padGrid.onClearMidiNote = [this](int padIndex)
+        {
+            app.settings.midiNoteMap[padIndex] = -1;
+            padGrid.setMidiNoteForPad(padIndex, -1);
+        };
+
+        // Initialize pad MIDI notes from settings
+        for (int i = 0; i < 8; ++i)
+            padGrid.setMidiNoteForPad(i, app.settings.midiNoteMap[i]);
+
         modifierSelectionPanel.setForceSelectionCallback([this](ModifierType type){
             app.scheduler.forceUpcomingModifier(type);
         });
@@ -293,6 +310,23 @@ private:
             if (processor.checkAndClearMidiToggle(i))
             {
                 padGrid.togglePadSelection(i);
+            }
+        }
+
+        // Poll for MIDI learn completion
+        if (processor.isMidiLearnEnabled())
+        {
+            const int learnedNote = processor.checkAndClearLearnedNote();
+            if (learnedNote >= 0)
+            {
+                const int padIndex = processor.getMidiLearnPadIndex();
+                if (padIndex >= 0 && padIndex < 8)
+                {
+                    app.settings.midiNoteMap[padIndex] = learnedNote;
+                    padGrid.setMidiNoteForPad(padIndex, learnedNote);
+                    padGrid.setMidiLearnForPad(padIndex, false);
+                    processor.setMidiLearnMode(false, -1);
+                }
             }
         }
 

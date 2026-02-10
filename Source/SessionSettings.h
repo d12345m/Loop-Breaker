@@ -47,6 +47,9 @@ struct SessionSettings
   // Pad file paths (absolute). Index corresponds to pad/buffer index. Empty means no file.
   juce::StringArray padFilePaths { "", "", "", "", "", "", "", "" };
 
+    // MIDI note mappings (per pad). -1 means unassigned. Defaults to General MIDI drum map (36-43)
+    std::array<int, 8> midiNoteMap { 36, 37, 38, 39, 40, 41, 42, 43 };
+
     // Persistence meta
     juce::String projectName { "Untitled Project" };
     juce::String projectId { juce::Uuid().toString() };

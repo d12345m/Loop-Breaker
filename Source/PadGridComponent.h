@@ -29,7 +29,18 @@ public:
             auto* btn = padButtons.add(new juce::ToggleButton(""));
             btn->setLookAndFeel(&invisibleToggleLF);
             btn->setClickingTogglesState(true);
-            btn->onClick = [this]{ if (selectionChanged) selectionChanged(); };
+            btn->onClick = [this, btn]
+            { 
+                // Skip selection change if Shift (MIDI learn) or Cmd (clear) was held
+                auto mods = juce::ModifierKeys::currentModifiers;
+                if (mods.isShiftDown() || mods.isCommandDown() || mods.isAltDown())
+                {
+                    // Revert the toggle since we don't want to change selection
+                    btn->setToggleState(!btn->getToggleState(), juce::dontSendNotification);
+                    return;
+                }
+                if (selectionChanged) selectionChanged(); 
+            };
             
             // Add mouse listener for MIDI learn (Shift+Click) and clear (Cmd+Click)
             btn->addMouseListener(this, false);

@@ -98,6 +98,24 @@ public:
         // MIDI learn callbacks
         padGrid.onMidiLearnRequest = [this](int padIndex)
         {
+            // If clicking on the pad already in learn mode, cancel learn mode
+            if (processor.isMidiLearnEnabled() && processor.getMidiLearnPadIndex() == padIndex)
+            {
+                processor.setMidiLearnMode(false, -1);
+                padGrid.setMidiLearnForPad(padIndex, false);
+                return;
+            }
+            
+            // If another pad is already in learn mode, clear it first
+            if (processor.isMidiLearnEnabled())
+            {
+                const int previousLearnPad = processor.getMidiLearnPadIndex();
+                if (previousLearnPad >= 0 && previousLearnPad < 8 && previousLearnPad != padIndex)
+                {
+                    padGrid.setMidiLearnForPad(previousLearnPad, false);
+                }
+            }
+            
             processor.setMidiLearnMode(true, padIndex);
             padGrid.setMidiLearnForPad(padIndex, true);
         };

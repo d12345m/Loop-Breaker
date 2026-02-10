@@ -3,6 +3,7 @@
 #include "ModifierScheduler.h"
 #include "SessionSettings.h"
 #include "AppState.h"
+#include "TimeStretchSoundTouch.h"
 
 class ModifierSchedulerQuantizeTest : public juce::UnitTest {
 public:
@@ -203,5 +204,29 @@ public:
 };
 
 static ModifierSchedulerEveryNBarsTest modifierSchedulerEveryNBarsTestInstance;
+
+class SoundTouchSmokeTest : public juce::UnitTest {
+public:
+    SoundTouchSmokeTest() : juce::UnitTest("SoundTouch Smoke") {}
+
+    void runTest() override {
+        beginTest("SoundTouch can time-stretch a mono buffer (basic output)");
+
+        // Keep the test tiny & deterministic. This is mainly a compile/link smoke test.
+        TimeStretchSoundTouch ts;
+        ts.prepare(48000.0, 1);
+        ts.setTempoRatio(0.5f); // slower => longer
+
+        juce::HeapBlock<float> in(2048);
+        juce::HeapBlock<float> out(8192);
+        for (int i = 0; i < 2048; ++i)
+            in[i] = std::sin(2.0 * juce::MathConstants<double>::pi * 440.0 * (double)i / 48000.0);
+
+        const int received = ts.processMono(in.getData(), 2048, out.getData(), 8192, true);
+        expect(received > 0, "Expected SoundTouch to produce some output after flush");
+    }
+};
+
+static SoundTouchSmokeTest soundTouchSmokeTestInstance;
 
 #endif // JUCE_UNIT_TESTS

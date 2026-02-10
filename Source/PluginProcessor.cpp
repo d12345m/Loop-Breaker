@@ -629,3 +629,95 @@ juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
     return new BufferTestAudioProcessor();
 }
+
+//==============================================================================
+// SoundTouch integration
+//
+// We don't have Projucer available in this environment to regenerate the Xcode project
+// with additional compilation units. To keep things simple and unblock development,
+// we compile SoundTouch by unity-including its .cpp files here.
+//
+// If/when you regenerate project files with Projucer, replace this with proper
+// compilation units in the Xcode project instead.
+#ifndef BUFFERTEST_ENABLE_SOUNDTOUCH
+ #define BUFFERTEST_ENABLE_SOUNDTOUCH 1
+#endif
+
+#if BUFFERTEST_ENABLE_SOUNDTOUCH
+ // SoundTouch sources use helper macros like `max(...)` in a few .cpp files.
+ // In a unity build these can collide/redefine, so we aggressively undef around each include.
+ #undef max
+ #undef min
+ #undef PI
+ #undef TWOPI
+ #include "../ThirdParty/soundtouch/source/SoundTouch/AAFilter.cpp"
+ #undef max
+ #undef min
+ #undef PI
+ #undef TWOPI
+ #include "../ThirdParty/soundtouch/source/SoundTouch/BPMDetect.cpp"
+ #undef max
+ #undef min
+ #undef PI
+ #undef TWOPI
+ #include "../ThirdParty/soundtouch/source/SoundTouch/FIFOSampleBuffer.cpp"
+ #undef max
+ #undef min
+ #undef PI
+ #undef TWOPI
+ #include "../ThirdParty/soundtouch/source/SoundTouch/FIRFilter.cpp"
+ #undef max
+ #undef min
+ #undef PI
+ #undef TWOPI
+ #include "../ThirdParty/soundtouch/source/SoundTouch/InterpolateCubic.cpp"
+ #undef max
+ #undef min
+ #undef PI
+ #undef TWOPI
+ #include "../ThirdParty/soundtouch/source/SoundTouch/InterpolateLinear.cpp"
+ #undef max
+ #undef min
+ #undef PI
+ #undef TWOPI
+ #include "../ThirdParty/soundtouch/source/SoundTouch/InterpolateShannon.cpp"
+ #undef max
+ #undef min
+ #undef PI
+ #undef TWOPI
+ #include "../ThirdParty/soundtouch/source/SoundTouch/PeakFinder.cpp"
+ #undef max
+ #undef min
+ #undef PI
+ #undef TWOPI
+ #include "../ThirdParty/soundtouch/source/SoundTouch/RateTransposer.cpp"
+ #undef max
+ #undef min
+ #undef PI
+ #undef TWOPI
+ #include "../ThirdParty/soundtouch/source/SoundTouch/SoundTouch.cpp"
+ #undef max
+ #undef min
+ #undef PI
+ #undef TWOPI
+ #include "../ThirdParty/soundtouch/source/SoundTouch/TDStretch.cpp"
+ #undef max
+ #undef min
+ #undef PI
+ #undef TWOPI
+ #include "../ThirdParty/soundtouch/source/SoundTouch/cpu_detect_x86.cpp"
+ #undef max
+ #undef min
+ #undef PI
+ #undef TWOPI
+ #include "../ThirdParty/soundtouch/source/SoundTouch/mmx_optimized.cpp"
+ #undef max
+ #undef min
+ #undef PI
+ #undef TWOPI
+ #include "../ThirdParty/soundtouch/source/SoundTouch/sse_optimized.cpp"
+ #undef max
+ #undef min
+ #undef PI
+ #undef TWOPI
+#endif

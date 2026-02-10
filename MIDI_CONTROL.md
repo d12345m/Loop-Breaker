@@ -7,7 +7,7 @@ The BufferTest plugin now supports MIDI input to control pad selection.
 The plugin uses the **General MIDI drum map layout** for pad control:
 
 | MIDI Note | Note Name | Pad Index |
-|-----------|-----------|-----------|
+| --------- | --------- | --------- |
 | 36        | C1        | Pad 0     |
 | 37        | C#1       | Pad 1     |
 | 38        | D1        | Pad 2     |
@@ -31,6 +31,7 @@ The plugin uses the **General MIDI drum map layout** for pad control:
 4. Selected pads will be targeted by the next modifier
 
 This mapping is compatible with most drum pad controllers like:
+
 - Akai MPD series
 - Native Instruments Maschine
 - Novation Launchpad
@@ -46,6 +47,7 @@ This mapping is compatible with most drum pad controllers like:
 ## Future Enhancements
 
 Potential future additions:
+
 - Configurable note mapping
 - Gate mode (note-off deselects)
 - Velocity-sensitive selection

@@ -208,6 +208,7 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                 if (learnMode && learnPad >= 0 && learnPad < 8)
                 {
                     learnedMidiNote.store(note);
+                    midiLearnEnabled.store(false);  // Disable learn mode after capturing
                     continue;
                 }
                 

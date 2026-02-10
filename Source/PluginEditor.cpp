@@ -95,11 +95,17 @@ public:
             loadDroppedFiles(startPadIndex, files);
         });
 
-        // MIDI learn callback - Shift+click on a pad to assign/reassign MIDI note
+        // MIDI learn callbacks
         padGrid.onMidiLearnRequest = [this](int padIndex)
         {
             processor.setMidiLearnMode(true, padIndex);
             padGrid.setMidiLearnForPad(padIndex, true);
+        };
+
+        padGrid.onClearMidiNote = [this](int padIndex)
+        {
+            app.settings.midiNoteMap[padIndex] = -1;
+            padGrid.setMidiNoteForPad(padIndex, -1);
         };
 
         // Initialize pad MIDI notes from settings

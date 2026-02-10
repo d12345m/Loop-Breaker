@@ -100,6 +100,7 @@ public:
     }
 
     std::function<void(int padIndex)> onMidiLearnRequest;
+    std::function<void(int padIndex)> onClearMidiNote;
 
     // Provide an AudioFormatManager to use for reading files (prepared by the app)
     void setAudioFormatManager(juce::AudioFormatManager* afm)
@@ -616,6 +617,12 @@ private:
                 onMidiLearnRequest(clickedPadIndex);
                 e.eventComponent->setMouseCursor(juce::MouseCursor::WaitCursor);
             }
+        }
+        // Cmd+click (or Alt+click) to clear MIDI assignment
+        else if (e.mods.isCommandDown() || e.mods.isAltDown())
+        {
+            if (onClearMidiNote)
+                onClearMidiNote(clickedPadIndex);
         }
     }
 };

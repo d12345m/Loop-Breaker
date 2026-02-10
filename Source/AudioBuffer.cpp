@@ -47,6 +47,9 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
     }
 
     const double stretch = stretchRatio.load();
+
+    // Route through SoundTouch only when actually stretching.
+    // Even at 1.0, SoundTouch adds buffering/CPU and can affect UI smoothness in Debug builds.
     if (std::abs(stretch - 1.0) > 1.0e-6)
     {
         processWithTimeStretch(outputBuffer);
@@ -55,8 +58,6 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
     {
         // Smooth speed changes to avoid artifacts
         speedSmoother.setTargetValue(getEffectiveSpeed());
-
-        // Process with repitching (speed and pitch change together)
         processWithRepitching(outputBuffer);
     }
     
@@ -397,9 +398,11 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
     // We intentionally keep these buffers around; setSize may allocate but only when capacity grows.
     // For time-stretch we may need to feed more input than output; size input scratch accordingly.
     const double clampedRatio = juce::jlimit (0.25, 4.0, ratio);
-    const int warmupFloorMs = 800; // Very large warmup to completely eliminate startup starvation
-    const int warmupFloorFrames = (int) std::ceil (hostSampleRate * warmupFloorMs / 1000.0);
-    const int maxInputChunkFrames = juce::jmax (numOutputSamples, (int) std::ceil (numOutputSamples * clampedRatio) + warmupFloorFrames);
+    // Feed chunks proportional to the output block.  A small margin (64 frames) ensures we don't
+    // starve SoundTouch on fractional boundaries, without generating the massive 300ms warmup that
+    // was previously causing CPU spikes every processBlock call.
+    const int marginFrames = 64;
+    const int maxInputChunkFrames = juce::jmax (numOutputSamples, (int) std::ceil (numOutputSamples * clampedRatio) + marginFrames);
     if (stretchInScratch.getNumChannels() != numChannels || stretchInScratch.getNumSamples() < maxInputChunkFrames)
         stretchInScratch.setSize (numChannels, maxInputChunkFrames, false, false, true);
 
@@ -430,29 +433,180 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
         if (framesToGenerate == 0)
             return 0;
 
+        // Fast path: common case is forward playback at 1x, same file/host sample rate, no slicing/window/crossfade.
+        // In that case we can bulk-copy samples instead of per-sample interpolation.
+        const double currentPos0 = playheadPosition.load();
+        const bool canBulkCopy = (inputSpeed > 0.0
+                                  && std::abs (inputSpeed - 1.0) < 1.0e-9
+                                  && std::abs (fileSampleRate - hostSampleRate) < 1.0e-9
+                                  && ! loopWindowEnabled.load()
+                                  && ! slicingModeActive.load()
+                                  && ! isInCrossfade
+                                  && std::abs (currentPos0 - std::floor (currentPos0)) < 1.0e-9);
+
+        if (canBulkCopy)
+        {
+            const int startSample = (int) currentPos0;
+            if (startSample >= 0 && startSample < fileLengthSamples)
+            {
+                int framesCopied = 0;
+                int pos = startSample;
+
+                while (framesCopied < framesToGenerate)
+                {
+                    const int available = fileLengthSamples - pos;
+                    if (available <= 0)
+                    {
+                        if (params.isLooping)
+                            pos = 0;
+                        else
+                        {
+                            params.isPlaying = false;
+                            break;
+                        }
+                    }
+
+                    const int chunk = juce::jmin (framesToGenerate - framesCopied, available);
+                    for (int ch = 0; ch < numChannels; ++ch)
+                        stretchInScratch.copyFrom (ch, framesCopied, sourceBuffer, ch, pos, chunk);
+
+                    framesCopied += chunk;
+                    pos += chunk;
+                }
+
+                playheadPosition.store ((double) (startSample + framesCopied));
+                return framesCopied;
+            }
+        }
+
         // Zero the region we are going to fill.
         stretchInScratch.clear (0, framesToGenerate);
+
+        // Use local playhead while generating to avoid per-sample atomic traffic.
+        double currentPos = playheadPosition.load();
+        const double step = inputSpeed * (fileSampleRate / hostSampleRate);
+
+        // Local crossfade helpers (avoid touching playhead atomics).
+        auto startSliceCrossfadeLocal = [&] (int newSliceIndex, double newPlayheadPos)
+        {
+            previousSliceIndex = currentActiveSlice.load();
+            previousSlicePlayheadPos = currentPos;
+            isInCrossfade = true;
+            crossfadePosition = 0;
+
+            currentActiveSlice.store (newSliceIndex);
+            currentPos = newPlayheadPos;
+        };
+
+        auto startBoundaryCrossfadeLocal = [&] (double newPlayheadPos)
+        {
+            previousSlicePlayheadPos = currentPos;
+            previousSliceIndex = -1;
+            isInCrossfade = true;
+            crossfadePosition = 0;
+            currentPos = newPlayheadPos;
+        };
+
+        // Inline slice handling using the local playhead.
+        auto handleSlicePlaybackLocal = [&] ()
+        {
+            if (! slicingModeActive.load())
+                return;
+
+            // Check if we need to jump to a new slice
+            if (sliceTriggered.load())
+            {
+                const int slice = targetSlice.load();
+                const double speed = getEffectiveSpeed();
+
+                double newPos = 0.0;
+                if (speed >= 0.0)
+                    newPos = getSliceStartPosition (slice, fileLengthSamples);
+                else
+                    newPos = getSliceEndPosition (slice, fileLengthSamples) - 1.0;
+
+                startSliceCrossfadeLocal (slice, newPos);
+                sliceTriggered.store (false);
+                return;
+            }
+
+            // Handle continuous random mode
+            if (params.continuousRandomSlicing)
+            {
+                const int activeSlice = currentActiveSlice.load();
+                const double sliceStart = getSliceStartPosition (activeSlice, fileLengthSamples);
+                const double sliceEnd   = getSliceEndPosition (activeSlice, fileLengthSamples);
+
+                bool shouldTriggerNext = false;
+                const double speed = getEffectiveSpeed();
+
+                if (speed > 0.0)
+                    shouldTriggerNext = (currentPos >= sliceEnd - 1.0);
+                else if (speed < 0.0)
+                    shouldTriggerNext = (currentPos <= sliceStart);
+
+                if (shouldTriggerNext)
+                {
+                    const int nextSlice = random.nextInt (params.numSlices);
+
+                    double newPos = 0.0;
+                    if (speed > 0.0)
+                        newPos = getSliceStartPosition (nextSlice, fileLengthSamples);
+                    else
+                        newPos = getSliceEndPosition (nextSlice, fileLengthSamples) - 1.0;
+
+                    startSliceCrossfadeLocal (nextSlice, newPos);
+                }
+            }
+            else
+            {
+                const int activeSlice = currentActiveSlice.load();
+                const double sliceStart = getSliceStartPosition (activeSlice, fileLengthSamples);
+                const double sliceEnd   = getSliceEndPosition (activeSlice, fileLengthSamples);
+                const double speed = getEffectiveSpeed();
+
+                if (speed > 0.0 && currentPos >= sliceEnd - 1.0)
+                {
+                    if (params.isLooping)
+                        currentPos = sliceStart;
+                    else
+                        params.isPlaying = false;
+                }
+                else if (speed < 0.0 && currentPos <= sliceStart)
+                {
+                    if (params.isLooping)
+                        currentPos = sliceEnd - 1.0;
+                    else
+                        params.isPlaying = false;
+                }
+            }
+        };
+
+        const float* const* sourceRead = sourceBuffer.getArrayOfReadPointers();
+        float* const* scratchWrite = stretchInScratch.getArrayOfWritePointers();
+
+        const bool loopWindowOn = loopWindowEnabled.load();
+        const int64_t loopStart = loopWindowOn ? loopStartSamples.load() : 0;
+        const int64_t loopEnd   = loopWindowOn ? loopEndSamples.load()   : 0;
+
+        const bool slicingOn = slicingModeActive.load();
 
         int framesFilled = 0;
         for (int sample = 0; sample < framesToGenerate; ++sample)
         {
-            double currentPos = playheadPosition.load();
+            // Keep slice behavior responsive (checks atomics, but avoids playhead atomics).
+            if (slicingOn || sliceTriggered.load())
+                handleSlicePlaybackLocal();
 
-            handleSlicePlayback (currentPos, fileLengthSamples);
-            currentPos = playheadPosition.load();
-
-            // If no custom loop window is active, respect file boundaries + looping similar to repitch mode.
-            if (! loopWindowEnabled.load() && ! slicingModeActive.load())
+            // If no custom loop window is active, respect file boundaries + looping.
+            if (! loopWindowOn && ! slicingOn)
             {
-                if (inputSpeed > 0.0) // forward
+                if (step > 0.0)
                 {
                     if (currentPos >= fileLengthSamples - 1)
                     {
                         if (params.isLooping)
-                        {
-                            startBoundaryCrossfade (0.0);
-                            currentPos = 0.0;
-                        }
+                            startBoundaryCrossfadeLocal (0.0);
                         else
                         {
                             params.isPlaying = false;
@@ -460,15 +614,12 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
                         }
                     }
                 }
-                else if (inputSpeed < 0.0) // reverse
+                else if (step < 0.0)
                 {
                     if (currentPos <= 0.0)
                     {
                         if (params.isLooping)
-                        {
-                            startBoundaryCrossfade ((double) (fileLengthSamples - 1));
-                            currentPos = (double) (fileLengthSamples - 1);
-                        }
+                            startBoundaryCrossfadeLocal ((double) (fileLengthSamples - 1));
                         else
                         {
                             params.isPlaying = false;
@@ -478,159 +629,91 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
                 }
             }
 
-            // Enforce loop window boundaries similarly to repitch path.
-            if (loopWindowEnabled.load())
+            // Enforce loop window boundaries.
+            if (loopWindowOn)
             {
-                const int64_t start = loopStartSamples.load();
-                const int64_t end   = loopEndSamples.load();
-                if (inputSpeed >= 0.0)
+                if (step >= 0.0)
                 {
-                    if (currentPos >= (double) end)
-                    {
-                        startBoundaryCrossfade ((double) start);
-                        currentPos = (double) start;
-                    }
-                    else if (currentPos < (double) start)
-                        currentPos = (double) start;
+                    if (currentPos >= (double) loopEnd)
+                        startBoundaryCrossfadeLocal ((double) loopStart);
+                    else if (currentPos < (double) loopStart)
+                        currentPos = (double) loopStart;
                 }
                 else
                 {
-                    if (currentPos < (double) start)
-                    {
-                        startBoundaryCrossfade ((double) end);
-                        currentPos = (double) end;
-                    }
-                    else if (currentPos > (double) end)
-                        currentPos = (double) end;
+                    if (currentPos < (double) loopStart)
+                        startBoundaryCrossfadeLocal ((double) loopEnd);
+                    else if (currentPos > (double) loopEnd)
+                        currentPos = (double) loopEnd;
                 }
             }
 
             currentPos = juce::jlimit (0.0, static_cast<double> (fileLengthSamples - 1), currentPos);
             const int pos1 = (int) currentPos;
             const int pos2 = juce::jmin (pos1 + 1, fileLengthSamples - 1);
-            const double frac = currentPos - (double) pos1;
+            const float frac = (float) (currentPos - (double) pos1);
 
             for (int ch = 0; ch < numChannels; ++ch)
             {
-                const float s1 = sourceBuffer.getSample (ch, pos1);
-                const float s2 = sourceBuffer.getSample (ch, pos2);
-                const float s = s1 + (float) frac * (s2 - s1);
-                stretchInScratch.setSample (ch, sample, s);
+                const float s1 = sourceRead[ch][pos1];
+                const float s2 = sourceRead[ch][pos2];
+                scratchWrite[ch][sample] = s1 + frac * (s2 - s1);
             }
 
             if (isInCrossfade)
                 applyCrossfadeToSliceTransition (sourceBuffer, fileLengthSamples, fileSampleRate, stretchInScratch, sample, 1);
 
-            currentPos += inputSpeed * (fileSampleRate / hostSampleRate);
-            playheadPosition.store (currentPos);
-
+            currentPos += step;
             ++framesFilled;
         }
 
+        playheadPosition.store (currentPos);
         return framesFilled;
     };
-
-    // Prime SoundTouch once after prepare with a warmup feed to reduce initial starvation.
-    if (! stretcherPrimed)
-    {
-        // Avoid advancing the real playhead or altering slicing state during priming.
-        const double startPos = playheadPosition.load();
-        const int primeFrames = warmupFloorFrames;
-
-        if (stretchInScratch.getNumChannels() != numChannels || stretchInScratch.getNumSamples() < primeFrames)
-            stretchInScratch.setSize (numChannels, primeFrames, false, false, true);
-
-        // Fill linearly from the current position without touching state or slice handlers.
-        double pos = startPos;
-        int framesFilled = 0;
-        for (int sample = 0; sample < primeFrames; ++sample)
-        {
-            // Basic boundary handling with looping; ignore slicing side effects for priming.
-            if (inputSpeed >= 0.0)
-            {
-                if (pos >= fileLengthSamples - 1)
-                {
-                    if (params.isLooping)
-                        pos = 0.0;
-                    else
-                        break;
-                }
-            }
-            else
-            {
-                if (pos <= 0.0)
-                {
-                    if (params.isLooping)
-                        pos = (double) (fileLengthSamples - 1);
-                    else
-                        break;
-                }
-            }
-
-            pos = juce::jlimit (0.0, (double) (fileLengthSamples - 1), pos);
-            const int pos1 = (int) pos;
-            const int pos2 = juce::jmin (pos1 + 1, fileLengthSamples - 1);
-            const double frac = pos - (double) pos1;
-
-            for (int ch = 0; ch < numChannels; ++ch)
-            {
-                const float s1 = sourceBuffer.getSample (ch, pos1);
-                const float s2 = sourceBuffer.getSample (ch, pos2);
-                const float s = s1 + (float) frac * (s2 - s1);
-                stretchInScratch.setSample (ch, sample, s);
-            }
-
-            pos += inputSpeed * (fileSampleRate / hostSampleRate);
-            ++framesFilled;
-        }
-
-        if (framesFilled > 0)
-        {
-            std::vector<const float*> primeInPtrs (numChannels, nullptr);
-            for (int ch = 0; ch < numChannels; ++ch)
-                primeInPtrs[ch] = stretchInScratch.getReadPointer (ch);
-
-            std::vector<float*> dummyOut (numChannels, nullptr); // not used when maxOutputSamples==0
-            stretcher.processNonInterleaved (primeInPtrs.data(), framesFilled, dummyOut.data(), 0, false,
-                                             stretchInterleavedIn, stretchInterleavedOut);
-        }
-
-        // Restore playhead unchanged; the real process loop continues normally.
-        stretcherPrimed = true;
-    }
 
     const int stretcherLatency = juce::jmax (0, stretcher.getLatencySamples());
 
     int framesWritten = 0;
     int safetyIters = 0;
-    while (framesWritten < numOutputSamples && safetyIters++ < 256)
+    std::vector<float*> outPtrs (numChannels, nullptr);
+    std::vector<const float*> inPtrs (numChannels, nullptr);
+
+    // Cap iterations: with proportional feed sizes we should fill the block in 2-4 iterations.
+    // More than 8 means something is very wrong.
+    while (framesWritten < numOutputSamples && safetyIters++ < 8)
     {
         const int remaining = numOutputSamples - framesWritten;
-        std::vector<float*> outPtrs (numChannels, nullptr);
         for (int ch = 0; ch < numChannels; ++ch)
             outPtrs[ch] = outputBuffer.getWritePointer (ch) + framesWritten;
 
         // 1) Drain any already-buffered output without consuming input.
-        const int drained = stretcher.processNonInterleaved (nullptr, 0, outPtrs.data(), remaining, false,
-                                                            stretchInterleavedIn, stretchInterleavedOut);
-        if (drained > 0)
+        //    Skip the drain call entirely if SoundTouch has nothing ready (avoids interleave overhead).
+        if (stretcher.numSamplesAvailable() > 0)
         {
-            framesWritten += drained;
-            continue;
+            const int drained = stretcher.processNonInterleaved (nullptr, 0, outPtrs.data(), remaining, false,
+                                                                stretchInterleavedIn, stretchInterleavedOut);
+            if (drained > 0)
+            {
+                framesWritten += drained;
+                continue;
+            }
         }
 
         // 2) Feed more input and try again.
-        // Keep chunks modest to avoid huge lookahead; SoundTouch can buffer internally.
-        const int desiredInputChunk = (int) std::ceil (remaining * clampedRatio);
-        // On first fills after a reset, feed at least the reported initial latency + a warmup floor.
-        const int primeTarget = std::max({ desiredInputChunk, stretcherLatency, warmupFloorFrames });
+        //    Feed just enough to produce `remaining` output frames, plus a small margin.
+        //    On the very first feed after a reset, also ensure we cover SoundTouch's initial latency.
+        const int desiredInputChunk = (int) std::ceil (remaining * clampedRatio) + marginFrames;
+        const int primeTarget = stretcherPrimed ? desiredInputChunk
+                                                : juce::jmax (desiredInputChunk, stretcherLatency);
         const int inputChunkFrames = juce::jlimit (1, maxInputChunkFrames, primeTarget);
 
         const int framesFilled = fillInputScratch (inputChunkFrames);
         if (framesFilled <= 0)
             break;
 
-        std::vector<const float*> inPtrs (numChannels, nullptr);
+        // Mark primed once we've generated any input after a reset.
+        stretcherPrimed = true;
+
         for (int ch = 0; ch < numChannels; ++ch)
             inPtrs[ch] = stretchInScratch.getReadPointer (ch);
 
@@ -642,7 +725,7 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
 
     // Warn in debug if we repeatedly failed to fill the block.
 #if JUCE_DEBUG
-    jassertquiet (framesWritten == numOutputSamples || safetyIters >= 256);
+    jassertquiet (framesWritten == numOutputSamples || safetyIters >= 8);
 #endif
 
     // If we still underfilled, pad the tail to avoid hard zeros/crackles.

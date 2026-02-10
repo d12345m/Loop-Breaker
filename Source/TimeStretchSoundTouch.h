@@ -24,13 +24,16 @@ public:
         st.setPitch (1.0f);
         st.setRate (1.0f);
 
-        // Favor lower latency for real-time playback while keeping quality acceptable.
-        // sequence: analysis window; seek: search window; overlap: crossfade between windows.
-        // Smaller windows + quickseek reduce internal buffering and CPU, which helps avoid crackles under load.
-        st.setSetting (SETTING_SEQUENCE_MS, 40);
-        st.setSetting (SETTING_SEEKWINDOW_MS, 20);
-        st.setSetting (SETTING_OVERLAP_MS, 10);
-        st.setSetting (SETTING_USE_QUICKSEEK, 1);
+        // Balance between latency and quality.
+        // Too-small windows (e.g. 40/20/10) produce metallic artifacts.
+        // Too-large windows (e.g. 80/30/12) add latency and CPU.
+        // These values are a good middle ground for real-time playback.
+        st.setSetting (SETTING_SEQUENCE_MS, 60);
+        st.setSetting (SETTING_SEEKWINDOW_MS, 25);
+        st.setSetting (SETTING_OVERLAP_MS, 12);
+        // Quickseek trades quality for speed.  With the feed-loop optimizations
+        // we have enough CPU headroom to keep it off for better audio quality.
+        st.setSetting (SETTING_USE_QUICKSEEK, 0);
     }
 
     void reset()
@@ -48,6 +51,12 @@ public:
     int getLatencySamples() const
     {
         return (int) st.getSetting (SETTING_INITIAL_LATENCY);
+    }
+
+    // Number of output frames already available (no new input needed).
+    int numSamplesAvailable() const
+    {
+        return (int) st.numSamples();
     }
 
     // Process non-interleaved JUCE buffers by interleaving into a scratch buffer.
@@ -68,30 +77,67 @@ public:
 
         if (numInputSamples > 0)
         {
-            if (interleavedIn.getNumChannels() != 1 || interleavedIn.getNumSamples() < numInputSamples * channels)
-                interleavedIn.setSize(1, numInputSamples * channels, false, false, true);
+            const int totalIn = numInputSamples * channels;
+            if (interleavedIn.getNumChannels() != 1 || interleavedIn.getNumSamples() < totalIn)
+                interleavedIn.setSize (1, totalIn, false, false, true);
 
-            auto* inInter = interleavedIn.getWritePointer(0);
-            for (int i = 0; i < numInputSamples; ++i)
-                for (int ch = 0; ch < channels; ++ch)
-                    inInter[i * channels + ch] = input[ch][i];
+            auto* inInter = interleavedIn.getWritePointer (0);
 
-            st.putSamples(inInter, (uint) numInputSamples);
+            if (channels == 1)
+            {
+                juce::FloatVectorOperations::copy (inInter, input[0], numInputSamples);
+            }
+            else if (channels == 2)
+            {
+                const float* l = input[0];
+                const float* r = input[1];
+                for (int i = 0; i < numInputSamples; ++i)
+                {
+                    inInter[i * 2]     = l[i];
+                    inInter[i * 2 + 1] = r[i];
+                }
+            }
+            else
+            {
+                for (int i = 0; i < numInputSamples; ++i)
+                    for (int ch = 0; ch < channels; ++ch)
+                        inInter[i * channels + ch] = input[ch][i];
+            }
+
+            st.putSamples (inInter, (uint) numInputSamples);
         }
 
         if (flush)
             st.flush();
 
-        if (interleavedOut.getNumChannels() != 1 || interleavedOut.getNumSamples() < maxOutputSamples * channels)
-            interleavedOut.setSize(1, maxOutputSamples * channels, false, false, true);
+        const int totalOut = maxOutputSamples * channels;
+        if (interleavedOut.getNumChannels() != 1 || interleavedOut.getNumSamples() < totalOut)
+            interleavedOut.setSize (1, totalOut, false, false, true);
 
-        auto* outInter = interleavedOut.getWritePointer(0);
-        const auto receivedFrames = (int) st.receiveSamples(outInter, (uint) maxOutputSamples);
+        auto* outInter = interleavedOut.getWritePointer (0);
+        const auto receivedFrames = (int) st.receiveSamples (outInter, (uint) maxOutputSamples);
+        const int frames = juce::jlimit (0, maxOutputSamples, receivedFrames);
 
-        const int frames = juce::jlimit(0, maxOutputSamples, receivedFrames);
-        for (int i = 0; i < frames; ++i)
-            for (int ch = 0; ch < channels; ++ch)
-                output[ch][i] = outInter[i * channels + ch];
+        if (channels == 1)
+        {
+            juce::FloatVectorOperations::copy (output[0], outInter, frames);
+        }
+        else if (channels == 2)
+        {
+            float* l = output[0];
+            float* r = output[1];
+            for (int i = 0; i < frames; ++i)
+            {
+                l[i] = outInter[i * 2];
+                r[i] = outInter[i * 2 + 1];
+            }
+        }
+        else
+        {
+            for (int i = 0; i < frames; ++i)
+                for (int ch = 0; ch < channels; ++ch)
+                    output[ch][i] = outInter[i * channels + ch];
+        }
 
         return frames;
     }

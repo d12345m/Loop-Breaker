@@ -41,6 +41,22 @@ public:
         st.clear();
     }
 
+    // T9: Widen seek/overlap windows for reversed audio (worse auto-correlation).
+    // Call after prepare() or after a direction change.  Forward = default params.
+    void setWindowsForReverse (bool isReversed)
+    {
+        if (isReversed)
+        {
+            st.setSetting (SETTING_SEEKWINDOW_MS, 35);
+            st.setSetting (SETTING_OVERLAP_MS, 18);
+        }
+        else
+        {
+            st.setSetting (SETTING_SEEKWINDOW_MS, 25);
+            st.setSetting (SETTING_OVERLAP_MS, 12);
+        }
+    }
+
     // ratio: 1.0 = original length, 0.5 = 2x longer, 2.0 = 2x shorter
     void setTempoRatio (float ratio)
     {

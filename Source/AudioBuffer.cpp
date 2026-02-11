@@ -23,6 +23,8 @@ AudioBuffer::AudioBuffer(int bufferIndex)
     speedSmoother.setCurrentAndTargetValue(1.0);
     stretchSmoother.reset(128);
     stretchSmoother.setCurrentAndTargetValue(1.0);
+    speedMagSmoother.reset(128);
+    speedMagSmoother.setCurrentAndTargetValue(1.0);
 }
 
 void AudioBuffer::prepare(double sampleRate, int samplesPerBlockExpected)
@@ -31,6 +33,7 @@ void AudioBuffer::prepare(double sampleRate, int samplesPerBlockExpected)
     hostSampleRate = sampleRate;
     speedSmoother.reset(sampleRate, 0.05); // 50ms smoothing time
     stretchSmoother.reset(sampleRate, 0.05);
+    speedMagSmoother.reset(sampleRate, 0.05); // T4: 50ms smoothing for speed-mag through SoundTouch
     
     // Calculate crossfade length in samples
     crossfadeLengthSamples = static_cast<int>(params.crossfadeLengthMs * sampleRate / 1000.0);
@@ -73,6 +76,13 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
     // When transitioning between repitch <-> stretch mode, crossfade the tail
     // of the previous block into the head of the current block to avoid a hard edge.
     const bool transitioned = (useStretcher != lastBlockUsedStretch);
+#if JUCE_DEBUG
+    if (transitioned)
+        DBG ("[AudioBuffer " + juce::String(bufferIndex) + "] mode transition: "
+             + juce::String(lastBlockUsedStretch ? "stretch" : "repitch") + " -> "
+             + juce::String(useStretcher ? "stretch" : "repitch")
+             + " speed=" + juce::String(snap.speed) + " stretch=" + juce::String(snap.stretchRatio));
+#endif
     if (transitioned && previousBlockValid)
     {
         const int curSamples = outputBuffer.getNumSamples();
@@ -350,6 +360,9 @@ void AudioBuffer::setLoadedAudioData(LoadedAudioData::Ptr newData)
     stretchFadeInRemaining = 0;
     stretcher.reset();
     stretchSmoother.setCurrentAndTargetValue(1.0);
+    speedMagSmoother.setCurrentAndTargetValue(1.0);
+    lastStretchDirection = 1.0;
+    sliceJumpOccurred = false;
     previousBlockValid = false;
     resetCrossfadePending = false;
 }
@@ -462,6 +475,9 @@ void AudioBuffer::resetToDefaults()
     lastBlockUsedStretch = false;
     stretcher.reset();
     stretchSmoother.setCurrentAndTargetValue(1.0);
+    speedMagSmoother.setCurrentAndTargetValue(1.0);
+    lastStretchDirection = 1.0;
+    sliceJumpOccurred = false;
     previousBlockValid = false;
     resetCrossfadePending = false;
     
@@ -528,7 +544,13 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
     if (numOutputSamples > 1)
         stretchSmoother.skip(numOutputSamples - 1);
 
-    const double clampedRate = juce::jlimit (0.25, 4.0, speedMag > 0.0 ? speedMag : 1.0);
+    // T4: Smooth speed magnitude changes to avoid abrupt rate/tempo jumps in SoundTouch.
+    speedMagSmoother.setTargetValue (speedMag > 0.0 ? speedMag : 1.0);
+    const double smoothedSpeedMag = speedMagSmoother.getNextValue();
+    if (numOutputSamples > 1)
+        speedMagSmoother.skip (numOutputSamples - 1);
+
+    const double clampedRate = juce::jlimit (0.25, 4.0, smoothedSpeedMag);
     const double tempoRatioForSt = pitchActive ? (smoothedRatio * clampedRate) : smoothedRatio;
     const double totalTempoRatioForIO = tempoRatioForSt * (useRate ? clampedRate : 1.0);
     // Feed chunks proportional to the output block.  A small margin (64 frames) ensures we don't
@@ -537,10 +559,20 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
     const int marginFrames = 64;
     const int maxInputChunkFrames = juce::jmax (numOutputSamples, (int) std::ceil (numOutputSamples * totalTempoRatioForIO) + marginFrames);
 
+    // T10: Log mode transitions for debugging.
+#if JUCE_DEBUG
+    if (didReset)
+        DBG ("[AudioBuffer " + juce::String(bufferIndex) + "] SoundTouch RESET  speed=" + juce::String(snap.speed)
+             + " stretch=" + juce::String(snap.stretchRatio) + " pitch=" + juce::String(snap.pitchSemis)
+             + " dir=" + juce::String(direction) + " pos=" + juce::String(playheadPosition.load()));
+#endif
+
     // Prepare SoundTouch when needed.
     if (!stretcherPrepared || stretcherPreparedSampleRate != hostSampleRate || stretcherPreparedChannels != numChannels)
     {
         stretcher.prepare(hostSampleRate, numChannels);
+        // T9: Tune windows for reversed audio on initial prepare.
+        stretcher.setWindowsForReverse (direction < 0.0);
         stretcher.setTempoRatio ((float) tempoRatioForSt);
         stretcher.setRateRatio ((float) (useRate ? clampedRate : 1.0));
         stretcher.setPitchSemiTones ((float) pitchSemis);
@@ -549,6 +581,7 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         stretcherPreparedChannels = numChannels;
         stretcherPrimed = false;
         stretchFadeInRemaining = 0;
+        lastStretchDirection = direction;
     }
     else
     {
@@ -556,6 +589,16 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         stretcher.setTempoRatio ((float) tempoRatioForSt);
         stretcher.setRateRatio ((float) (useRate ? clampedRate : 1.0));
         stretcher.setPitchSemiTones ((float) pitchSemis);
+
+        // T9: When the direction changes, re-tune SoundTouch's overlap windows.
+        if (direction != lastStretchDirection)
+        {
+            stretcher.setWindowsForReverse (direction < 0.0);
+#if JUCE_DEBUG
+            DBG ("[AudioBuffer " + juce::String(bufferIndex) + "] direction flip " + juce::String(lastStretchDirection) + "->" + juce::String(direction));
+#endif
+            lastStretchDirection = direction;
+        }
     }
 
     // Ensure scratch buffers are appropriately sized.
@@ -732,12 +775,29 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
 
         const bool slicingOn = slicingModeActive.load();
 
+        // T5: Track the playhead before each sample so we can detect large jumps.
+        double prevPosForJumpDetect = currentPos;
+
         int framesFilled = 0;
         for (int sample = 0; sample < framesToGenerate; ++sample)
         {
+            prevPosForJumpDetect = currentPos;
+
             // Keep slice behavior responsive (checks atomics, but avoids playhead atomics).
             if (slicingOn || sliceTriggered.load())
                 handleSlicePlaybackLocal();
+
+            // T5: If the slice handler jumped the playhead by a large amount,
+            // flag it so processWithTimeStretch can flush SoundTouch's pipeline.
+            const double jumpDist = std::abs(currentPos - prevPosForJumpDetect);
+            if (jumpDist > 512.0)
+            {
+                sliceJumpOccurred = true;
+#if JUCE_DEBUG
+                DBG ("[AudioBuffer " + juce::String(bufferIndex) + "] slice jump detected: "
+                     + juce::String(prevPosForJumpDetect, 0) + " -> " + juce::String(currentPos, 0));
+#endif
+            }
 
             // If no custom loop window is active, respect file boundaries + looping.
             if (! loopWindowOn && ! slicingOn)
@@ -892,6 +952,48 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
             framesWritten += produced;
     }
 
+    // T5: If a large playhead jump occurred during input filling (e.g., slice trigger),
+    // flush SoundTouch's stale pipeline and re-prime so the overlap-add doesn't
+    // blend audio from two completely different source positions.
+    if (sliceJumpOccurred)
+    {
+        sliceJumpOccurred = false;
+        stretcher.reset();
+
+        // Re-configure SoundTouch (reset clears settings).
+        stretcher.prepare (hostSampleRate, numChannels);
+        stretcher.setWindowsForReverse (direction < 0.0);
+        stretcher.setTempoRatio ((float) tempoRatioForSt);
+        stretcher.setRateRatio ((float) (useRate ? clampedRate : 1.0));
+        stretcher.setPitchSemiTones ((float) pitchSemis);
+        stretcherPreparedSampleRate = hostSampleRate;
+        stretcherPreparedChannels = numChannels;
+
+        // Re-prime with latency samples.
+        const int jumpPrime = juce::jmax (0, stretcher.getLatencySamples());
+        if (jumpPrime > 0)
+        {
+            if (stretchInScratch.getNumSamples() < jumpPrime)
+                stretchInScratch.setSize (numChannels, jumpPrime, false, false, true);
+
+            const int filled = fillInputScratch (jumpPrime);
+            if (filled > 0)
+            {
+                std::vector<const float*> pp ((size_t) numChannels, nullptr);
+                for (int ch = 0; ch < numChannels; ++ch)
+                    pp[(size_t) ch] = stretchInScratch.getReadPointer (ch);
+                stretcher.processNonInterleaved (pp.data(), filled, nullptr, 0, false,
+                                                 stretchInterleavedIn, stretchInterleavedOut);
+            }
+        }
+
+        // Apply a short fade-in to mask the discontinuity.
+        stretchFadeInRemaining = juce::jmax (1, (int) (hostSampleRate * 0.005)); // 5ms
+
+        // Re-fill what we already wrote with fresh output after the re-prime.
+        // (Simply let the main drain loop continue with the cleared pipeline.)
+    }
+
     // Apply fade-in if this is the first block after priming.
     if (stretchFadeInRemaining > 0 && framesWritten > 0)
     {
@@ -906,6 +1008,36 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
             }
         }
         stretchFadeInRemaining -= fadeLen;
+    }
+
+    // T8: When the playback direction changed this block (detected via T1 reset +
+    // direction != lastStretchDirection from previous block), crossfade the tail
+    // of the previous block into the head of the current block.
+    // The mode-transition crossfade in processBlock handles repitch<->stretch,
+    // but direction flips within the stretch path need their own crossfade.
+    if (didReset && previousBlockValid
+        && previousBlockBuffer.getNumChannels() >= outputBuffer.getNumChannels())
+    {
+        const int curSamples = framesWritten;
+        const int prevSamples = previousBlockNumSamples;
+        const int fadeSamples = juce::jmin (curSamples,
+                                            juce::jmin (prevSamples,
+                                                        juce::jmax (1, (int) (hostSampleRate * 0.01)))); // 10ms
+        if (fadeSamples > 0)
+        {
+            const int prevStart = juce::jmax (0, prevSamples - fadeSamples);
+            for (int ch = 0; ch < outputBuffer.getNumChannels(); ++ch)
+            {
+                const float* prev = previousBlockBuffer.getReadPointer (ch);
+                float* curr = outputBuffer.getWritePointer (ch);
+                for (int i = 0; i < fadeSamples; ++i)
+                {
+                    const float fadeIn  = (float) (i + 1) / (float) (fadeSamples + 1);
+                    const float fadeOut = 1.0f - fadeIn;
+                    curr[i] = prev[prevStart + i] * fadeOut + curr[i] * fadeIn;
+                }
+            }
+        }
     }
 
     // Clamp output to +/-1.0 to prevent SoundTouch's overlap-add from producing
@@ -944,6 +1076,12 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         }
 
         timeStretchUnderfills.fetch_add (1, std::memory_order_relaxed);
+#if JUCE_DEBUG
+        // T10: Log underruns.
+        DBG ("[AudioBuffer " + juce::String(bufferIndex) + "] SoundTouch UNDERRUN: wrote "
+             + juce::String(framesWritten) + "/" + juce::String(numOutputSamples)
+             + " stretch=" + juce::String(snap.stretchRatio) + " speed=" + juce::String(snap.speed));
+#endif
     }
 }
 
@@ -1176,10 +1314,16 @@ void AudioBuffer::applyCrossfadeToSliceTransition(const juce::AudioBuffer<float>
         return;
     }
     
-    // Process crossfade sample by sample
+    // Process crossfade sample by sample.
+    // T7: In stretch mode the source-read advancement is direction * tempoMult,
+    // regardless of whether speed magnitude is routed through SoundTouch's
+    // rate or tempo knob (SoundTouch handles that internally). Using
+    // getEffectiveSpeed() here would be wrong because it includes the speed
+    // magnitude which SoundTouch already accounts for.
     const double stretch = stretchRatio.load();
-    const bool useStretch = std::abs(stretch - 1.0) > 1.0e-6;
-    const double effectiveSpeed = useStretch
+    const double pitchST = pitchSemiTones.load();
+    const bool stretcherActive = (std::abs(stretch - 1.0) > 1.0e-6) || (std::abs(pitchST) > 1.0e-6);
+    const double effectiveSpeed = stretcherActive
         ? ((params.speed < 0.0 ? -1.0 : 1.0) * tempoMultiplier.load())
         : getEffectiveSpeed();
     for (int sample = 0; sample < samplesToProcess; ++sample)

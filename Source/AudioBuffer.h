@@ -187,6 +187,16 @@ private:
 
     double getEffectiveSpeed() const { return params.speed * tempoMultiplier.load(); }
 
+    // T4: Smoother for speed magnitude when routed through SoundTouch rate/tempo.
+    juce::SmoothedValue<double> speedMagSmoother;
+
+    // T8: Track the last direction used so we can detect direction flips and crossfade.
+    double lastStretchDirection = 1.0;
+
+    // T5: Set by fillInputScratch when a large playhead jump occurs; processWithTimeStretch
+    // will flush SoundTouch and re-prime before continuing the drain loop.
+    bool sliceJumpOccurred = false;
+
     // Coordinated snapshot of stretch-related parameters.
     // Read once at the top of processBlock so the mode decision and all parameter
     // values are consistent within a single audio callback.

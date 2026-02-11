@@ -266,9 +266,10 @@ private:
         {
             if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
             {
+                // T6: Toggle direction — flip the sign rather than always going negative.
                 double s = b->getSpeed();
                 if (s == 0.0) s = 1.0;
-                b->setSpeed(-std::abs(s));
+                b->setSpeed(-s);  // flip sign: forward→reverse, reverse→forward
                 if (!b->isPlaying()) b->play();
             }
         }

@@ -125,6 +125,10 @@ private:
     // so loops follow DAW tempo changes.
     double tempoReferenceBpm = 0.0;
 
+    // Grace period counter: when > 0, don't stop buffers due to transport state changes.
+    // This protects against false transport-stop signals during bus reconfiguration.
+    std::atomic<int> prepareGraceBlocks { 0 };
+
     // State restore: defer disk I/O until we are on the audio thread.
     std::atomic<bool> pendingRestoreReload { false };
 

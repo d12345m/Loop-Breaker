@@ -146,6 +146,11 @@ void BufferTestAudioProcessor::prepareToPlay (double sampleRate, int samplesPerB
 {
     app.bufferManager.prepare(sampleRate, samplesPerBlock);
 
+    // Set a grace period to ignore transport-stop signals that may occur during bus reconfig.
+    // Some hosts call prepareToPlay when enabling/disabling output buses, and may report
+    // transport=stopped temporarily. 10 blocks (~5-10ms) should be enough.
+    prepareGraceBlocks.store(10);
+
     // Some hosts may call setStateInformation before prepareToPlay; reload on the audio thread.
     if (pendingRestoreReload.exchange(false))
         reloadBuffersFromPadPaths();
@@ -158,7 +163,11 @@ void BufferTestAudioProcessor::releaseResources()
 
 bool BufferTestAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
-    if ((int) layouts.outputBuses.size() != (AudioBufferManager::MAX_BUFFERS + 1))
+    // Allow flexible bus configurations - DAWs may enable/disable buses dynamically
+    const int numOutputBuses = (int) layouts.outputBuses.size();
+    
+    // Must have at least the main output bus
+    if (numOutputBuses < 1)
         return false;
 
     // Require stereo on the main output bus. Allow other output buses to be stereo or disabled.
@@ -166,7 +175,8 @@ bool BufferTestAudioProcessor::isBusesLayoutSupported (const BusesLayout& layout
     if (mainOut != juce::AudioChannelSet::stereo())
         return false;
 
-    for (int busIndex = 1; busIndex < (int) layouts.outputBuses.size(); ++busIndex)
+    // Check all additional output buses (Ch1..Ch8)
+    for (int busIndex = 1; busIndex < numOutputBuses; ++busIndex)
     {
         const auto& busSet = layouts.outputBuses[(size_t) busIndex];
         if (! busSet.isDisabled() && busSet != juce::AudioChannelSet::stereo())
@@ -413,13 +423,19 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     if (pendingRestoreReload.exchange(false))
         reloadBuffersFromPadPaths();
 
+    // Decrement grace period counter (protects against false stops during bus reconfig).
+    int graceRemaining = prepareGraceBlocks.load();
+    if (graceRemaining > 0)
+        prepareGraceBlocks.store(graceRemaining - 1);
+    const bool inGracePeriod = graceRemaining > 0;
+
     // Apply any completed background loads (fast pointer swap; no disk I/O).
     // If new audio arrived, immediately apply the active part division (loop window) so
     // the buffer is segmented without waiting for a SwitchPart modifier.
     if (app.bufferManager.applyPendingLoads() > 0)
     {
         app.setActivePart(app.getActivePart());
-        if (! hostPlaying)
+        if (! hostPlaying && !inGracePeriod)
             app.bufferManager.stopAll();
     }
 
@@ -435,7 +451,8 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
         app.bufferManager.setTempoMultiplier(1.0);
 
         // On transport stop transition, stop buffers so the next play starts cleanly.
-        if (wasHostPlaying)
+        // BUT: don't stop during grace period (bus reconfig may falsely report transport stopped).
+        if (wasHostPlaying && !inGracePeriod)
             app.bufferManager.stopAll();
 
         // Clear any pending start request (so we don't "surprise start" when transport resumes unless user pressed Play again).

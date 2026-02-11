@@ -1537,10 +1537,9 @@ void AudioBuffer::notifyPositionChanged()
 
 void AudioBuffer::releaseResources()
 {
-    {
-        const juce::SpinLock::ScopedLockType sl(audioDataLock);
-        audioData = nullptr;
-    }
+    // NOTE: Do NOT clear audioData here! The loaded audio should persist across
+    // bus configuration changes and host re-preparation cycles. Only clear
+    // processing buffers which will be re-allocated in prepare().
     repitchBuffer.setSize(0, 0);
     tempProcessingBuffer.setSize(0, 0);
     crossfadeBuffer.setSize(0, 0);

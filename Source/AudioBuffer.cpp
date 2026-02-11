@@ -715,13 +715,20 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
     // For time-stretch we may need to feed more input than output; size input scratch accordingly.
     const double clampedRatio = juce::jlimit (0.25, 4.0, ratio);
     // Smooth stretch ratio changes to avoid abrupt tempo jumps.
+    // However, on a reset (mode transition), snap to target immediately to avoid
+    // underruns from the mismatch between the priming calculation and actual tempo.
     stretchSmoother.setTargetValue(clampedRatio);
+    if (didReset)
+        stretchSmoother.setCurrentAndTargetValue(clampedRatio);
     const double smoothedRatio = stretchSmoother.getNextValue();
     if (numOutputSamples > 1)
         stretchSmoother.skip(numOutputSamples - 1);
 
     // T4: Smooth speed magnitude changes to avoid abrupt rate/tempo jumps in SoundTouch.
+    // On reset, snap to target to match the stretchSmoother fix above.
     speedMagSmoother.setTargetValue (speedMag > 0.0 ? speedMag : 1.0);
+    if (didReset)
+        speedMagSmoother.setCurrentAndTargetValue(speedMag > 0.0 ? speedMag : 1.0);
     const double smoothedSpeedMag = speedMagSmoother.getNextValue();
     if (numOutputSamples > 1)
         speedMagSmoother.skip (numOutputSamples - 1);
@@ -1125,13 +1132,26 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
 
         const int framesFilled = fillInputScratch (inputChunkFrames);
         if (framesFilled <= 0)
+        {
+#if JUCE_DEBUG
+            DBG ("[AudioBuffer " + juce::String(bufferIndex) + "] fillInputScratch returned 0, breaking. remaining=" 
+                 + juce::String(remaining) + " inputChunkFrames=" + juce::String(inputChunkFrames));
+#endif
             break;
+        }
 
         for (int ch = 0; ch < numChannels; ++ch)
             inPtrs[ch] = stretchInScratch.getReadPointer (ch);
 
         const int produced = stretcher.processNonInterleaved (inPtrs.data(), framesFilled, outPtrs.data(), remaining, false,
                                                              stretchInterleavedIn, stretchInterleavedOut);
+#if JUCE_DEBUG
+        if (produced == 0 && framesFilled > 0)
+        {
+            DBG ("[AudioBuffer " + juce::String(bufferIndex) + "] SoundTouch produced 0 from " + juce::String(framesFilled) 
+                 + " input frames. avail=" + juce::String(stretcher.numSamplesAvailable()));
+        }
+#endif
         if (produced > 0)
             framesWritten += produced;
     }
@@ -1264,7 +1284,10 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         // T10: Log underruns.
         DBG ("[AudioBuffer " + juce::String(bufferIndex) + "] SoundTouch UNDERRUN: wrote "
              + juce::String(framesWritten) + "/" + juce::String(numOutputSamples)
-             + " stretch=" + juce::String(snap.stretchRatio) + " speed=" + juce::String(snap.speed));
+             + " iters=" + juce::String(safetyIters)
+             + " stretch=" + juce::String(snap.stretchRatio) + " speed=" + juce::String(snap.speed)
+             + " avail=" + juce::String(stretcher.numSamplesAvailable())
+             + " latency=" + juce::String(stretcher.getLatencySamples()));
         if (tearingDebugEnabled.load())
             tearingStats.partialUnderfills.fetch_add(1, std::memory_order_relaxed);
 #endif

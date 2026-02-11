@@ -66,6 +66,9 @@ void AudioBufferManager::processBlock(juce::AudioBuffer<float>& outputBuffer)
             if (perBufferProcessor)
                 perBufferProcessor(i, tempBuffer, hostSampleRate);
             
+            // Apply -12dB reduction per channel (gain = 0.251189 for -12dB)
+            tempBuffer.applyGain(0.251189f);
+            
             // Add to the mix
             for (int channel = 0; channel < numChannels; ++channel)
             {
@@ -99,6 +102,9 @@ void AudioBufferManager::processSingleBuffer(int bufferIndex, juce::AudioBuffer<
 
     if (perBufferProcessor)
         perBufferProcessor(bufferIndex, outputBuffer, hostSampleRate);
+
+    // Apply -12dB reduction per channel (gain = 0.251189 for -12dB)
+    outputBuffer.applyGain(0.251189f);
 
     const float masterVol = masterVolume.load();
     if (masterVol != 1.0f)

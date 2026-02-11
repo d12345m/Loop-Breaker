@@ -37,6 +37,9 @@ public:
             juce::dsp::ProcessSpec spec { sampleRate, (juce::uint32) blockSize, 2 };
             reverb.reset();
             reverb.prepare(spec);
+            limiter.prepare(spec);
+            limiter.setThreshold(-0.1f);  // -0.1dB to prevent clipping
+            limiter.setRelease(100.0f);   // 100ms release
             reverbPrepared = true;
             lastSampleRate = sampleRate;
             lastBlockSize = blockSize;
@@ -300,6 +303,11 @@ public:
                 data[i] += reverbWetBuffer.getSample(ch, i) * (wetGain * duck);
             }
         }
+
+        // Apply limiter at the end of the effect chain to prevent clipping
+        juce::dsp::AudioBlock<float> block(tempBuffer);
+        juce::dsp::ProcessContextReplacing<float> context(block);
+        limiter.process(context);
     }
 
     void setAudioBuffer(AudioBuffer* b) { buffer = b; }
@@ -477,6 +485,7 @@ private:
     EffectEnvelope highPassCutoffEnv;
     EffectEnvelope tremoloDepthEnv;
     juce::dsp::Reverb reverb;
+    juce::dsp::Limiter<float> limiter;
     bool reverbPrepared = false;
     double lastSampleRate = 0.0;
     int lastBlockSize = 0;

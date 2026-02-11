@@ -187,6 +187,33 @@ private:
 
     double getEffectiveSpeed() const { return params.speed * tempoMultiplier.load(); }
 
+    // Coordinated snapshot of stretch-related parameters.
+    // Read once at the top of processBlock so the mode decision and all parameter
+    // values are consistent within a single audio callback.
+    struct StretchSnapshot
+    {
+        double speed        = 1.0;   // params.speed
+        double stretchRatio = 1.0;
+        double pitchSemis   = 0.0;
+        double tempoMult    = 1.0;
+
+        bool useStretch  () const { return std::abs(stretchRatio - 1.0) > 1.0e-6; }
+        bool usePitch    () const { return std::abs(pitchSemis)        > 1.0e-6; }
+        bool useStretcher() const { return useStretch() || usePitch(); }
+        double direction () const { return speed < 0.0 ? -1.0 : 1.0; }
+        double speedMag  () const { return std::abs(speed); }
+    };
+
+    StretchSnapshot takeStretchSnapshot() const
+    {
+        StretchSnapshot s;
+        s.speed        = params.speed;
+        s.stretchRatio = stretchRatio.load();
+        s.pitchSemis   = pitchSemiTones.load();
+        s.tempoMult    = tempoMultiplier.load();
+        return s;
+    }
+
     // Time-stretch engine + scratch buffers (used when stretchRatio != 1.0)
     TimeStretchSoundTouch stretcher;
     bool stretcherPrepared = false;
@@ -246,7 +273,7 @@ private:
     //==============================================================================
     // Internal processing methods
     void processWithRepitching(juce::AudioBuffer<float>& outputBuffer);
-    void processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer);
+    void processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer, const StretchSnapshot& snap);
     void handleSlicePlayback(double& currentPos, int fileLengthSamples);
     void applyCrossfadeToSliceTransition(const juce::AudioBuffer<float>& sourceBuffer,
                                          int fileLengthSamples,

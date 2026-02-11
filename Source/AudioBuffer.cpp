@@ -51,22 +51,22 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
         return;
     }
 
-    const double stretch = stretchRatio.load();
-    const bool useStretch = std::abs(stretch - 1.0) > 1.0e-6;
-    const double pitchSemis = pitchSemiTones.load();
-    const bool usePitch = std::abs(pitchSemis) > 1.0e-6;
-    const bool useStretcher = (useStretch || usePitch);
+    // T3: Take a single coordinated snapshot of all stretch-related parameters
+    // so the mode decision and parameter values are always consistent within
+    // this audio block.
+    const auto snap = takeStretchSnapshot();
+    const bool useStretcher = snap.useStretcher();
 
     // Route through SoundTouch when stretching or when pitch shifting is active.
     // Even at 1.0, SoundTouch adds buffering/CPU and can affect UI smoothness in Debug builds.
     if (useStretcher)
     {
-        processWithTimeStretch(outputBuffer);
+        processWithTimeStretch(outputBuffer, snap);
     }
     else
     {
         // Smooth speed changes to avoid artifacts
-        speedSmoother.setTargetValue(getEffectiveSpeed());
+        speedSmoother.setTargetValue(snap.speed * snap.tempoMult);
         processWithRepitching(outputBuffer);
     }
 
@@ -398,7 +398,20 @@ void AudioBuffer::setPlaying(bool shouldPlay)
 
 void AudioBuffer::setSpeed(double newSpeed)
 {
+    const double oldSpeed = params.speed;
     params.speed = newSpeed;
+
+    // T1: When the playback direction flips while SoundTouch is active,
+    // its internal pipeline holds samples read in the old direction.
+    // Flush it so we don't blend forward and reversed audio at the splice point.
+    const bool directionFlipped = (oldSpeed < 0.0) != (newSpeed < 0.0) && oldSpeed != 0.0 && newSpeed != 0.0;
+    if (directionFlipped)
+    {
+        const bool stretchActive = std::abs(stretchRatio.load() - 1.0) > 1.0e-6;
+        const bool pitchActive   = std::abs(pitchSemiTones.load()) > 1.0e-6;
+        if (stretchActive || pitchActive)
+            stretcherNeedsReset.store(true);
+    }
 }
 
 void AudioBuffer::setStretchRatio(double ratio)
@@ -458,7 +471,7 @@ void AudioBuffer::resetToDefaults()
     previousSliceIndex = -1;
 }
 
-void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
+void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer, const StretchSnapshot& snap)
 {
     const int numOutputSamples = outputBuffer.getNumSamples();
 
@@ -479,23 +492,25 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
         return;
     }
 
-    const double ratio = stretchRatio.load();
-    const double pitchSemis = pitchSemiTones.load();
-    const bool pitchActive = std::abs(pitchSemis) > 1.0e-6;
+    // T3: Use the coordinated snapshot instead of independent atomic reads.
+    const double ratio      = snap.stretchRatio;
+    const double pitchSemis = snap.pitchSemis;
+    const bool pitchActive  = snap.usePitch();
     // When time-stretching, SoundTouch changes the output tempo. We should NOT also scale
     // the source read speed by ratio (that would double-apply the effect).
     // We do, however, still apply host tempo-following so Stretch remains relative to the DAW tempo.
-    const double direction = (params.speed < 0.0 ? -1.0 : 1.0);
-    const double inputSpeed = direction * tempoMultiplier.load();
+    const double direction  = snap.direction();
+    const double inputSpeed = direction * snap.tempoMult;
 
     // If pitch shifting is active, keep tempo/speed independent of pitch by expressing speed
     // via SoundTouch tempo (NOT rate). Rate is only used when pitch shifting is inactive.
-    const double speedMag = std::abs(params.speed);
+    const double speedMag = snap.speedMag();
     const bool useRate = (!pitchActive) && (std::abs(speedMag - 1.0) > 1.0e-6);
 
-    // Handle deferred reset (e.g., from setStretchRatio mode transition or stop).
+    // Handle deferred reset (e.g., from setStretchRatio mode transition, stop, or direction flip).
     // Always touch the SoundTouch instance from the audio thread only.
-    if (stretcherNeedsReset.exchange(false))
+    const bool didReset = stretcherNeedsReset.exchange(false);
+    if (didReset)
     {
         stretcher.reset();
         stretcherPrepared = false;
@@ -803,6 +818,34 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
     {
         stretcherPrimed = true;
         stretchFadeInRemaining = juce::jmax (1, (int) (hostSampleRate * 0.02));
+
+        // T2: Pre-prime SoundTouch with enough input to fill its internal latency
+        // pipeline.  Without this, the first 1–2 output blocks after a reset are
+        // partially empty (underruns), which sounds like crackles or brief silence.
+        const int primeSamples = juce::jmax (0, stretcher.getLatencySamples());
+        if (primeSamples > 0)
+        {
+            // Ensure scratch is large enough for the priming chunk.
+            if (stretchInScratch.getNumChannels() != numChannels
+                || stretchInScratch.getNumSamples() < primeSamples)
+            {
+                stretchInScratch.setSize (numChannels, primeSamples, false, false, true);
+            }
+
+            const int primed = fillInputScratch (primeSamples);
+            if (primed > 0)
+            {
+                std::vector<const float*> primePtrs ((size_t) numChannels, nullptr);
+                for (int ch = 0; ch < numChannels; ++ch)
+                    primePtrs[(size_t) ch] = stretchInScratch.getReadPointer (ch);
+
+                // Feed to SoundTouch but don't try to drain output yet — this just
+                // fills the internal pipeline so the drain loop below won't starve.
+                stretcher.processNonInterleaved (primePtrs.data(), primed,
+                                                 nullptr, 0, false,
+                                                 stretchInterleavedIn, stretchInterleavedOut);
+            }
+        }
     }
 
     int framesWritten = 0;

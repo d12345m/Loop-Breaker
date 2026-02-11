@@ -1,15 +1,13 @@
 {
-	"version": "2.0.0",
-	"tasks": [
-		{
-			"label": "Build VST3 (Debug)",
-			"type": "shell",
-			"command": "cd Builds/MacOSX && xcodebuild -project BufferTest.xcodeproj -scheme \"BufferTest - VST3\" -configuration Debug build",
-			"group": "build",
-			"problemMatcher": [
-				"$gcc"
-			],
-			"isBackground": false
-		}
-	]
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build VST3 (Debug)",
+      "type": "shell",
+      "command": "cd Builds/MacOSX && xcodebuild -project BufferTest.xcodeproj -scheme \"BufferTest - VST3\" -configuration Debug build",
+      "group": "build",
+      "problemMatcher": ["$gcc"],
+      "isBackground": false
+    }
+  ]
 }

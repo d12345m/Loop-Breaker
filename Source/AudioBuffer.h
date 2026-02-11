@@ -116,6 +116,10 @@ public:
     // Time-stretch (tempo only, no pitch). 1.0 = normal.
     void setStretchRatio(double ratio);
     double getStretchRatio() const { return stretchRatio.load(); }
+
+    // Pitch shift (semitones). 0 = no shift. Implemented via SoundTouch when non-zero.
+    void setPitchSemiTones(double semiTones);
+    double getPitchSemiTones() const { return pitchSemiTones.load(); }
     
     //==============================================================================
     // Slicing functionality
@@ -179,6 +183,7 @@ private:
 
     std::atomic<double> tempoMultiplier { 1.0 };
     std::atomic<double> stretchRatio { 1.0 }; // 1.0 = normal; <1 slower/longer; >1 faster/shorter
+    std::atomic<double> pitchSemiTones { 0.0 }; // pitch shift in semitones; 0 = none
 
     double getEffectiveSpeed() const { return params.speed * tempoMultiplier.load(); }
 

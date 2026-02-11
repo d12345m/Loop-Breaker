@@ -53,6 +53,12 @@ public:
         st.setRate (juce::jlimit (0.25f, 4.0f, ratio));
     }
 
+    // Pitch shift in semitones. 0 = original pitch.
+    void setPitchSemiTones (float semiTones)
+    {
+        st.setPitchSemiTones (juce::jlimit (-24.0f, 24.0f, semiTones));
+    }
+
     // Expose SoundTouch's reported initial latency so callers can prime appropriately.
     int getLatencySamples() const
     {

@@ -459,6 +459,8 @@ ModifierDescriptor ModifierScheduler::pickRandomDescriptor() const
             bool allowed = (t == ModifierType::Reverse
                 || t == ModifierType::Speed
                 || t == ModifierType::Stretch
+                || t == ModifierType::PitchUpOctave
+                || t == ModifierType::PitchDownOctave
                 || t == ModifierType::ResetAll
                 || t == ModifierType::BeatSliceRandom
                 || t == ModifierType::BufferReverbOn

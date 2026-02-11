@@ -134,6 +134,12 @@ struct AppState : public ModifierSchedulerListener
             case ModifierType::Stretch:
                 applyStretch(desc, targets);
                 break;
+            case ModifierType::PitchUpOctave:
+                applyPitchSemiTones(+12.0, targets);
+                break;
+            case ModifierType::PitchDownOctave:
+                applyPitchSemiTones(-12.0, targets);
+                break;
             case ModifierType::ResetAll:
                 applyReset(targets);
                 break;
@@ -239,6 +245,20 @@ struct AppState : public ModifierSchedulerListener
         }
     }
 private:
+    void applyPitchSemiTones(double deltaSemiTones, const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        for (int idx : targets)
+        {
+            if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
+            {
+                const double current = b->getPitchSemiTones();
+                b->setPitchSemiTones(current + deltaSemiTones);
+                if (!b->isPlaying()) b->play();
+            }
+        }
+    }
+
     void applyReverse(const juce::Array<int>& targets)
     {
         if (targets.isEmpty()) return;

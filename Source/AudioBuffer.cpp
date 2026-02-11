@@ -53,10 +53,13 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
 
     const double stretch = stretchRatio.load();
     const bool useStretch = std::abs(stretch - 1.0) > 1.0e-6;
+    const double pitchSemis = pitchSemiTones.load();
+    const bool usePitch = std::abs(pitchSemis) > 1.0e-6;
+    const bool useStretcher = (useStretch || usePitch);
 
-    // Route through SoundTouch only when actually stretching.
+    // Route through SoundTouch when stretching or when pitch shifting is active.
     // Even at 1.0, SoundTouch adds buffering/CPU and can affect UI smoothness in Debug builds.
-    if (useStretch)
+    if (useStretcher)
     {
         processWithTimeStretch(outputBuffer);
     }
@@ -69,7 +72,7 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
 
     // When transitioning between repitch <-> stretch mode, crossfade the tail
     // of the previous block into the head of the current block to avoid a hard edge.
-    const bool transitioned = (useStretch != lastBlockUsedStretch);
+    const bool transitioned = (useStretcher != lastBlockUsedStretch);
     if (transitioned && previousBlockValid)
     {
         const int curSamples = outputBuffer.getNumSamples();
@@ -95,7 +98,7 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
             }
         }
     }
-    lastBlockUsedStretch = useStretch;
+    lastBlockUsedStretch = useStretcher;
 
     // Cache this block for potential transition crossfade next time.
     if (previousBlockBuffer.getNumChannels() != outputBuffer.getNumChannels()
@@ -114,6 +117,25 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
     notifyPlaybackStateChanged();
     notifySliceChanged();
     notifyPositionChanged();
+}
+
+void AudioBuffer::setPitchSemiTones(double semiTones)
+{
+    // Clamp to a musically useful range to keep SoundTouch stable.
+    semiTones = juce::jlimit(-24.0, 24.0, semiTones);
+
+    const double oldPitch = pitchSemiTones.load();
+    pitchSemiTones.store(semiTones);
+
+    const bool oldPitchActive = std::abs(oldPitch - 0.0) > 1.0e-6;
+    const bool newPitchActive = std::abs(semiTones - 0.0) > 1.0e-6;
+    const bool stretchActive = std::abs(stretchRatio.load() - 1.0) > 1.0e-6;
+
+    // Reset SoundTouch only when toggling overall "stretcher usage" on/off.
+    const bool oldUse = (stretchActive || oldPitchActive);
+    const bool newUse = (stretchActive || newPitchActive);
+    if (oldUse != newUse)
+        stretcherNeedsReset.store(true);
 }
 
 AudioBuffer::LoadedAudioData::Ptr AudioBuffer::getAudioDataSnapshot() const
@@ -420,6 +442,7 @@ void AudioBuffer::resetToDefaults()
     params.reset();
 
     stretchRatio.store(1.0);
+    pitchSemiTones.store(0.0);
     stretcherPrepared = false;
     stretcherPrimed = false;
     stretcherNeedsReset.store(false);
@@ -457,15 +480,18 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
     }
 
     const double ratio = stretchRatio.load();
+    const double pitchSemis = pitchSemiTones.load();
+    const bool pitchActive = std::abs(pitchSemis) > 1.0e-6;
     // When time-stretching, SoundTouch changes the output tempo. We should NOT also scale
     // the source read speed by ratio (that would double-apply the effect).
     // We do, however, still apply host tempo-following so Stretch remains relative to the DAW tempo.
     const double direction = (params.speed < 0.0 ? -1.0 : 1.0);
     const double inputSpeed = direction * tempoMultiplier.load();
 
-    // Optional combined mode: if speed magnitude != 1.0, route it through SoundTouch rate.
+    // If pitch shifting is active, keep tempo/speed independent of pitch by expressing speed
+    // via SoundTouch tempo (NOT rate). Rate is only used when pitch shifting is inactive.
     const double speedMag = std::abs(params.speed);
-    const bool useRate = std::abs(speedMag - 1.0) > 1.0e-6;
+    const bool useRate = (!pitchActive) && (std::abs(speedMag - 1.0) > 1.0e-6);
 
     // Handle deferred reset (e.g., from setStretchRatio mode transition or stop).
     // Always touch the SoundTouch instance from the audio thread only.
@@ -488,18 +514,21 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
         stretchSmoother.skip(numOutputSamples - 1);
 
     const double clampedRate = juce::jlimit (0.25, 4.0, speedMag > 0.0 ? speedMag : 1.0);
+    const double tempoRatioForSt = pitchActive ? (smoothedRatio * clampedRate) : smoothedRatio;
+    const double totalTempoRatioForIO = tempoRatioForSt * (useRate ? clampedRate : 1.0);
     // Feed chunks proportional to the output block.  A small margin (64 frames) ensures we don't
     // starve SoundTouch on fractional boundaries, without generating the massive 300ms warmup that
     // was previously causing CPU spikes every processBlock call.
     const int marginFrames = 64;
-    const int maxInputChunkFrames = juce::jmax (numOutputSamples, (int) std::ceil (numOutputSamples * clampedRatio) + marginFrames);
+    const int maxInputChunkFrames = juce::jmax (numOutputSamples, (int) std::ceil (numOutputSamples * totalTempoRatioForIO) + marginFrames);
 
     // Prepare SoundTouch when needed.
     if (!stretcherPrepared || stretcherPreparedSampleRate != hostSampleRate || stretcherPreparedChannels != numChannels)
     {
         stretcher.prepare(hostSampleRate, numChannels);
-        stretcher.setTempoRatio ((float) smoothedRatio);
+        stretcher.setTempoRatio ((float) tempoRatioForSt);
         stretcher.setRateRatio ((float) (useRate ? clampedRate : 1.0));
+        stretcher.setPitchSemiTones ((float) pitchSemis);
         stretcherPrepared = true;
         stretcherPreparedSampleRate = hostSampleRate;
         stretcherPreparedChannels = numChannels;
@@ -509,8 +538,9 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
     else
     {
         // Ratio can change without channel/sr changing; keep tempo updated.
-        stretcher.setTempoRatio ((float) smoothedRatio);
+        stretcher.setTempoRatio ((float) tempoRatioForSt);
         stretcher.setRateRatio ((float) (useRate ? clampedRate : 1.0));
+        stretcher.setPitchSemiTones ((float) pitchSemis);
     }
 
     // Ensure scratch buffers are appropriately sized.

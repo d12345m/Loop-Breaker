@@ -224,7 +224,6 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                     if (noteMap[i] == note)
                     {
                         midiPadToggleRequests[i].store(true);
-                        break;
                     }
                 }
             }

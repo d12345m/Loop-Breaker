@@ -79,6 +79,16 @@ public:
         }
         partsCountBox.onChange = [this]{ partsCountChanged(); };
 
+        // Bars between modifiers slider
+        addAndMakeVisible(barsBetweenModifiersSlider);
+        barsBetweenModifiersSlider.setRange(1.0, 16.0, 1.0);
+        barsBetweenModifiersSlider.setValue(app.settings.barsBetweenModifiers, juce::dontSendNotification);
+        barsBetweenModifiersSlider.onValueChange = [this]{ barsBetweenModifiersChanged(); };
+        barsBetweenModifiersSlider.setSliderStyle(juce::Slider::LinearBar);
+        barsBetweenModifiersSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 44, 20);
+        addAndMakeVisible(barsBetweenModifiersLabel);
+        barsBetweenModifiersLabel.attachToComponent(&barsBetweenModifiersSlider, true);
+
         addAndMakeVisible(statusLabel);
         statusLabel.setJustificationType(juce::Justification::centredLeft);
         statusLabel.setColour(juce::Label::textColourId, Theme::textSubtle());
@@ -174,6 +184,7 @@ public:
         auto controlBar = topBar;
         modifiersToggle.setBounds(controlBar.removeFromLeft(120).reduced(2));
         partsCountBox.setBounds(controlBar.removeFromLeft(120).reduced(2));
+        barsBetweenModifiersSlider.setBounds(controlBar.removeFromLeft(220).reduced(2));
 
         auto rightRegion = controlBar;
         implementedOnlyToggle.setBounds(rightRegion.removeFromRight(150).reduced(2));
@@ -214,6 +225,13 @@ public:
     {
         juce::MessageManager::callAsync([this, desc, targets]
         {
+            // Apply pending parts count change exactly on the next modifier trigger.
+            if (pendingPartsCount >= 1 && pendingPartsCount <= 4)
+            {
+                app.settings.parts.numParts = pendingPartsCount;
+                app.setActivePart(app.getActivePart());
+                pendingPartsCount = -1;
+            }
             modifierHistory.addEntry(desc, targets);
             padGrid.flashPads(targets);
             if (! targets.isEmpty())
@@ -241,6 +259,9 @@ private:
     juce::ToggleButton implementedOnlyToggle { "Implemented Only" };
 
     juce::ComboBox partsCountBox;
+    int pendingPartsCount = -1; // -1 = none; otherwise apply on next modifier trigger
+    juce::Slider barsBetweenModifiersSlider;
+    juce::Label barsBetweenModifiersLabel { {}, "Bars/Mod" };
     juce::Label statusLabel { {}, "Status: Idle" };
     juce::Label hostTransportLabel { {}, "Host: Unknown" };
 
@@ -418,9 +439,45 @@ private:
     void partsCountChanged()
     {
         const int n = juce::jlimit(1, 4, partsCountBox.getSelectedId());
+
+        // If transport is running (host or internal playback), defer until next modifier trigger.
+        if (isTransportRunning())
+        {
+            pendingPartsCount = n;
+            refreshStatus();
+            return;
+        }
+
+        // Not running: store the setting only. Loop windows will be recomputed when playback starts
+        // or on the next modifier trigger if modifiers are enabled.
         app.settings.parts.numParts = n;
-        // Re-apply active part to recompute loop windows immediately.
-        app.setActivePart(app.getActivePart());
+        pendingPartsCount = -1;
+        refreshStatus();
+    }
+
+    void barsBetweenModifiersChanged()
+    {
+        const int bars = (int) barsBetweenModifiersSlider.getValue();
+        app.settings.barsBetweenModifiers = juce::jlimit(1, 16, bars);
+        refreshStatus();
+    }
+
+    bool isTransportRunning() const
+    {
+        // If scheduler is actively ticking modifiers, treat as running.
+        if (app.scheduler.isRunning() && ! app.scheduler.isSuppressed() && app.settings.modifiersEnabled)
+            return true;
+
+        // If any buffers are playing, treat as running.
+        if (! app.bufferManager.getPlayingBufferIndices().isEmpty())
+            return true;
+
+        // Fall back to host transport state (DAW).
+        if (processor.getLastHostTransportState() == BufferTestAudioProcessor::HostTransportState::Playing
+            && processor.isPlaybackEnabled())
+            return true;
+
+        return false;
     }
 
 
@@ -433,7 +490,11 @@ private:
         static const char* partNames[] = { "A", "B", "C", "D" };
         const int numParts = app.settings.parts.getNumParts();
         const int active = juce::jlimit(0, 3, app.getActivePart());
-        s << " | Parts: " << numParts << " | Active: " << partNames[active];
+        s << " | Parts: " << numParts;
+        if (pendingPartsCount >= 1 && pendingPartsCount <= 4)
+            s << " (pending: " << pendingPartsCount << ")";
+        s << " | Active: " << partNames[active];
+        s << " | Bars/Mod: " << app.settings.barsBetweenModifiers;
         statusLabel.setText("Status: " + s, juce::dontSendNotification);
     }
 };

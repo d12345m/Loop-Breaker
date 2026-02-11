@@ -72,6 +72,16 @@ MainAppComponent::MainAppComponent()
     bpmLabel.attachToComponent(&bpmSlider, true);
     addAndMakeVisible(bpmLabel);
 
+    // Bars between modifiers slider
+    barsBetweenModifiersSlider.setRange(1.0, 16.0, 1.0);
+    barsBetweenModifiersSlider.setValue(app.settings.barsBetweenModifiers, juce::dontSendNotification);
+    barsBetweenModifiersSlider.onValueChange = [this]{ barsBetweenModifiersChanged(); };
+    barsBetweenModifiersSlider.setSliderStyle(juce::Slider::LinearBar);
+    barsBetweenModifiersSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 40, 20);
+    addAndMakeVisible(barsBetweenModifiersSlider);
+    barsBetweenModifiersLabel.attachToComponent(&barsBetweenModifiersSlider, true);
+    addAndMakeVisible(barsBetweenModifiersLabel);
+
     attachPadCallbacks();
 
     // Provide AudioFormatManager to padGrid so thumbnails can read files
@@ -189,6 +199,8 @@ void MainAppComponent::resized()
     loadProjectButton.setBounds(projArea.removeFromLeft(130).reduced(2));
     // Parts selector moved to second row for dev clarity
     partsCountBox.setBounds(projArea.removeFromLeft(160).reduced(2));
+    // Bars between modifiers slider
+    barsBetweenModifiersSlider.setBounds(projArea.removeFromLeft(240).reduced(2));
     // Label is attached to partsCountBox; no explicit bounds needed
     // Parts buttons removed; reclaim space for other controls.
     // Status label occupies the remaining right-side space on this row
@@ -238,6 +250,14 @@ void MainAppComponent::upcomingModifierChanged(const ModifierDescriptor& desc)
 
 void MainAppComponent::modifierTriggered(const ModifierDescriptor& desc, const juce::Array<int>& targets)
 {
+    // Apply pending parts count change if one is queued
+    if (pendingPartsCount >= 1 && pendingPartsCount <= 4)
+    {
+        app.settings.parts.numParts = pendingPartsCount;
+        app.setActivePart(app.getActivePart());
+        pendingPartsCount = -1;
+    }
+
     auto doUiWork = [this](const ModifierDescriptor& d, const juce::Array<int>& t)
     {
         juce::String targetStr;
@@ -358,7 +378,12 @@ void MainAppComponent::refreshStatus()
         endBars = spanBars.second;
     }
     juce::String spanStr = juce::String(startBars, 2) + " bars–" + juce::String(endBars, 2) + " bars";
-    juce::String base = partName + " [" + spanStr + "] | Parts: " + juce::String(numParts)
+    juce::String partsStr = juce::String(numParts);
+    if (pendingPartsCount >= 1 && pendingPartsCount <= 4)
+        partsStr << " (pending: " << pendingPartsCount << ")";
+
+    juce::String base = partName + " [" + spanStr + "] | Parts: " + partsStr
+        + " | Bars/Mod: " + juce::String(app.settings.barsBetweenModifiers)
         + " | Playing: " + juce::String(playing) + " | BPM " + juce::String(app.settings.bpm, 0);
     if (app.scheduler.isRunning())
     {
@@ -387,9 +412,37 @@ void MainAppComponent::implementedOnlyToggled()
 void MainAppComponent::partsCountChanged()
 {
     int n = juce::jlimit(1, 4, partsCountBox.getSelectedId());
-    app.settings.parts.numParts = n;
-    // Re-apply active part to recompute loop windows immediately.
-    app.setActivePart(app.getActivePart());
+    
+    // If transport is running (scheduler active or buffers playing), defer the change until next modifier
+    if (isTransportRunning())
+    {
+        pendingPartsCount = n;
+        statusLabel.setText(juce::String("Parts change pending: ") + juce::String(n) + " part" + (n > 1 ? "s" : ""), juce::dontSendNotification);
+    }
+    else
+    {
+        // Apply immediately - just update the settings, don't call setActivePart yet
+        app.settings.parts.numParts = n;
+        pendingPartsCount = -1;
+        statusLabel.setText(juce::String("Parts set to: ") + juce::String(n) + " part" + (n > 1 ? "s" : ""), juce::dontSendNotification);
+    }
+}
+
+void MainAppComponent::barsBetweenModifiersChanged()
+{
+    int bars = (int) barsBetweenModifiersSlider.getValue();
+    app.settings.barsBetweenModifiers = juce::jlimit(1, 16, bars);
+}
+
+bool MainAppComponent::isTransportRunning() const
+{
+    // Transport is running if scheduler is active OR any buffers are playing
+    if (app.scheduler.isRunning() && !app.scheduler.isSuppressed())
+        return true;
+    
+    // Also check if any buffers are currently playing
+    auto playing = app.bufferManager.getPlayingBufferIndices();
+    return !playing.isEmpty();
 }
 
 void MainAppComponent::saveProjectClicked()

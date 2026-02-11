@@ -62,6 +62,10 @@ private:
   juce::Label bpmLabel { {}, "BPM" };
   // Parts count selector (1–4)
   juce::ComboBox partsCountBox;
+  int pendingPartsCount = -1; // -1 = no pending change
+  // Bars between modifiers slider
+  juce::Slider barsBetweenModifiersSlider;
+  juce::Label barsBetweenModifiersLabel { {}, "Bars/Mod" };
   // Dev controls
   juce::TextButton triggerNowButton { "Trigger Now" };
   juce::TextButton skipUpcomingButton { "Skip" };
@@ -85,6 +89,8 @@ private:
   void bpmChanged();
   void updatePlaybackModifierLink();
   void partsCountChanged();
+  void barsBetweenModifiersChanged();
+  bool isTransportRunning() const;
   void saveProjectClicked();
   void loadProjectClicked();
   void restorePadFilesFromSettings();

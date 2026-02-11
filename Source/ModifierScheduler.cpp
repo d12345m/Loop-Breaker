@@ -29,6 +29,7 @@ void ModifierScheduler::start()
     hostTimelineActive.store(false);
     lastHostPpqPosition = 0.0;
     nextTriggerPpq = 0.0;
+    nextMainTriggerPpq = 0.0;
     quarterNoteBurstRemaining.store(0);
     scheduleNextTrigger();
     selectNextModifier();
@@ -51,6 +52,7 @@ void ModifierScheduler::resetTimeline()
     hostTimelineActive.store(false);
     lastHostPpqPosition = 0.0;
     nextTriggerPpq = 0.0;
+    nextMainTriggerPpq = 0.0;
     quarterNoteBurstRemaining.store(0);
     // Keep upcoming descriptor as-is if running; otherwise it will be selected on start()
     if (running)
@@ -171,10 +173,19 @@ void ModifierScheduler::scheduleNextTriggerHost(double currentPpq, double bpm)
     }
     else
     {
-        // Next trigger is at the next bar boundary, plus barsBetweenModifiers.
-        const double currentBar = (barLenPpq > 0.0 ? std::floor((currentPpq / barLenPpq) + 1e-9) : 0.0);
-        const double targetBar = currentBar + (double) settings.barsBetweenModifiers;
-        nextTriggerPpq = targetBar * barLenPpq;
+        // Resume the main loop schedule if it's already been computed.
+        if (nextMainTriggerPpq > currentPpq + 1e-9)
+        {
+            nextTriggerPpq = nextMainTriggerPpq;
+        }
+        else
+        {
+            // Next trigger is at the next bar boundary, plus barsBetweenModifiers.
+            const double currentBar = (barLenPpq > 0.0 ? std::floor((currentPpq / barLenPpq) + 1e-9) : 0.0);
+            const double targetBar = currentBar + (double) settings.barsBetweenModifiers;
+            nextTriggerPpq = targetBar * barLenPpq;
+            nextMainTriggerPpq = nextTriggerPpq;
+        }
 
         // Optional extra snapping to subdivisions (kept for future flexibility)
         if (quantizationEnabled.load())
@@ -185,6 +196,8 @@ void ModifierScheduler::scheduleNextTriggerHost(double currentPpq, double bpm)
             {
                 const double snapped = std::ceil((nextTriggerPpq / grid) - 1e-9) * grid;
                 nextTriggerPpq = snapped;
+                // Keep main schedule in sync when snapping is active.
+                nextMainTriggerPpq = juce::jmax(nextMainTriggerPpq, nextTriggerPpq);
             }
         }
     }
@@ -224,11 +237,14 @@ void ModifierScheduler::triggerIfDueHost(double currentPpq, double bpm)
 
     static constexpr double eps = 1e-6;
     const double secondsPerQuarter = 60.0 / bpm;
+    const double denom = (double) juce::jmax(1, settings.timeSigDenominator);
+    const double barLenPpq = (double) settings.timeSigNumerator * (4.0 / denom);
 
     // Limit catch-up triggers in case of unusual host blocks or jumps.
     int safety = 0;
     while (currentPpq + eps >= nextTriggerPpq && safety++ < 128)
     {
+        const int burstRemainingBefore = quarterNoteBurstRemaining.load();
         auto descriptor = upcoming.value();
 
         if (descriptor.type == ModifierType::Unknown)
@@ -267,18 +283,24 @@ void ModifierScheduler::triggerIfDueHost(double currentPpq, double bpm)
         // If the triggered modifier is QuarterNoteBurst, enable rapid-fire mode.
         if (descriptor.type == ModifierType::QuarterNoteBurst)
         {
-            const double denom = (double) juce::jmax(1, settings.timeSigDenominator);
-            const double barLenPpq = (double) settings.timeSigNumerator * (4.0 / denom);
             const int quartersPerBar = juce::jmax(1, (int) std::round(barLenPpq));
             const int bars = juce::jmax(1, descriptor.plannedBurstBars.value_or(2));
             const int total = juce::jmax(1, bars) * quartersPerBar;
             quarterNoteBurstRemaining.store(total);
+
+            // Advance the MAIN loop schedule right now so burst ticks don't move it.
+            if (barLenPpq > 0.0)
+                nextMainTriggerPpq = nextTriggerPpq + ((double) settings.barsBetweenModifiers * barLenPpq);
         }
         else
         {
             const int remaining = quarterNoteBurstRemaining.load();
             if (remaining > 0)
                 quarterNoteBurstRemaining.store(remaining - 1);
+
+            // If this was a normal MAIN trigger (not a burst tick), advance the main schedule.
+            if (burstRemainingBefore <= 0 && barLenPpq > 0.0)
+                nextMainTriggerPpq = nextTriggerPpq + ((double) settings.barsBetweenModifiers * barLenPpq);
         }
 
         lastTriggerAbsoluteSeconds = nextTriggerPpq * secondsPerQuarter;

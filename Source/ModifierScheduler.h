@@ -110,6 +110,7 @@ private:
     std::atomic<bool> hostTimelineActive { false };
     double lastHostPpqPosition = 0.0;
     double nextTriggerPpq = 0.0;
+    double nextMainTriggerPpq = 0.0; // main loop schedule (barsBetweenModifiers), independent of burst ticks
 
     // Quarter-note burst scheduling (rapid-fire modifiers)
     std::atomic<int> quarterNoteBurstRemaining { 0 }; // number of quarter-note triggers remaining

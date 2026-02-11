@@ -35,6 +35,7 @@ public:
         addToggle(ModifierType::Reverse, "Reverse");
         addToggle(ModifierType::Speed, "Speed (rand)");
         addToggle(ModifierType::Stretch, "Stretch (rand)");
+        addToggle(ModifierType::QuarterNoteBurst, "Burst (quarter)");
     // Buffer FX (placeholders)
     addToggle(ModifierType::BufferReverbOn, "Reverb On");
     addToggle(ModifierType::BufferDelayOn, "Delay On");

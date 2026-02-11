@@ -440,6 +440,17 @@ private:
     {
         const int n = juce::jlimit(1, 4, partsCountBox.getSelectedId());
 
+        // If the DAW transport is stopped, apply immediately.
+        // This matches user expectation: edits while stopped should take effect now.
+        if (processor.getLastHostTransportState() == BufferTestAudioProcessor::HostTransportState::Stopped)
+        {
+            app.settings.parts.numParts = n;
+            app.setActivePart(app.getActivePart());
+            pendingPartsCount = -1;
+            refreshStatus();
+            return;
+        }
+
         // If transport is running (host or internal playback), defer until next modifier trigger.
         if (isTransportRunning())
         {

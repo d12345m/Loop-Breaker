@@ -2,56 +2,14 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "Build and Run BufferTest",
+			"label": "Build VST3 (Debug)",
 			"type": "shell",
-			"command": "cd Builds/MacOSX && xcodebuild -project BufferTest.xcodeproj -configuration Debug && open build/Debug/BufferTest.app",
+			"command": "cd Builds/MacOSX && xcodebuild -project BufferTest.xcodeproj -scheme \"BufferTest - VST3\" -configuration Debug build",
 			"group": "build",
 			"problemMatcher": [
 				"$gcc"
 			],
 			"isBackground": false
-		},
-		{
-			"label": "Build and Run iOS Simulator",
-			"type": "shell",
-			"command": "cd Builds/iOS && xcodebuild -project BufferTest.xcodeproj -configuration Debug -sdk iphonesimulator build && DEVICE=\"iPhone 15\" && xcrun simctl boot \"$DEVICE\" || true && xcrun simctl install \"$DEVICE\" build/Debug/BufferTest.app && xcrun simctl launch \"$DEVICE\" com.yourcompany.BufferTest",
-			"args": [],
-			"isBackground": false,
-			"problemMatcher": [
-				"$xcodebuild"
-			],
-			"group": "build"
-		},
-		{
-			"label": "Build and Run iOS Simulator",
-			"type": "shell",
-			"command": "cd Builds/iOS && xcodebuild -project BufferTest.xcodeproj -configuration Debug -sdk iphonesimulator build && open -a Simulator && xcrun simctl bootstatus -b || true && xcrun simctl install booted build/Debug/BufferTest.app && xcrun simctl launch booted com.yourcompany.BufferTest",
-			"args": [],
-			"isBackground": false,
-			"problemMatcher": [
-				"$xcodebuild"
-			],
-			"group": "build"
-		},
-		{
-			"label": "Clean and Build iOS Simulator",
-			"type": "shell",
-			"command": "cd Builds/iOS && xcodebuild -project BufferTest.xcodeproj -configuration Debug -sdk iphonesimulator clean build",
-			"args": [],
-			"isBackground": false,
-			"problemMatcher": [
-				"$xcodebuild"
-			],
-			"group": "build"
-		},
-		{
-			"label": "Clean Build and Run iOS Simulator",
-			"type": "shell",
-			"command": "cd Builds/iOS && xcodebuild -project BufferTest.xcodeproj -configuration Debug -sdk iphonesimulator clean build && open -a Simulator || true && SIMUDID=$(xcrun simctl list devices | awk -F\"[()]\" '/iPhone/{ if ($4 ~ /Shutdown|Booted/ && $2 ~ /^[A-F0-9-]+$/) {print $2; exit} }'); if [ -z \"$SIMUDID\" ]; then echo \"No simulator UDID found. Listing devices...\"; xcrun simctl list devices | cat; exit 1; fi; xcrun simctl boot \"$SIMUDID\" || true; xcrun simctl bootstatus \"$SIMUDID\" -b || true; xcrun simctl install \"$SIMUDID\" build/Debug/BufferTest.app; xcrun simctl launch \"$SIMUDID\" com.yourcompany.BufferTest | cat",
-			"problemMatcher": [
-				"$xcodebuild"
-			],
-			"group": "build"
 		}
 	]
 }

@@ -43,14 +43,16 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
     if (!hasAudioLoaded() || !params.isPlaying)
     {
         outputBuffer.clear();
+        lastBlockUsedStretch = false;
         return;
     }
 
     const double stretch = stretchRatio.load();
+    const bool useStretch = std::abs(stretch - 1.0) > 1.0e-6;
 
     // Route through SoundTouch only when actually stretching.
     // Even at 1.0, SoundTouch adds buffering/CPU and can affect UI smoothness in Debug builds.
-    if (std::abs(stretch - 1.0) > 1.0e-6)
+    if (useStretch)
     {
         processWithTimeStretch(outputBuffer);
     }
@@ -60,6 +62,21 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
         speedSmoother.setTargetValue(getEffectiveSpeed());
         processWithRepitching(outputBuffer);
     }
+
+    // When transitioning between repitch <-> stretch mode, apply a short fade-in
+    // to prevent a discontinuity click at the block boundary.
+    if (useStretch != lastBlockUsedStretch)
+    {
+        const int fadeSamples = juce::jmin(outputBuffer.getNumSamples(),
+                                           juce::jmax(1, (int)(hostSampleRate * 0.01))); // 10ms
+        for (int ch = 0; ch < outputBuffer.getNumChannels(); ++ch)
+        {
+            float* data = outputBuffer.getWritePointer(ch);
+            for (int i = 0; i < fadeSamples; ++i)
+                data[i] *= (float)(i + 1) / (float)(fadeSamples + 1);
+        }
+    }
+    lastBlockUsedStretch = useStretch;
     
     // Check for state changes and notify listeners
     notifyPlaybackStateChanged();
@@ -273,7 +290,9 @@ void AudioBuffer::setLoadedAudioData(LoadedAudioData::Ptr newData)
     // Reset time-stretch state for a clean start.
     stretchRatio.store(1.0);
     stretcherPrepared = false;
-    stretcherPrimed = false; // Ensure the new primed flag resets
+    stretcherPrimed = false;
+    stretcherNeedsReset.store(false);
+    lastBlockUsedStretch = false;
     stretchFadeInRemaining = 0;
     stretcher.reset();
 }
@@ -314,11 +333,9 @@ void AudioBuffer::setPlaying(bool shouldPlay)
 
     if (! shouldPlay)
     {
-        // Flush any buffered SoundTouch audio so we don't resume with stale data.
-        stretcher.reset();
-        stretcherPrepared = false;
-        stretcherPrimed = false; // Ensure the new primed flag resets
-        stretchFadeInRemaining = 0;
+        // Signal the audio thread to flush SoundTouch so we don't resume with stale data.
+        // Use a flag rather than touching SoundTouch directly for thread safety.
+        stretcherNeedsReset.store(true);
     }
 }
 
@@ -335,7 +352,17 @@ void AudioBuffer::setStretchRatio(double ratio)
     // Clamp to reasonable range (matches TimeStretchSoundTouch)
     ratio = juce::jlimit(0.25, 4.0, ratio);
 
+    const double oldRatio = stretchRatio.load();
     stretchRatio.store(ratio);
+
+    // When transitioning between stretch and non-stretch modes, signal the audio
+    // thread to clear SoundTouch's internal buffers so stale data doesn't cause
+    // a volume spike or burst of old audio on the first output block.
+    const bool wasStretching = std::abs(oldRatio - 1.0) > 1.0e-6;
+    const bool nowStretching = std::abs(ratio  - 1.0) > 1.0e-6;
+
+    if (wasStretching != nowStretching)
+        stretcherNeedsReset.store(true);
 }
 
 void AudioBuffer::setLooping(bool shouldLoop)
@@ -360,6 +387,8 @@ void AudioBuffer::resetToDefaults()
     stretchRatio.store(1.0);
     stretcherPrepared = false;
     stretcherPrimed = false;
+    stretcherNeedsReset.store(false);
+    lastBlockUsedStretch = false;
     stretcher.reset();
     
     // Reset crossfade state
@@ -395,6 +424,16 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
     // We do, however, still apply host tempo-following so Stretch remains relative to the DAW tempo.
     const double direction = (params.speed < 0.0 ? -1.0 : 1.0);
     const double inputSpeed = direction * tempoMultiplier.load();
+
+    // Handle deferred reset (e.g., from setStretchRatio mode transition or stop).
+    // Always touch the SoundTouch instance from the audio thread only.
+    if (stretcherNeedsReset.exchange(false))
+    {
+        stretcher.reset();
+        stretcherPrepared = false;
+        stretcherPrimed = false;
+        stretchFadeInRemaining = 0;
+    }
 
     // Ensure scratch buffers are appropriately sized without per-sample allocation.
     // We intentionally keep these buffers around; setSize may allocate but only when capacity grows.
@@ -683,7 +722,7 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
     if (! stretcherPrimed)
     {
         stretcherPrimed = true;
-        stretchFadeInRemaining = juce::jmax (1, (int) (hostSampleRate * 0.005));
+        stretchFadeInRemaining = juce::jmax (1, (int) (hostSampleRate * 0.02));
     }
 
     int framesWritten = 0;
@@ -746,18 +785,39 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
         stretchFadeInRemaining -= fadeLen;
     }
 
+    // Clamp output to +/-1.0 to prevent SoundTouch's overlap-add from producing
+    // peaks that cause DAW metering to clip and stay in the red.
+    for (int ch = 0; ch < numChannels; ++ch)
+        juce::FloatVectorOperations::clip (outputBuffer.getWritePointer (ch),
+                                           outputBuffer.getReadPointer (ch),
+                                           -1.0f, 1.0f, framesWritten);
+
     // Warn in debug if we repeatedly failed to fill the block.
 #if JUCE_DEBUG
     jassertquiet (framesWritten == numOutputSamples || safetyIters >= 8);
 #endif
 
-    // If we still underfilled, pad the tail to avoid hard zeros/crackles.
+    // If we still underfilled, fade the tail to zero instead of holding the last
+    // sample value.  The old constant-fill approach created DC offset that caused
+    // DAW metering to stay in the red and crackles at block boundaries.
     if (framesWritten < numOutputSamples)
     {
+        const int tail = numOutputSamples - framesWritten;
+        const int fadeOut = juce::jmin (tail, juce::jmax (1, (int) (hostSampleRate * 0.002))); // 2ms
+
         for (int ch = 0; ch < numChannels; ++ch)
         {
-            const float last = framesWritten > 0 ? outputBuffer.getSample (ch, framesWritten - 1) : 0.0f;
-            outputBuffer.copyFrom (ch, framesWritten, &last, numOutputSamples - framesWritten);
+            float* out = outputBuffer.getWritePointer (ch);
+            const float last = framesWritten > 0 ? out[framesWritten - 1] : 0.0f;
+
+            // Short fade from last valid sample to zero.
+            for (int i = 0; i < fadeOut; ++i)
+                out[framesWritten + i] = last * (1.0f - (float) (i + 1) / (float) (fadeOut + 1));
+
+            // Zero the remainder of the block.
+            if (framesWritten + fadeOut < numOutputSamples)
+                juce::FloatVectorOperations::clear (out + framesWritten + fadeOut,
+                                                    numOutputSamples - framesWritten - fadeOut);
         }
 
         timeStretchUnderfills.fetch_add (1, std::memory_order_relaxed);

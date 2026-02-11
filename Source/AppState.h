@@ -252,6 +252,14 @@ private:
         {
             if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
             {
+                // SoundTouch pitch shift conflicts with reverse playback.
+                // Force forward playback when applying pitch modifiers.
+                double s = b->getSpeed();
+                if (s < 0.0)
+                {
+                    b->setSpeed(std::abs(s)); // flip to forward
+                }
+                
                 const double current = b->getPitchSemiTones();
                 b->setPitchSemiTones(current + deltaSemiTones);
                 if (!b->isPlaying()) b->play();
@@ -266,6 +274,18 @@ private:
         {
             if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
             {
+                // Reverse conflicts with SoundTouch-powered modifiers.
+                // Disable stretch and pitch shift before reversing.
+                const bool hadSoundTouchActive = 
+                    (std::abs(b->getStretchRatio() - 1.0) > 1.0e-6) || 
+                    (std::abs(b->getPitchSemiTones()) > 1.0e-6);
+                
+                if (hadSoundTouchActive)
+                {
+                    b->setStretchRatio(1.0);
+                    b->setPitchSemiTones(0.0);
+                }
+                
                 // T6: Toggle direction — flip the sign rather than always going negative.
                 double s = b->getSpeed();
                 if (s == 0.0) s = 1.0;
@@ -305,10 +325,12 @@ private:
         {
             if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
             {
-                // Preserve direction but neutralize speed magnitude when stretching.
+                // SoundTouch stretch conflicts with reverse playback.
+                // Force forward playback and neutralize speed to 1.0 when stretching.
                 double s = b->getSpeed();
                 if (s == 0.0) s = 1.0;
-                b->setSpeed((s < 0.0) ? -1.0 : 1.0);
+                // Always use forward (positive) speed with stretch
+                b->setSpeed((s < 0.0) ? 1.0 : std::abs(s));
                 b->setStretchRatio(ratioVal);
                 if (!b->isPlaying()) b->play();
             }

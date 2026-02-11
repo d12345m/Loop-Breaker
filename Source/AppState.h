@@ -259,11 +259,16 @@ private:
         if (targets.isEmpty()) return;
         // Use structured planned speed if provided; else default to 1.0 (no change)
         double speedVal = desc.plannedSpeed.has_value() ? desc.plannedSpeed.value() : 1.0;
+        speedVal = (speedVal == 0.0 ? 1.0 : std::abs(speedVal));
         for (int idx : targets)
         {
             if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
             {
-                b->setSpeed(speedVal);
+                // Preserve current direction: negative speed means reverse.
+                double current = b->getSpeed();
+                if (current == 0.0) current = 1.0;
+                const double signedSpeed = (current < 0.0 ? -speedVal : speedVal);
+                b->setSpeed(signedSpeed);
                 // When explicitly setting speed, exit stretch mode to avoid hidden state.
                 b->setStretchRatio(1.0);
                 if (!b->isPlaying()) b->play();

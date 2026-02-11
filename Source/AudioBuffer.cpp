@@ -21,6 +21,8 @@ AudioBuffer::AudioBuffer(int bufferIndex)
 {
     speedSmoother.reset(128); // Smooth parameter changes over ~3ms at 44.1kHz
     speedSmoother.setCurrentAndTargetValue(1.0);
+    stretchSmoother.reset(128);
+    stretchSmoother.setCurrentAndTargetValue(1.0);
 }
 
 void AudioBuffer::prepare(double sampleRate, int samplesPerBlockExpected)
@@ -28,6 +30,7 @@ void AudioBuffer::prepare(double sampleRate, int samplesPerBlockExpected)
     juce::FloatVectorOperations::disableDenormalisedNumberSupport();
     hostSampleRate = sampleRate;
     speedSmoother.reset(sampleRate, 0.05); // 50ms smoothing time
+    stretchSmoother.reset(sampleRate, 0.05);
     
     // Calculate crossfade length in samples
     crossfadeLengthSamples = static_cast<int>(params.crossfadeLengthMs * sampleRate / 1000.0);
@@ -44,6 +47,7 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
     {
         outputBuffer.clear();
         lastBlockUsedStretch = false;
+        previousBlockValid = false;
         return;
     }
 
@@ -63,20 +67,48 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
         processWithRepitching(outputBuffer);
     }
 
-    // When transitioning between repitch <-> stretch mode, apply a short fade-in
-    // to prevent a discontinuity click at the block boundary.
-    if (useStretch != lastBlockUsedStretch)
+    // When transitioning between repitch <-> stretch mode, crossfade the tail
+    // of the previous block into the head of the current block to avoid a hard edge.
+    const bool transitioned = (useStretch != lastBlockUsedStretch);
+    if (transitioned && previousBlockValid)
     {
-        const int fadeSamples = juce::jmin(outputBuffer.getNumSamples(),
-                                           juce::jmax(1, (int)(hostSampleRate * 0.01))); // 10ms
-        for (int ch = 0; ch < outputBuffer.getNumChannels(); ++ch)
+        const int curSamples = outputBuffer.getNumSamples();
+        const int prevSamples = previousBlockNumSamples;
+        const int fadeSamples = juce::jmin(curSamples,
+                                           juce::jmin(prevSamples,
+                                                     juce::jmax(1, (int)(hostSampleRate * 0.01)))); // 10ms
+
+        if (fadeSamples > 0
+            && previousBlockBuffer.getNumChannels() >= outputBuffer.getNumChannels())
         {
-            float* data = outputBuffer.getWritePointer(ch);
-            for (int i = 0; i < fadeSamples; ++i)
-                data[i] *= (float)(i + 1) / (float)(fadeSamples + 1);
+            const int prevStart = juce::jmax(0, prevSamples - fadeSamples);
+            for (int ch = 0; ch < outputBuffer.getNumChannels(); ++ch)
+            {
+                const float* prev = previousBlockBuffer.getReadPointer(ch);
+                float* curr = outputBuffer.getWritePointer(ch);
+                for (int i = 0; i < fadeSamples; ++i)
+                {
+                    const float fadeIn  = (float)(i + 1) / (float)(fadeSamples + 1);
+                    const float fadeOut = 1.0f - fadeIn;
+                    curr[i] = prev[prevStart + i] * fadeOut + curr[i] * fadeIn;
+                }
+            }
         }
     }
     lastBlockUsedStretch = useStretch;
+
+    // Cache this block for potential transition crossfade next time.
+    if (previousBlockBuffer.getNumChannels() != outputBuffer.getNumChannels()
+        || previousBlockBuffer.getNumSamples() < outputBuffer.getNumSamples())
+    {
+        previousBlockBuffer.setSize(outputBuffer.getNumChannels(),
+                                    outputBuffer.getNumSamples(),
+                                    false, false, true);
+    }
+    for (int ch = 0; ch < outputBuffer.getNumChannels(); ++ch)
+        previousBlockBuffer.copyFrom(ch, 0, outputBuffer, ch, 0, outputBuffer.getNumSamples());
+    previousBlockNumSamples = outputBuffer.getNumSamples();
+    previousBlockValid = true;
     
     // Check for state changes and notify listeners
     notifyPlaybackStateChanged();
@@ -295,6 +327,9 @@ void AudioBuffer::setLoadedAudioData(LoadedAudioData::Ptr newData)
     lastBlockUsedStretch = false;
     stretchFadeInRemaining = 0;
     stretcher.reset();
+    stretchSmoother.setCurrentAndTargetValue(1.0);
+    previousBlockValid = false;
+    resetCrossfadePending = false;
 }
 
 void AudioBuffer::clearAudioData()
@@ -390,6 +425,9 @@ void AudioBuffer::resetToDefaults()
     stretcherNeedsReset.store(false);
     lastBlockUsedStretch = false;
     stretcher.reset();
+    stretchSmoother.setCurrentAndTargetValue(1.0);
+    previousBlockValid = false;
+    resetCrossfadePending = false;
     
     // Reset crossfade state
     isInCrossfade = false;
@@ -425,6 +463,10 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
     const double direction = (params.speed < 0.0 ? -1.0 : 1.0);
     const double inputSpeed = direction * tempoMultiplier.load();
 
+    // Optional combined mode: if speed magnitude != 1.0, route it through SoundTouch rate.
+    const double speedMag = std::abs(params.speed);
+    const bool useRate = std::abs(speedMag - 1.0) > 1.0e-6;
+
     // Handle deferred reset (e.g., from setStretchRatio mode transition or stop).
     // Always touch the SoundTouch instance from the audio thread only.
     if (stretcherNeedsReset.exchange(false))
@@ -439,6 +481,13 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
     // We intentionally keep these buffers around; setSize may allocate but only when capacity grows.
     // For time-stretch we may need to feed more input than output; size input scratch accordingly.
     const double clampedRatio = juce::jlimit (0.25, 4.0, ratio);
+    // Smooth stretch ratio changes to avoid abrupt tempo jumps.
+    stretchSmoother.setTargetValue(clampedRatio);
+    const double smoothedRatio = stretchSmoother.getNextValue();
+    if (numOutputSamples > 1)
+        stretchSmoother.skip(numOutputSamples - 1);
+
+    const double clampedRate = juce::jlimit (0.25, 4.0, speedMag > 0.0 ? speedMag : 1.0);
     // Feed chunks proportional to the output block.  A small margin (64 frames) ensures we don't
     // starve SoundTouch on fractional boundaries, without generating the massive 300ms warmup that
     // was previously causing CPU spikes every processBlock call.
@@ -449,7 +498,8 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
     if (!stretcherPrepared || stretcherPreparedSampleRate != hostSampleRate || stretcherPreparedChannels != numChannels)
     {
         stretcher.prepare(hostSampleRate, numChannels);
-        stretcher.setTempoRatio ((float) clampedRatio);
+        stretcher.setTempoRatio ((float) smoothedRatio);
+        stretcher.setRateRatio ((float) (useRate ? clampedRate : 1.0));
         stretcherPrepared = true;
         stretcherPreparedSampleRate = hostSampleRate;
         stretcherPreparedChannels = numChannels;
@@ -459,7 +509,8 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
     else
     {
         // Ratio can change without channel/sr changing; keep tempo updated.
-        stretcher.setTempoRatio ((float) clampedRatio);
+        stretcher.setTempoRatio ((float) smoothedRatio);
+        stretcher.setRateRatio ((float) (useRate ? clampedRate : 1.0));
     }
 
     // Ensure scratch buffers are appropriately sized.
@@ -716,9 +767,8 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer)
         return framesFilled;
     };
 
-    // On the very first block after a reset, schedule a short fade-in (~5ms)
+    // On the very first block after a reset, schedule a short fade-in (~20ms)
     // to mask any startup transient from SoundTouch's empty internal buffers.
-    // No expensive priming — just let the normal feed/drain loop do its job.
     if (! stretcherPrimed)
     {
         stretcherPrimed = true;
@@ -1054,7 +1104,11 @@ void AudioBuffer::applyCrossfadeToSliceTransition(const juce::AudioBuffer<float>
     }
     
     // Process crossfade sample by sample
-    const double effectiveSpeed = getEffectiveSpeed();
+    const double stretch = stretchRatio.load();
+    const bool useStretch = std::abs(stretch - 1.0) > 1.0e-6;
+    const double effectiveSpeed = useStretch
+        ? ((params.speed < 0.0 ? -1.0 : 1.0) * tempoMultiplier.load())
+        : getEffectiveSpeed();
     for (int sample = 0; sample < samplesToProcess; ++sample)
     {
         const double fadeProgress = static_cast<double>(crossfadePosition + sample) / static_cast<double>(crossfadeLengthSamples);
@@ -1273,4 +1327,7 @@ void AudioBuffer::releaseResources()
     repitchBuffer.setSize(0, 0);
     tempProcessingBuffer.setSize(0, 0);
     crossfadeBuffer.setSize(0, 0);
+    previousBlockBuffer.setSize(0, 0);
+    previousBlockValid = false;
+    resetCrossfadePending = false;
 }

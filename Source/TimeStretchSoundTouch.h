@@ -47,6 +47,12 @@ public:
         st.setTempo (juce::jlimit (0.25f, 4.0f, ratio));
     }
 
+    // ratio: 1.0 = normal rate, <1 slower (lower pitch), >1 faster (higher pitch)
+    void setRateRatio (float ratio)
+    {
+        st.setRate (juce::jlimit (0.25f, 4.0f, ratio));
+    }
+
     // Expose SoundTouch's reported initial latency so callers can prime appropriately.
     int getLatencySamples() const
     {

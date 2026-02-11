@@ -264,6 +264,8 @@ private:
             if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
             {
                 b->setSpeed(speedVal);
+                // When explicitly setting speed, exit stretch mode to avoid hidden state.
+                b->setStretchRatio(1.0);
                 if (!b->isPlaying()) b->play();
             }
         }
@@ -277,6 +279,10 @@ private:
         {
             if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
             {
+                // Preserve direction but neutralize speed magnitude when stretching.
+                double s = b->getSpeed();
+                if (s == 0.0) s = 1.0;
+                b->setSpeed((s < 0.0) ? -1.0 : 1.0);
                 b->setStretchRatio(ratioVal);
                 if (!b->isPlaying()) b->play();
             }

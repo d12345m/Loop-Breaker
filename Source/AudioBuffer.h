@@ -175,6 +175,7 @@ private:
     mutable juce::SpinLock audioDataLock;
     std::atomic<double> playheadPosition { 0.0 };
     juce::SmoothedValue<double> speedSmoother;
+    juce::SmoothedValue<double> stretchSmoother;
 
     std::atomic<double> tempoMultiplier { 1.0 };
     std::atomic<double> stretchRatio { 1.0 }; // 1.0 = normal; <1 slower/longer; >1 faster/shorter
@@ -223,6 +224,11 @@ private:
     // Processing buffers
     juce::AudioBuffer<float> repitchBuffer;
     juce::AudioBuffer<float> tempProcessingBuffer;
+    // Previous block cache for mode-transition crossfades
+    juce::AudioBuffer<float> previousBlockBuffer;
+    int previousBlockNumSamples = 0;
+    bool previousBlockValid = false;
+    bool resetCrossfadePending = false;
     
     // Listeners
     juce::Array<AudioBufferListener*> listeners;

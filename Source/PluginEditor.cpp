@@ -6,6 +6,7 @@
 #include "ModifierHistoryPanel.h"
 #include "ModifierSelectionPanel.h"
 #include "FxStatusPanel.h"
+#include "TearingDebugPanel.h"
 #include "Theme.h"
 
 namespace
@@ -46,7 +47,8 @@ public:
     explicit PluginEditorContent (BufferTestAudioProcessor& p)
         : processor(p),
           app(p.getAppState()),
-          fxStatusPanel(app)
+          fxStatusPanel(app),
+          tearingDebugPanel(app)
     {
         setLookAndFeel(&hipLnf);
 
@@ -57,6 +59,7 @@ public:
         modifierSelectionViewport.setViewedComponent(&modifierSelectionPanel, false);
         addAndMakeVisible(modifierSelectionViewport);
         addAndMakeVisible(fxStatusPanel);
+        addAndMakeVisible(tearingDebugPanel);
 
         addAndMakeVisible(modifiersToggle);
         modifiersToggle.setToggleState(app.settings.modifiersEnabled, juce::dontSendNotification);
@@ -219,14 +222,20 @@ public:
         area.removeFromTop(6);
         auto bottomArea = area;
         auto rightPanel = bottomArea.removeFromRight(bottomArea.getWidth() / 3).reduced(4);
-        auto rightTop = rightPanel.removeFromTop(int(rightPanel.getHeight() * 0.65f));
+        auto rightTop = rightPanel.removeFromTop(int(rightPanel.getHeight() * 0.4f));
 
         int toggleCount = modifierSelectionPanel.getNumChildComponents();
         int desiredHeight = juce::jmax(rightTop.getHeight() - 60, toggleCount * 26 + 20);
         modifierSelectionPanel.setSize(rightTop.getWidth() - 8, desiredHeight);
         modifierSelectionViewport.setBounds(rightTop);
 
-        fxStatusPanel.setBounds(rightPanel);
+        rightPanel.removeFromTop(4);
+        auto fxPanel = rightPanel.removeFromTop(int(rightPanel.getHeight() * 0.35f));
+        fxStatusPanel.setBounds(fxPanel);
+        
+        rightPanel.removeFromTop(4);
+        tearingDebugPanel.setBounds(rightPanel);
+        
         modifierHistory.setBounds(bottomArea.reduced(2));
     }
 
@@ -272,6 +281,7 @@ private:
     ModifierSelectionPanel modifierSelectionPanel;
     juce::Viewport modifierSelectionViewport;
     FxStatusPanel fxStatusPanel;
+    TearingDebugPanel tearingDebugPanel;
 
     juce::ToggleButton modifiersToggle { "Modifiers" };
 
@@ -536,7 +546,9 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
     content = std::make_unique<PluginEditorContent>(processor);
     addAndMakeVisible(*content);
 
-    setSize (920, 600);
+    setSize (1200, 800);
+    setResizable(true, true);
+    setResizeLimits(920, 600, 2400, 1600);
 }
 
 BufferTestAudioProcessorEditor::~BufferTestAudioProcessorEditor() = default;

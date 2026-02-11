@@ -65,6 +65,68 @@ struct AudioBufferParams
 
 //==============================================================================
 /**
+    Debug statistics for tracking audio tearing and buffer issues.
+    Only active in JUCE_DEBUG builds.
+*/
+struct TearingDebugStats
+{
+    // Counts of detected tearing conditions
+    std::atomic<int> emptyOutputBuffers { 0 };       // Output buffer was completely empty
+    std::atomic<int> partialUnderfills { 0 };        // SoundTouch didn't fill entire buffer
+    std::atomic<int> discontinuities { 0 };          // Large sample value jumps detected
+    std::atomic<int> directionFlips { 0 };           // Playback direction changes
+    std::atomic<int> sliceJumps { 0 };               // Slice-triggered position jumps
+    std::atomic<int> modeTransitions { 0 };          // Repitch <-> stretch transitions
+    std::atomic<int> soundTouchResets { 0 };         // SoundTouch pipeline resets
+    std::atomic<int> zeroSampleRuns { 0 };           // Consecutive zero samples detected
+    std::atomic<int> clippedSamples { 0 };           // Samples that exceeded +/-1.0
+    std::atomic<int> nanOrInfSamples { 0 };          // NaN or Inf samples detected
+    
+    // Timing info
+    std::atomic<double> lastTearingEventTime { 0.0 };
+    std::atomic<double> lastPlayheadPos { 0.0 };
+    
+    void reset()
+    {
+        emptyOutputBuffers.store(0);
+        partialUnderfills.store(0);
+        discontinuities.store(0);
+        directionFlips.store(0);
+        sliceJumps.store(0);
+        modeTransitions.store(0);
+        soundTouchResets.store(0);
+        zeroSampleRuns.store(0);
+        clippedSamples.store(0);
+        nanOrInfSamples.store(0);
+        lastTearingEventTime.store(0.0);
+        lastPlayheadPos.store(0.0);
+    }
+    
+    juce::String getSummary() const
+    {
+        return "TearingStats: empty=" + juce::String(emptyOutputBuffers.load())
+             + " underfill=" + juce::String(partialUnderfills.load())
+             + " discont=" + juce::String(discontinuities.load())
+             + " dirFlip=" + juce::String(directionFlips.load())
+             + " sliceJump=" + juce::String(sliceJumps.load())
+             + " modeTrans=" + juce::String(modeTransitions.load())
+             + " stReset=" + juce::String(soundTouchResets.load())
+             + " zeroRuns=" + juce::String(zeroSampleRuns.load())
+             + " clipped=" + juce::String(clippedSamples.load())
+             + " nanInf=" + juce::String(nanOrInfSamples.load());
+    }
+    
+    int getTotalEvents() const
+    {
+        return emptyOutputBuffers.load() + partialUnderfills.load() + discontinuities.load()
+             + directionFlips.load() + sliceJumps.load() + modeTransitions.load()
+             + soundTouchResets.load() + zeroSampleRuns.load() + clippedSamples.load()
+             + nanOrInfSamples.load();
+    }
+};
+
+//==============================================================================
+/**
     A professional audio buffer that handles variable speed playback
     with proper repitching, reverse playback, and seamless looping.
     
@@ -142,6 +204,13 @@ public:
     bool isInSlicingMode() const { return slicingModeActive.load(); }
     
     //==============================================================================
+    // Debug statistics (only meaningful in debug builds)
+    const TearingDebugStats& getTearingStats() const { return tearingStats; }
+    void resetTearingStats() { tearingStats.reset(); }
+    void setTearingDebugEnabled(bool enabled) { tearingDebugEnabled.store(enabled); }
+    bool isTearingDebugEnabled() const { return tearingDebugEnabled.load(); }
+    
+    //==============================================================================
     // Timing and position
     double getPlayheadPositionInSeconds() const;
     double getPlayheadPositionInSamples() const { return playheadPosition.load(); }
@@ -192,6 +261,12 @@ private:
 
     // T8: Track the last direction used so we can detect direction flips and crossfade.
     double lastStretchDirection = 1.0;
+    
+    // Tearing debug
+    TearingDebugStats tearingStats;
+    std::atomic<bool> tearingDebugEnabled { true }; // Enable by default in debug builds
+    float lastOutputSample[2] = { 0.0f, 0.0f };     // Track last sample for discontinuity detection
+    int consecutiveZeroSamples = 0;                  // Counter for zero sample runs
 
     // T5: Set by fillInputScratch when a large playhead jump occurs; processWithTimeStretch
     // will flush SoundTouch and re-prime before continuing the drain loop.

@@ -11,6 +11,50 @@
 #include "AudioBuffer.h"
 #include <vector>
 #include <algorithm>
+#include <cmath>
+
+//==============================================================================
+// Tearing Debug Helpers
+//==============================================================================
+
+namespace TearingDebug
+{
+    // Threshold for detecting discontinuities (sample-to-sample jump)
+    constexpr float kDiscontinuityThreshold = 0.3f;  // 30% of full scale
+    
+    // Threshold for consecutive zeros to be considered a "zero run"
+    constexpr int kZeroRunThreshold = 64;  // ~1.5ms at 44.1kHz
+    
+    // Check if a sample value is valid (not NaN or Inf)
+    inline bool isValidSample(float s)
+    {
+        return std::isfinite(s);
+    }
+    
+    // Check if a sample is effectively zero
+    inline bool isZero(float s)
+    {
+        return std::abs(s) < 1.0e-10f;
+    }
+    
+    // Check for clipping (|sample| > 1.0)
+    inline bool isClipped(float s)
+    {
+        return std::abs(s) > 1.0f;
+    }
+    
+    // Check for discontinuity between two consecutive samples
+    inline bool isDiscontinuity(float prev, float curr)
+    {
+        // Skip if either sample is invalid
+        if (!isValidSample(prev) || !isValidSample(curr))
+            return false;
+        // Skip if both are near zero (silence)
+        if (isZero(prev) && isZero(curr))
+            return false;
+        return std::abs(curr - prev) > kDiscontinuityThreshold;
+    }
+}
 
 //==============================================================================
 // AudioBuffer Implementation
@@ -78,10 +122,14 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
     const bool transitioned = (useStretcher != lastBlockUsedStretch);
 #if JUCE_DEBUG
     if (transitioned)
+    {
         DBG ("[AudioBuffer " + juce::String(bufferIndex) + "] mode transition: "
              + juce::String(lastBlockUsedStretch ? "stretch" : "repitch") + " -> "
              + juce::String(useStretcher ? "stretch" : "repitch")
              + " speed=" + juce::String(snap.speed) + " stretch=" + juce::String(snap.stretchRatio));
+        if (tearingDebugEnabled.load())
+            tearingStats.modeTransitions.fetch_add(1, std::memory_order_relaxed);
+    }
 #endif
     if (transitioned && previousBlockValid)
     {
@@ -122,6 +170,108 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
         previousBlockBuffer.copyFrom(ch, 0, outputBuffer, ch, 0, outputBuffer.getNumSamples());
     previousBlockNumSamples = outputBuffer.getNumSamples();
     previousBlockValid = true;
+    
+    //==============================================================================
+    // TEARING DEBUG: Validate output buffer for potential audio issues
+    //==============================================================================
+#if JUCE_DEBUG
+    if (tearingDebugEnabled.load())
+    {
+        const int numSamples = outputBuffer.getNumSamples();
+        const int numChannels = outputBuffer.getNumChannels();
+        
+        // Check for completely empty buffer
+        bool bufferIsEmpty = true;
+        for (int ch = 0; ch < numChannels && bufferIsEmpty; ++ch)
+        {
+            const float* data = outputBuffer.getReadPointer(ch);
+            for (int i = 0; i < numSamples && bufferIsEmpty; ++i)
+            {
+                if (!TearingDebug::isZero(data[i]))
+                    bufferIsEmpty = false;
+            }
+        }
+        
+        if (bufferIsEmpty)
+        {
+            tearingStats.emptyOutputBuffers.fetch_add(1, std::memory_order_relaxed);
+            tearingStats.lastTearingEventTime.store(juce::Time::getMillisecondCounterHiRes());
+            DBG("[AudioBuffer " + juce::String(bufferIndex) + "] TEARING: Empty output buffer detected! "
+                + "pos=" + juce::String(playheadPosition.load(), 0)
+                + " speed=" + juce::String(snap.speed)
+                + " stretch=" + juce::String(snap.stretchRatio));
+        }
+        
+        // Check each channel for issues
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            const float* data = outputBuffer.getReadPointer(ch);
+            float lastValid = (ch < 2) ? lastOutputSample[ch] : 0.0f;
+            
+            for (int i = 0; i < numSamples; ++i)
+            {
+                const float sample = data[i];
+                
+                // Check for NaN/Inf
+                if (!TearingDebug::isValidSample(sample))
+                {
+                    tearingStats.nanOrInfSamples.fetch_add(1, std::memory_order_relaxed);
+                    tearingStats.lastTearingEventTime.store(juce::Time::getMillisecondCounterHiRes());
+                    DBG("[AudioBuffer " + juce::String(bufferIndex) + "] TEARING: NaN/Inf sample at ch="
+                        + juce::String(ch) + " idx=" + juce::String(i));
+                    continue;
+                }
+                
+                // Check for clipping
+                if (TearingDebug::isClipped(sample))
+                {
+                    tearingStats.clippedSamples.fetch_add(1, std::memory_order_relaxed);
+                }
+                
+                // Check for discontinuity (only check after first sample has valid lastValid)
+                if (i > 0 || (ch < 2 && std::abs(lastOutputSample[ch]) > 1.0e-10f))
+                {
+                    if (TearingDebug::isDiscontinuity(lastValid, sample))
+                    {
+                        tearingStats.discontinuities.fetch_add(1, std::memory_order_relaxed);
+                        tearingStats.lastTearingEventTime.store(juce::Time::getMillisecondCounterHiRes());
+                        DBG("[AudioBuffer " + juce::String(bufferIndex) + "] TEARING: Discontinuity ch=" 
+                            + juce::String(ch) + " idx=" + juce::String(i)
+                            + " prev=" + juce::String(lastValid, 4) + " curr=" + juce::String(sample, 4)
+                            + " delta=" + juce::String(std::abs(sample - lastValid), 4));
+                    }
+                }
+                
+                // Track consecutive zeros
+                if (TearingDebug::isZero(sample))
+                {
+                    if (ch == 0)
+                        consecutiveZeroSamples++;
+                }
+                else
+                {
+                    if (ch == 0 && consecutiveZeroSamples >= TearingDebug::kZeroRunThreshold)
+                    {
+                        tearingStats.zeroSampleRuns.fetch_add(1, std::memory_order_relaxed);
+                        DBG("[AudioBuffer " + juce::String(bufferIndex) + "] TEARING: Zero run of "
+                            + juce::String(consecutiveZeroSamples) + " samples ended at idx=" + juce::String(i));
+                    }
+                    if (ch == 0)
+                        consecutiveZeroSamples = 0;
+                }
+                
+                lastValid = sample;
+            }
+            
+            // Store last sample for next block discontinuity check
+            if (ch < 2)
+                lastOutputSample[ch] = data[numSamples - 1];
+        }
+        
+        // Update playhead tracking
+        tearingStats.lastPlayheadPos.store(playheadPosition.load());
+    }
+#endif
     
     // Check for state changes and notify listeners
     notifyPlaybackStateChanged();
@@ -384,11 +534,37 @@ void AudioBuffer::clearAudioData()
 
 void AudioBuffer::play()
 {
+#if JUCE_DEBUG
+    // Reset tearing stats when starting playback for a fresh tracking session
+    if (tearingDebugEnabled.load() && !params.isPlaying)
+    {
+        DBG("[AudioBuffer " + juce::String(bufferIndex) + "] Starting playback - resetting tearing stats");
+        tearingStats.reset();
+        consecutiveZeroSamples = 0;
+        lastOutputSample[0] = 0.0f;
+        lastOutputSample[1] = 0.0f;
+    }
+#endif
     setPlaying(true);
 }
 
 void AudioBuffer::stop()
 {
+#if JUCE_DEBUG
+    // Print tearing stats summary when stopping
+    if (tearingDebugEnabled.load() && params.isPlaying)
+    {
+        const int totalEvents = tearingStats.getTotalEvents();
+        if (totalEvents > 0)
+        {
+            DBG("[AudioBuffer " + juce::String(bufferIndex) + "] TEARING SUMMARY: " + tearingStats.getSummary());
+        }
+        else
+        {
+            DBG("[AudioBuffer " + juce::String(bufferIndex) + "] Stopping playback - no tearing events detected");
+        }
+    }
+#endif
     setPlaying(false);
 }
 
@@ -562,9 +738,13 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
     // T10: Log mode transitions for debugging.
 #if JUCE_DEBUG
     if (didReset)
+    {
         DBG ("[AudioBuffer " + juce::String(bufferIndex) + "] SoundTouch RESET  speed=" + juce::String(snap.speed)
              + " stretch=" + juce::String(snap.stretchRatio) + " pitch=" + juce::String(snap.pitchSemis)
              + " dir=" + juce::String(direction) + " pos=" + juce::String(playheadPosition.load()));
+        if (tearingDebugEnabled.load())
+            tearingStats.soundTouchResets.fetch_add(1, std::memory_order_relaxed);
+    }
 #endif
 
     // Prepare SoundTouch when needed.
@@ -596,6 +776,8 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
             stretcher.setWindowsForReverse (direction < 0.0);
 #if JUCE_DEBUG
             DBG ("[AudioBuffer " + juce::String(bufferIndex) + "] direction flip " + juce::String(lastStretchDirection) + "->" + juce::String(direction));
+            if (tearingDebugEnabled.load())
+                tearingStats.directionFlips.fetch_add(1, std::memory_order_relaxed);
 #endif
             lastStretchDirection = direction;
         }
@@ -796,6 +978,8 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
 #if JUCE_DEBUG
                 DBG ("[AudioBuffer " + juce::String(bufferIndex) + "] slice jump detected: "
                      + juce::String(prevPosForJumpDetect, 0) + " -> " + juce::String(currentPos, 0));
+                if (tearingDebugEnabled.load())
+                    tearingStats.sliceJumps.fetch_add(1, std::memory_order_relaxed);
 #endif
             }
 
@@ -1081,6 +1265,8 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         DBG ("[AudioBuffer " + juce::String(bufferIndex) + "] SoundTouch UNDERRUN: wrote "
              + juce::String(framesWritten) + "/" + juce::String(numOutputSamples)
              + " stretch=" + juce::String(snap.stretchRatio) + " speed=" + juce::String(snap.speed));
+        if (tearingDebugEnabled.load())
+            tearingStats.partialUnderfills.fetch_add(1, std::memory_order_relaxed);
 #endif
     }
 }

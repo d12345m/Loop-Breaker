@@ -9,10 +9,10 @@
 
 The codebase has **two completely independent audio processing paths** inside `AudioBuffer::processBlock()`:
 
-| Path | Trigger | Engine | Pitch changes? | Controlled by |
-|------|---------|--------|----------------|---------------|
-| **Repitching** (`processWithRepitching`) | `stretchRatio == 1.0` | Manual sample interpolation | Yes (pitch scales with speed) | `params.speed`, `tempoMultiplier` |
-| **Time-Stretch** (`processWithTimeStretch`) | `stretchRatio != 1.0` | SoundTouch (`setTempo()`) | No (pitch preserved) | `stretchRatio`, direction from `params.speed` sign only |
+| Path                                        | Trigger               | Engine                      | Pitch changes?                | Controlled by                                           |
+| ------------------------------------------- | --------------------- | --------------------------- | ----------------------------- | ------------------------------------------------------- |
+| **Repitching** (`processWithRepitching`)    | `stretchRatio == 1.0` | Manual sample interpolation | Yes (pitch scales with speed) | `params.speed`, `tempoMultiplier`                       |
+| **Time-Stretch** (`processWithTimeStretch`) | `stretchRatio != 1.0` | SoundTouch (`setTempo()`)   | No (pitch preserved)          | `stretchRatio`, direction from `params.speed` sign only |
 
 The mode switch happens every `processBlock()` call at `AudioBuffer.cpp` lines 52–65:
 
@@ -97,6 +97,7 @@ const double prevPos = previousSlicePlayheadPos + sample * effectiveSpeed * (fil
 ### 2.5 `resetToDefaults()` Resets Both, But `applyReset()` Doesn't Coordinate
 
 `AudioBuffer::resetToDefaults()` (line 375) properly resets both:
+
 ```cpp
 params.reset();          // speed → 1.0
 stretchRatio.store(1.0); // stretch → 1.0
@@ -107,6 +108,7 @@ However, `AppState::applyReset()` calls `channelStrips[idx]->reset()` which call
 ### 2.6 Speed Smoother Not Used in Stretch Path
 
 In the repitch path, speed changes are smoothed via `speedSmoother` (128-sample window):
+
 ```cpp
 speedSmoother.setTargetValue(getEffectiveSpeed());
 ```
@@ -126,11 +128,11 @@ effective_tempo = virtualTempo / virtualPitch
 effective_rate  = virtualPitch * virtualRate
 ```
 
-| API | What it does | Pitch changes? | Uses time-stretch? |
-|-----|-------------|----------------|-------------------|
-| `setTempo()` | Changes playback speed without changing pitch | No | Yes (TDHS algorithm) |
-| `setRate()` | Changes playback speed with proportional pitch change | Yes | No (resampling only) |
-| `setPitch()` | Changes pitch without changing speed | Pitch only | Yes + resampling |
+| API          | What it does                                          | Pitch changes? | Uses time-stretch?   |
+| ------------ | ----------------------------------------------------- | -------------- | -------------------- |
+| `setTempo()` | Changes playback speed without changing pitch         | No             | Yes (TDHS algorithm) |
+| `setRate()`  | Changes playback speed with proportional pitch change | Yes            | No (resampling only) |
+| `setPitch()` | Changes pitch without changing speed                  | Pitch only     | Yes + resampling     |
 
 **The current wrapper (`TimeStretchSoundTouch.h`) only exposes `setTempo()`.** It never calls `setRate()` or `setPitch()`.
 
@@ -139,12 +141,14 @@ effective_rate  = virtualPitch * virtualRate
 **Yes, this is technically feasible and would provide several benefits:**
 
 **Benefits:**
+
 1. **Unified audio pipeline.** Both speed and stretch would go through one engine, eliminating the mode-switch discontinuity entirely.
 2. **Combining speed + stretch becomes natural.** SoundTouch is designed to handle `setRate()` and `setTempo()` simultaneously. For example, `setRate(2.0)` + `setTempo(0.5)` gives 2x playback speed (with pitch shift) at half tempo — SoundTouch handles the math internally.
 3. **No more hidden state.** The wrapper could expose `setRate()` for the Speed modifier and `setTempo()` for the Stretch modifier, and SoundTouch would combine them automatically.
 4. **Smoother transitions.** SoundTouch's overlap-add windowing handles gradual parameter changes more gracefully than the current hard mode switch.
 
 **Costs / Risks:**
+
 1. **Always-on SoundTouch overhead.** Currently, SoundTouch is bypassed when `stretchRatio == 1.0`. Routing speed through it means SoundTouch processes every block, even for simple rate changes. At `rate=1.0, tempo=1.0`, SoundTouch is essentially a pass-through, but it still adds ~20ms latency and some CPU.
 2. **Latency increase.** SoundTouch's TDHS algorithm introduces `SETTING_INITIAL_LATENCY` samples of latency (~60ms with current settings). The repitch path has zero added latency. Always routing through SoundTouch would add perceptible latency for speed-only changes.
 3. **Quality difference for pure rate changes.** The current repitch path uses simple linear interpolation (per-sample). SoundTouch's rate transposer is higher quality but also heavier. For simple 2x or 0.5x speeds, the current approach may actually sound fine.
@@ -232,11 +236,11 @@ The intermittent nature matches: it only tears **when both modifiers target the 
 
 ## 7. Summary
 
-| Issue | Severity | Likely Causes Tearing? |
-|-------|----------|----------------------|
-| Speed magnitude silently dropped in stretch mode | High | Indirect (hidden state → unexpected jumps on reset) |
-| Mode transition: fade-in only, no crossfade | **Critical** | **Yes — hard audio edge** |
-| SoundTouch underrun after reset | High | **Yes — brief silence gaps** |
-| Crossfade uses wrong speed in stretch mode | Medium | Yes — glitchy slice transitions while stretching |
-| No smoothing on stretchRatio changes | Medium | Yes — abrupt tempo jumps |
-| Neither modifier resets the other's state | High | Indirect (compounds the above issues) |
+| Issue                                            | Severity     | Likely Causes Tearing?                              |
+| ------------------------------------------------ | ------------ | --------------------------------------------------- |
+| Speed magnitude silently dropped in stretch mode | High         | Indirect (hidden state → unexpected jumps on reset) |
+| Mode transition: fade-in only, no crossfade      | **Critical** | **Yes — hard audio edge**                           |
+| SoundTouch underrun after reset                  | High         | **Yes — brief silence gaps**                        |
+| Crossfade uses wrong speed in stretch mode       | Medium       | Yes — glitchy slice transitions while stretching    |
+| No smoothing on stretchRatio changes             | Medium       | Yes — abrupt tempo jumps                            |
+| Neither modifier resets the other's state        | High         | Indirect (compounds the above issues)               |

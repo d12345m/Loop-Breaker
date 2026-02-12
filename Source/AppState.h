@@ -259,7 +259,12 @@ private:
                 {
                     b->setSpeed(std::abs(s)); // flip to forward
                 }
-                
+
+                // SoundTouch also conflicts with slicing (underrun on every
+                // slice jump). Exit slicing mode before applying pitch.
+                if (b->isInSlicingMode() || b->isInContinuousRandomMode())
+                    b->exitSlicingMode();
+
                 const double current = b->getPitchSemiTones();
                 b->setPitchSemiTones(current + deltaSemiTones);
                 if (!b->isPlaying()) b->play();
@@ -331,6 +336,12 @@ private:
                 if (s == 0.0) s = 1.0;
                 // Always use forward (positive) speed with stretch
                 b->setSpeed((s < 0.0) ? 1.0 : std::abs(s));
+
+                // SoundTouch also conflicts with slicing (underrun on every
+                // slice jump). Exit slicing mode before applying stretch.
+                if (b->isInSlicingMode() || b->isInContinuousRandomMode())
+                    b->exitSlicingMode();
+
                 b->setStretchRatio(ratioVal);
                 if (!b->isPlaying()) b->play();
             }
@@ -378,6 +389,13 @@ private:
         {
             if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
             {
+                // Slicing conflicts with SoundTouch (underrun on every slice
+                // jump). Disable stretch and pitch shift before enabling slicing.
+                if (std::abs(b->getStretchRatio() - 1.0) > 1.0e-6)
+                    b->setStretchRatio(1.0);
+                if (std::abs(b->getPitchSemiTones()) > 1.0e-6)
+                    b->setPitchSemiTones(0.0);
+
                 int slices = plannedSlices;
                 if (slices <= 0)
                 {

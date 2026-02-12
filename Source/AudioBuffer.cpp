@@ -1142,8 +1142,18 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
             framesWritten += produced;
     }
 
-    // Apply fade-in if this is the first block after priming.
-    if (stretchFadeInRemaining > 0 && framesWritten > 0)
+    // Apply fade-in if this is the first block after priming — but only when
+    // there is NO mode-transition crossfade about to run in processBlock.
+    // The processBlock crossfade already blends the previous repitch block into
+    // this stretch block; applying a fade-from-silence here would fight with it
+    // and cause a volume dip / click at the transition point.
+    const bool modeTransitionCrossfadeWillRun = (lastBlockUsedStretch == false) && previousBlockValid;
+    if (modeTransitionCrossfadeWillRun)
+    {
+        // Skip the fade-in entirely; processBlock's crossfade handles the blend.
+        stretchFadeInRemaining = 0;
+    }
+    else if (stretchFadeInRemaining > 0 && framesWritten > 0)
     {
         const int fadeLen = juce::jmin (stretchFadeInRemaining, framesWritten);
         for (int ch = 0; ch < numChannels; ++ch)

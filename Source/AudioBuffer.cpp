@@ -731,10 +731,9 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
     const double clampedRate = juce::jlimit (0.25, 4.0, smoothedSpeedMag);
     const double tempoRatioForSt = pitchActive ? (smoothedRatio * clampedRate) : smoothedRatio;
     const double totalTempoRatioForIO = tempoRatioForSt * (useRate ? clampedRate : 1.0);
-    // Feed chunks proportional to the output block.  A small margin (64 frames) ensures we don't
-    // starve SoundTouch on fractional boundaries, without generating the massive 300ms warmup that
-    // was previously causing CPU spikes every processBlock call.
-    const int marginFrames = 64;
+    // Feed chunks proportional to the output block.  The margin scales with the effective
+    // consumption ratio so we don't starve SoundTouch when rate/tempo/pitch are high.
+    const int marginFrames = juce::jmax (64, (int) std::ceil (64.0 * totalTempoRatioForIO));
     const int maxInputChunkFrames = juce::jmax (numOutputSamples, (int) std::ceil (numOutputSamples * totalTempoRatioForIO) + marginFrames);
 
     // T10: Log mode transitions for debugging.
@@ -1049,7 +1048,14 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         // T2: Pre-prime SoundTouch with enough input to fill its internal latency
         // pipeline.  Without this, the first 1–2 output blocks after a reset are
         // partially empty (underruns), which sounds like crackles or brief silence.
-        const int primeSamples = juce::jmax (0, stretcher.getLatencySamples());
+        //
+        // getLatencySamples() underestimates when rate/tempo/pitch are > 1 because
+        // it doesn't fully account for the rate transposer's input consumption.
+        // Scale by the effective consumption ratio so the TDStretch + RateTransposer
+        // pipeline is fully warm on the first drain.
+        const int rawLatency = juce::jmax (0, stretcher.getLatencySamples());
+        const int primeSamples = juce::jmax (rawLatency,
+                                             (int) std::ceil (rawLatency * totalTempoRatioForIO));
         if (primeSamples > 0)
         {
             // Ensure scratch is large enough for the priming chunk.
@@ -1080,9 +1086,10 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
     std::vector<float*> outPtrs (numChannels, nullptr);
     std::vector<const float*> inPtrs (numChannels, nullptr);
 
-    // Cap iterations: with proportional feed sizes we should fill the block in 2-4 iterations.
-    // More than 8 means something is very wrong.
-    while (framesWritten < numOutputSamples && safetyIters++ < 8)
+    // Cap iterations: with proportional feed sizes we should fill the block in 2-4 iterations
+    // in steady state.  During initial warmup or at high effective ratios (e.g. speed=2 + oct+)
+    // more iterations may be needed to fill SoundTouch's internal pipeline.
+    while (framesWritten < numOutputSamples && safetyIters++ < 24)
     {
         const int remaining = numOutputSamples - framesWritten;
         for (int ch = 0; ch < numChannels; ++ch)
@@ -1103,8 +1110,11 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
 
         // 2) Feed more input and try again.
         //    Feed just enough to produce `remaining` output frames, plus a small margin.
+        //    Use totalTempoRatioForIO (not just the stretch ratio) because when pitch
+        //    shifting is active, the speed magnitude is routed through SoundTouch's
+        //    tempo control, so it consumes more input per output frame.
         const int inputChunkFrames = juce::jlimit (1, maxInputChunkFrames,
-                                                    (int) std::ceil (remaining * clampedRatio) + marginFrames);
+                                                    (int) std::ceil (remaining * totalTempoRatioForIO) + marginFrames);
 
         const int framesFilled = fillInputScratch (inputChunkFrames);
         if (framesFilled <= 0)
@@ -1190,7 +1200,7 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
 
     // Warn in debug if we repeatedly failed to fill the block.
 #if JUCE_DEBUG
-    jassertquiet (framesWritten == numOutputSamples || safetyIters >= 8);
+    jassertquiet (framesWritten == numOutputSamples || safetyIters >= 24);
 #endif
 
     // If we still underfilled, fade the tail to zero instead of holding the last

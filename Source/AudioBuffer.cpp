@@ -112,8 +112,13 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
     }
     else
     {
-        // Smooth speed changes to avoid artifacts
-        speedSmoother.setTargetValue(snap.speed * snap.tempoMult);
+        // When transitioning from stretch → repitch, snap the speed smoother to
+        // the current value so we don't ramp from a stale value that was frozen
+        // while SoundTouch was handling speed internally.
+        if (lastBlockUsedStretch)
+            speedSmoother.setCurrentAndTargetValue(snap.speed * snap.tempoMult);
+        else
+            speedSmoother.setTargetValue(snap.speed * snap.tempoMult);
         processWithRepitching(outputBuffer);
     }
 
@@ -639,6 +644,7 @@ void AudioBuffer::resetToDefaults()
     stretcherNeedsReset.store(false);
     lastBlockUsedStretch = false;
     stretcher.reset();
+    speedSmoother.setCurrentAndTargetValue(1.0);
     stretchSmoother.setCurrentAndTargetValue(1.0);
     speedMagSmoother.setCurrentAndTargetValue(1.0);
     lastStretchDirection = 1.0;

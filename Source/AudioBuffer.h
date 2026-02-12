@@ -268,9 +268,7 @@ private:
     float lastOutputSample[2] = { 0.0f, 0.0f };     // Track last sample for discontinuity detection
     int consecutiveZeroSamples = 0;                  // Counter for zero sample runs
 
-    // T5: Set by fillInputScratch when a large playhead jump occurs; processWithTimeStretch
-    // will flush SoundTouch and re-prime before continuing the drain loop.
-    bool sliceJumpOccurred = false;
+
 
     // Coordinated snapshot of stretch-related parameters.
     // Read once at the top of processBlock so the mode decision and all parameter

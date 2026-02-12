@@ -252,19 +252,8 @@ private:
         {
             if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
             {
-                // SoundTouch pitch shift conflicts with reverse playback.
-                // Force forward playback when applying pitch modifiers.
-                double s = b->getSpeed();
-                if (s < 0.0)
-                {
-                    b->setSpeed(std::abs(s)); // flip to forward
-                }
-
-                // SoundTouch also conflicts with slicing (underrun on every
-                // slice jump). Exit slicing mode before applying pitch.
-                if (b->isInSlicingMode() || b->isInContinuousRandomMode())
-                    b->exitSlicingMode();
-
+                // Pitch shift now coexists with reverse and slicing; source-level
+                // crossfades keep SoundTouch's input smooth so no flush is needed.
                 const double current = b->getPitchSemiTones();
                 b->setPitchSemiTones(current + deltaSemiTones);
                 if (!b->isPlaying()) b->play();
@@ -279,19 +268,9 @@ private:
         {
             if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
             {
-                // Reverse conflicts with SoundTouch-powered modifiers.
-                // Disable stretch and pitch shift before reversing.
-                const bool hadSoundTouchActive = 
-                    (std::abs(b->getStretchRatio() - 1.0) > 1.0e-6) || 
-                    (std::abs(b->getPitchSemiTones()) > 1.0e-6);
-                
-                if (hadSoundTouchActive)
-                {
-                    b->setStretchRatio(1.0);
-                    b->setPitchSemiTones(0.0);
-                }
-                
                 // T6: Toggle direction — flip the sign rather than always going negative.
+                // Reverse now coexists with SoundTouch stretch/pitch; the source-level
+                // crossfade and SoundTouch's overlap-add handle transitions smoothly.
                 double s = b->getSpeed();
                 if (s == 0.0) s = 1.0;
                 b->setSpeed(-s);  // flip sign: forward→reverse, reverse→forward
@@ -315,8 +294,8 @@ private:
                 if (current == 0.0) current = 1.0;
                 const double signedSpeed = (current < 0.0 ? -speedVal : speedVal);
                 b->setSpeed(signedSpeed);
-                // When explicitly setting speed, exit stretch mode to avoid hidden state.
-                b->setStretchRatio(1.0);
+                // Speed and stretch now coexist; SoundTouch routes speed magnitude
+                // through its rate/tempo controls alongside the stretch ratio.
                 if (!b->isPlaying()) b->play();
             }
         }
@@ -330,18 +309,8 @@ private:
         {
             if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
             {
-                // SoundTouch stretch conflicts with reverse playback.
-                // Force forward playback and neutralize speed to 1.0 when stretching.
-                double s = b->getSpeed();
-                if (s == 0.0) s = 1.0;
-                // Always use forward (positive) speed with stretch
-                b->setSpeed((s < 0.0) ? 1.0 : std::abs(s));
-
-                // SoundTouch also conflicts with slicing (underrun on every
-                // slice jump). Exit slicing mode before applying stretch.
-                if (b->isInSlicingMode() || b->isInContinuousRandomMode())
-                    b->exitSlicingMode();
-
+                // Stretch now coexists with reverse and slicing; source-level crossfades
+                // keep SoundTouch's input smooth so no flush is needed.
                 b->setStretchRatio(ratioVal);
                 if (!b->isPlaying()) b->play();
             }
@@ -389,12 +358,8 @@ private:
         {
             if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
             {
-                // Slicing conflicts with SoundTouch (underrun on every slice
-                // jump). Disable stretch and pitch shift before enabling slicing.
-                if (std::abs(b->getStretchRatio() - 1.0) > 1.0e-6)
-                    b->setStretchRatio(1.0);
-                if (std::abs(b->getPitchSemiTones()) > 1.0e-6)
-                    b->setPitchSemiTones(0.0);
+                // Slicing now coexists with SoundTouch stretch and pitch; source-level
+                // crossfades keep SoundTouch's input smooth so no flush is needed.
 
                 int slices = plannedSlices;
                 if (slices <= 0)

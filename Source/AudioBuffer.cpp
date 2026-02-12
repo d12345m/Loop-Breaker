@@ -729,7 +729,12 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         speedMagSmoother.skip (numOutputSamples - 1);
 
     const double clampedRate = juce::jlimit (0.25, 4.0, smoothedSpeedMag);
-    const double tempoRatioForSt = pitchActive ? (smoothedRatio * clampedRate) : smoothedRatio;
+    // SoundTouch internally divides virtualTempo by virtualPitch to get effective tempo:
+    //   effective_tempo = virtualTempo / virtualPitch
+    // So when pitch shifting is active we must pre-multiply the tempo we send by the pitch
+    // ratio, otherwise the speed component gets cancelled by the pitch factor.
+    const double pitchRatio = pitchActive ? std::pow (2.0, pitchSemis / 12.0) : 1.0;
+    const double tempoRatioForSt = pitchActive ? (smoothedRatio * clampedRate * pitchRatio) : smoothedRatio;
     const double totalTempoRatioForIO = tempoRatioForSt * (useRate ? clampedRate : 1.0);
     // Feed chunks proportional to the output block.  The margin scales with the effective
     // consumption ratio so we don't starve SoundTouch when rate/tempo/pitch are high.

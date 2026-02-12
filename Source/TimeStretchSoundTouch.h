@@ -58,9 +58,10 @@ public:
     }
 
     // ratio: 1.0 = original length, 0.5 = 2x longer, 2.0 = 2x shorter
+    // Range is wide to accommodate pitch-ratio compensation (see AudioBuffer.cpp).
     void setTempoRatio (float ratio)
     {
-        st.setTempo (juce::jlimit (0.25f, 4.0f, ratio));
+        st.setTempo (juce::jlimit (0.01f, 16.0f, ratio));
     }
 
     // ratio: 1.0 = normal rate, <1 slower (lower pitch), >1 faster (higher pitch)

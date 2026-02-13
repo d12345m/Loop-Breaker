@@ -22,7 +22,7 @@ namespace TearingDebug
     // Multi-level thresholds for detecting discontinuities of different severities
     constexpr float kMajorDiscontinuityThreshold = 0.3f;   // 30% of full scale - major tearing
     constexpr float kMediumDiscontinuityThreshold = 0.15f; // 15% of full scale - medium pops
-    constexpr float kMinorDiscontinuityThreshold = 0.05f;  // 5% of full scale - minor clicks
+    constexpr float kMinorDiscontinuityThreshold = 0.10f;  // 10% of full scale - minor clicks (increased from 0.05)
     
     // Threshold for consecutive zeros to be considered a "zero run"
     constexpr int kZeroRunThreshold = 64;  // ~1.5ms at 44.1kHz
@@ -31,7 +31,7 @@ namespace TearingDebug
     constexpr float kRmsJumpThreshold = 3.0f;  // 3x RMS change is suspicious
     
     // DC offset drift threshold
-    constexpr float kDcOffsetThreshold = 0.1f;  // 10% DC drift is problematic
+    constexpr float kDcOffsetThreshold = 0.25f;  // 25% DC drift is problematic (increased from 0.1)
     
     // Check if a sample value is valid (not NaN or Inf)
     inline bool isValidSample(float s)

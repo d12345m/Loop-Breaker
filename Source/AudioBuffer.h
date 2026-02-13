@@ -73,7 +73,9 @@ struct TearingDebugStats
     // Counts of detected tearing conditions
     std::atomic<int> emptyOutputBuffers { 0 };       // Output buffer was completely empty
     std::atomic<int> partialUnderfills { 0 };        // SoundTouch didn't fill entire buffer
-    std::atomic<int> discontinuities { 0 };          // Large sample value jumps detected
+    std::atomic<int> discontinuities { 0 };          // Large sample value jumps detected (>0.3)
+    std::atomic<int> mediumDiscontinuities { 0 };    // Medium sample value jumps (0.15-0.3)
+    std::atomic<int> minorDiscontinuities { 0 };     // Minor sample value jumps (0.05-0.15)
     std::atomic<int> directionFlips { 0 };           // Playback direction changes
     std::atomic<int> sliceJumps { 0 };               // Slice-triggered position jumps
     std::atomic<int> modeTransitions { 0 };          // Repitch <-> stretch transitions
@@ -81,6 +83,8 @@ struct TearingDebugStats
     std::atomic<int> zeroSampleRuns { 0 };           // Consecutive zero samples detected
     std::atomic<int> clippedSamples { 0 };           // Samples that exceeded +/-1.0
     std::atomic<int> nanOrInfSamples { 0 };          // NaN or Inf samples detected
+    std::atomic<int> rmsJumps { 0 };                 // Sudden RMS level changes between blocks
+    std::atomic<int> dcOffsetDrifts { 0 };           // DC offset drifting beyond threshold
     
     // Timing info
     std::atomic<double> lastTearingEventTime { 0.0 };
@@ -91,6 +95,8 @@ struct TearingDebugStats
         emptyOutputBuffers.store(0);
         partialUnderfills.store(0);
         discontinuities.store(0);
+        mediumDiscontinuities.store(0);
+        minorDiscontinuities.store(0);
         directionFlips.store(0);
         sliceJumps.store(0);
         modeTransitions.store(0);
@@ -98,6 +104,8 @@ struct TearingDebugStats
         zeroSampleRuns.store(0);
         clippedSamples.store(0);
         nanOrInfSamples.store(0);
+        rmsJumps.store(0);
+        dcOffsetDrifts.store(0);
         lastTearingEventTime.store(0.0);
         lastPlayheadPos.store(0.0);
     }
@@ -107,21 +115,26 @@ struct TearingDebugStats
         return "TearingStats: empty=" + juce::String(emptyOutputBuffers.load())
              + " underfill=" + juce::String(partialUnderfills.load())
              + " discont=" + juce::String(discontinuities.load())
+             + " medium=" + juce::String(mediumDiscontinuities.load())
+             + " minor=" + juce::String(minorDiscontinuities.load())
              + " dirFlip=" + juce::String(directionFlips.load())
              + " sliceJump=" + juce::String(sliceJumps.load())
              + " modeTrans=" + juce::String(modeTransitions.load())
              + " stReset=" + juce::String(soundTouchResets.load())
              + " zeroRuns=" + juce::String(zeroSampleRuns.load())
              + " clipped=" + juce::String(clippedSamples.load())
-             + " nanInf=" + juce::String(nanOrInfSamples.load());
+             + " nanInf=" + juce::String(nanOrInfSamples.load())
+             + " rmsJump=" + juce::String(rmsJumps.load())
+             + " dcDrift=" + juce::String(dcOffsetDrifts.load());
     }
     
     int getTotalEvents() const
     {
         return emptyOutputBuffers.load() + partialUnderfills.load() + discontinuities.load()
+             + mediumDiscontinuities.load() + minorDiscontinuities.load()
              + directionFlips.load() + sliceJumps.load() + modeTransitions.load()
              + soundTouchResets.load() + zeroSampleRuns.load() + clippedSamples.load()
-             + nanOrInfSamples.load();
+             + nanOrInfSamples.load() + rmsJumps.load() + dcOffsetDrifts.load();
     }
 };
 
@@ -267,6 +280,8 @@ private:
     std::atomic<bool> tearingDebugEnabled { true }; // Enable by default in debug builds
     float lastOutputSample[2] = { 0.0f, 0.0f };     // Track last sample for discontinuity detection
     int consecutiveZeroSamples = 0;                  // Counter for zero sample runs
+    float lastBlockRms[2] = { 0.0f, 0.0f };         // Track RMS from previous block
+    float lastBlockDcOffset[2] = { 0.0f, 0.0f };    // Track DC offset from previous block
 
 
 

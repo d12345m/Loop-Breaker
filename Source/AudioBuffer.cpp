@@ -19,11 +19,19 @@
 
 namespace TearingDebug
 {
-    // Threshold for detecting discontinuities (sample-to-sample jump)
-    constexpr float kDiscontinuityThreshold = 0.3f;  // 30% of full scale
+    // Multi-level thresholds for detecting discontinuities of different severities
+    constexpr float kMajorDiscontinuityThreshold = 0.3f;   // 30% of full scale - major tearing
+    constexpr float kMediumDiscontinuityThreshold = 0.15f; // 15% of full scale - medium pops
+    constexpr float kMinorDiscontinuityThreshold = 0.05f;  // 5% of full scale - minor clicks
     
     // Threshold for consecutive zeros to be considered a "zero run"
     constexpr int kZeroRunThreshold = 64;  // ~1.5ms at 44.1kHz
+    
+    // RMS jump detection threshold (ratio between consecutive blocks)
+    constexpr float kRmsJumpThreshold = 3.0f;  // 3x RMS change is suspicious
+    
+    // DC offset drift threshold
+    constexpr float kDcOffsetThreshold = 0.1f;  // 10% DC drift is problematic
     
     // Check if a sample value is valid (not NaN or Inf)
     inline bool isValidSample(float s)
@@ -43,16 +51,68 @@ namespace TearingDebug
         return std::abs(s) > 1.0f;
     }
     
-    // Check for discontinuity between two consecutive samples
-    inline bool isDiscontinuity(float prev, float curr)
+    enum class DiscontinuityLevel { None, Minor, Medium, Major };
+    
+    // Check for discontinuity between two consecutive samples with severity level
+    inline DiscontinuityLevel getDiscontinuityLevel(float prev, float curr)
     {
         // Skip if either sample is invalid
         if (!isValidSample(prev) || !isValidSample(curr))
-            return false;
+            return DiscontinuityLevel::None;
         // Skip if both are near zero (silence)
         if (isZero(prev) && isZero(curr))
-            return false;
-        return std::abs(curr - prev) > kDiscontinuityThreshold;
+            return DiscontinuityLevel::None;
+            
+        const float delta = std::abs(curr - prev);
+        
+        if (delta > kMajorDiscontinuityThreshold)
+            return DiscontinuityLevel::Major;
+        else if (delta > kMediumDiscontinuityThreshold)
+            return DiscontinuityLevel::Medium;
+        else if (delta > kMinorDiscontinuityThreshold)
+            return DiscontinuityLevel::Minor;
+        else
+            return DiscontinuityLevel::None;
+    }
+    
+    // Legacy function for backward compatibility
+    inline bool isDiscontinuity(float prev, float curr)
+    {
+        return getDiscontinuityLevel(prev, curr) == DiscontinuityLevel::Major;
+    }
+    
+    // Calculate RMS of a buffer
+    inline float calculateRms(const float* data, int numSamples)
+    {
+        if (numSamples <= 0)
+            return 0.0f;
+            
+        double sum = 0.0;
+        for (int i = 0; i < numSamples; ++i)
+        {
+            if (isValidSample(data[i]))
+                sum += data[i] * data[i];
+        }
+        return std::sqrt((float)(sum / numSamples));
+    }
+    
+    // Calculate DC offset (average sample value)
+    inline float calculateDcOffset(const float* data, int numSamples)
+    {
+        if (numSamples <= 0)
+            return 0.0f;
+            
+        double sum = 0.0;
+        int validCount = 0;
+        for (int i = 0; i < numSamples; ++i)
+        {
+            if (isValidSample(data[i]))
+            {
+                sum += data[i];
+                validCount++;
+            }
+        }
+        return validCount > 0 ? (float)(sum / validCount) : 0.0f;
     }
 }
 
@@ -128,10 +188,24 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
 #if JUCE_DEBUG
     if (transitioned)
     {
+        juce::String modifiers;
+        if (std::abs(snap.pitchSemis) > 0.01)
+            modifiers += " [PITCH]";
+        if (std::abs(snap.stretchRatio - 1.0) > 0.01)
+            modifiers += " [STRETCH]";
+        if (std::abs(snap.speed - 1.0) > 0.01)
+            modifiers += " [SPEED]";
+        if (snap.speed < 0.0)
+            modifiers += " [REVERSE]";
+        if (slicingModeActive.load())
+            modifiers += " [SLICING]";
+            
         DBG ("[AudioBuffer " + juce::String(bufferIndex) + "] mode transition: "
              + juce::String(lastBlockUsedStretch ? "stretch" : "repitch") + " -> "
              + juce::String(useStretcher ? "stretch" : "repitch")
-             + " speed=" + juce::String(snap.speed) + " stretch=" + juce::String(snap.stretchRatio));
+             + " speed=" + juce::String(snap.speed) + " stretch=" + juce::String(snap.stretchRatio)
+             + " pitch=" + juce::String(snap.pitchSemis)
+             + " modifiers:" + modifiers);
         if (tearingDebugEnabled.load())
             tearingStats.modeTransitions.fetch_add(1, std::memory_order_relaxed);
     }
@@ -204,7 +278,9 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
             DBG("[AudioBuffer " + juce::String(bufferIndex) + "] TEARING: Empty output buffer detected! "
                 + "pos=" + juce::String(playheadPosition.load(), 0)
                 + " speed=" + juce::String(snap.speed)
-                + " stretch=" + juce::String(snap.stretchRatio));
+                + " stretch=" + juce::String(snap.stretchRatio)
+                + " pitch=" + juce::String(snap.pitchSemis)
+                + " mode=" + (snap.useStretcher() ? "stretch" : "repitch"));
         }
         
         // Check each channel for issues
@@ -212,6 +288,42 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
         {
             const float* data = outputBuffer.getReadPointer(ch);
             float lastValid = (ch < 2) ? lastOutputSample[ch] : 0.0f;
+            
+            // Calculate RMS and DC offset for this block
+            const float currentRms = TearingDebug::calculateRms(data, numSamples);
+            const float currentDc = TearingDebug::calculateDcOffset(data, numSamples);
+            
+            // Check for RMS jumps (only for first 2 channels to avoid spam)
+            if (ch < 2 && lastBlockRms[ch] > 1.0e-6f)
+            {
+                const float rmsRatio = juce::jmax(currentRms / lastBlockRms[ch], 
+                                                   lastBlockRms[ch] / currentRms);
+                if (rmsRatio > TearingDebug::kRmsJumpThreshold)
+                {
+                    tearingStats.rmsJumps.fetch_add(1, std::memory_order_relaxed);
+                    tearingStats.lastTearingEventTime.store(juce::Time::getMillisecondCounterHiRes());
+                    DBG("[AudioBuffer " + juce::String(bufferIndex) + "] TEARING: RMS jump ch="
+                        + juce::String(ch) + " prev=" + juce::String(lastBlockRms[ch], 4)
+                        + " curr=" + juce::String(currentRms, 4) + " ratio=" + juce::String(rmsRatio, 2));
+                }
+            }
+            
+            // Check for DC offset drift
+            if (ch < 2)
+            {
+                const float dcDrift = std::abs(currentDc - lastBlockDcOffset[ch]);
+                if (dcDrift > TearingDebug::kDcOffsetThreshold)
+                {
+                    tearingStats.dcOffsetDrifts.fetch_add(1, std::memory_order_relaxed);
+                    DBG("[AudioBuffer " + juce::String(bufferIndex) + "] TEARING: DC offset drift ch="
+                        + juce::String(ch) + " prev=" + juce::String(lastBlockDcOffset[ch], 4)
+                        + " curr=" + juce::String(currentDc, 4) + " drift=" + juce::String(dcDrift, 4));
+                }
+                
+                // Store for next block
+                lastBlockRms[ch] = currentRms;
+                lastBlockDcOffset[ch] = currentDc;
+            }
             
             for (int i = 0; i < numSamples; ++i)
             {
@@ -233,17 +345,41 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
                     tearingStats.clippedSamples.fetch_add(1, std::memory_order_relaxed);
                 }
                 
-                // Check for discontinuity (only check after first sample has valid lastValid)
+                // Check for discontinuity with multiple severity levels
                 if (i > 0 || (ch < 2 && std::abs(lastOutputSample[ch]) > 1.0e-10f))
                 {
-                    if (TearingDebug::isDiscontinuity(lastValid, sample))
+                    const auto level = TearingDebug::getDiscontinuityLevel(lastValid, sample);
+                    if (level != TearingDebug::DiscontinuityLevel::None)
                     {
-                        tearingStats.discontinuities.fetch_add(1, std::memory_order_relaxed);
                         tearingStats.lastTearingEventTime.store(juce::Time::getMillisecondCounterHiRes());
-                        DBG("[AudioBuffer " + juce::String(bufferIndex) + "] TEARING: Discontinuity ch=" 
-                            + juce::String(ch) + " idx=" + juce::String(i)
-                            + " prev=" + juce::String(lastValid, 4) + " curr=" + juce::String(sample, 4)
-                            + " delta=" + juce::String(std::abs(sample - lastValid), 4));
+                        const float delta = std::abs(sample - lastValid);
+                        
+                        switch (level)
+                        {
+                            case TearingDebug::DiscontinuityLevel::Major:
+                                tearingStats.discontinuities.fetch_add(1, std::memory_order_relaxed);
+                                DBG("[AudioBuffer " + juce::String(bufferIndex) + "] TEARING [MAJOR]: Discontinuity ch="
+                                    + juce::String(ch) + " idx=" + juce::String(i)
+                                    + " prev=" + juce::String(lastValid, 4) + " curr=" + juce::String(sample, 4)
+                                    + " delta=" + juce::String(delta, 4));
+                                break;
+                            case TearingDebug::DiscontinuityLevel::Medium:
+                                tearingStats.mediumDiscontinuities.fetch_add(1, std::memory_order_relaxed);
+                                DBG("[AudioBuffer " + juce::String(bufferIndex) + "] TEARING [MEDIUM]: Discontinuity ch="
+                                    + juce::String(ch) + " idx=" + juce::String(i)
+                                    + " prev=" + juce::String(lastValid, 4) + " curr=" + juce::String(sample, 4)
+                                    + " delta=" + juce::String(delta, 4));
+                                break;
+                            case TearingDebug::DiscontinuityLevel::Minor:
+                                tearingStats.minorDiscontinuities.fetch_add(1, std::memory_order_relaxed);
+                                DBG("[AudioBuffer " + juce::String(bufferIndex) + "] TEARING [MINOR]: Discontinuity ch="
+                                    + juce::String(ch) + " idx=" + juce::String(i)
+                                    + " prev=" + juce::String(lastValid, 4) + " curr=" + juce::String(sample, 4)
+                                    + " delta=" + juce::String(delta, 4));
+                                break;
+                            default:
+                                break;
+                        }
                     }
                 }
                 
@@ -547,6 +683,10 @@ void AudioBuffer::play()
         consecutiveZeroSamples = 0;
         lastOutputSample[0] = 0.0f;
         lastOutputSample[1] = 0.0f;
+        lastBlockRms[0] = 0.0f;
+        lastBlockRms[1] = 0.0f;
+        lastBlockDcOffset[0] = 0.0f;
+        lastBlockDcOffset[1] = 0.0f;
     }
 #endif
     setPlaying(true);
@@ -751,9 +891,22 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
 #if JUCE_DEBUG
     if (didReset)
     {
+        juce::String modifiers;
+        if (std::abs(snap.pitchSemis) > 0.01)
+            modifiers += " [PITCH]";
+        if (std::abs(snap.stretchRatio - 1.0) > 0.01)
+            modifiers += " [STRETCH]";
+        if (std::abs(snap.speed - 1.0) > 0.01)
+            modifiers += " [SPEED]";
+        if (direction < 0.0)
+            modifiers += " [REVERSE]";
+        if (slicingModeActive.load())
+            modifiers += " [SLICING]";
+        
         DBG ("[AudioBuffer " + juce::String(bufferIndex) + "] SoundTouch RESET  speed=" + juce::String(snap.speed)
              + " stretch=" + juce::String(snap.stretchRatio) + " pitch=" + juce::String(snap.pitchSemis)
-             + " dir=" + juce::String(direction) + " pos=" + juce::String(playheadPosition.load()));
+             + " dir=" + juce::String(direction) + " pos=" + juce::String(playheadPosition.load())
+             + " modifiers:" + modifiers);
         if (tearingDebugEnabled.load())
             tearingStats.soundTouchResets.fetch_add(1, std::memory_order_relaxed);
     }
@@ -787,7 +940,9 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         {
             stretcher.setWindowsForReverse (direction < 0.0);
 #if JUCE_DEBUG
-            DBG ("[AudioBuffer " + juce::String(bufferIndex) + "] direction flip " + juce::String(lastStretchDirection) + "->" + juce::String(direction));
+            DBG ("[AudioBuffer " + juce::String(bufferIndex) + "] direction flip " + juce::String(lastStretchDirection) 
+                 + "->" + juce::String(direction) + " speed=" + juce::String(snap.speed)
+                 + " stretch=" + juce::String(snap.stretchRatio) + " pos=" + juce::String(playheadPosition.load()));
             if (tearingDebugEnabled.load())
                 tearingStats.directionFlips.fetch_add(1, std::memory_order_relaxed);
 #endif
@@ -1469,6 +1624,17 @@ void AudioBuffer::startSliceCrossfade(int newSliceIndex, double newPlayheadPos)
     // Update to new slice
     currentActiveSlice.store(newSliceIndex);
     playheadPosition.store(newPlayheadPos);
+    
+#if JUCE_DEBUG
+    // Track slice jumps for tearing debug
+    if (tearingDebugEnabled.load())
+    {
+        tearingStats.sliceJumps.fetch_add(1, std::memory_order_relaxed);
+        DBG("[AudioBuffer " + juce::String(bufferIndex) + "] SLICE JUMP: from slice " 
+            + juce::String(previousSliceIndex) + " to " + juce::String(newSliceIndex)
+            + " pos=" + juce::String(previousSlicePlayheadPos, 0) + "->" + juce::String(newPlayheadPos, 0));
+    }
+#endif
 }
 
 void AudioBuffer::applyCrossfadeToSliceTransition(const juce::AudioBuffer<float>& sourceBuffer,

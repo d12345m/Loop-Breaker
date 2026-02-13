@@ -41,27 +41,32 @@ public:
         g.drawText("Audio Tearing Debug", area.removeFromTop(lineH + 2), juce::Justification::centredLeft);
         area.removeFromTop(2); // Small gap
         
-        g.setFont(juce::FontOptions(12.0f));
+        g.setFont(juce::FontOptions(10.0f));
         
 #if JUCE_DEBUG
-        // Column headers
+        // Single row header - compact columns
         g.setColour(Theme::textSubtle());
         auto headerRow = area.removeFromTop(lineH);
-        g.drawText("Pad", headerRow.removeFromLeft(30), juce::Justification::centredLeft);
-        g.drawText("Empty", headerRow.removeFromLeft(45), juce::Justification::centredLeft);
-        g.drawText("Under", headerRow.removeFromLeft(45), juce::Justification::centredLeft);
-        g.drawText("Disc", headerRow.removeFromLeft(40), juce::Justification::centredLeft);
-        g.drawText("Dir", headerRow.removeFromLeft(35), juce::Justification::centredLeft);
-        g.drawText("Jump", headerRow.removeFromLeft(40), juce::Justification::centredLeft);
-        g.drawText("Trans", headerRow.removeFromLeft(45), juce::Justification::centredLeft);
-        g.drawText("Reset", headerRow.removeFromLeft(45), juce::Justification::centredLeft);
-        g.drawText("Zeros", headerRow.removeFromLeft(45), juce::Justification::centredLeft);
-        g.drawText("Clip", headerRow.removeFromLeft(40), juce::Justification::centredLeft);
-        g.drawText("NaN", headerRow, juce::Justification::centredLeft);
+        const int colW = 30; // Compact column width
+        g.drawText("P", headerRow.removeFromLeft(18), juce::Justification::centredLeft);
+        g.drawText("Emty", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
+        g.drawText("Undr", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
+        g.drawText("Maj", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
+        g.drawText("Med", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
+        g.drawText("Min", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
+        g.drawText("Zero", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
+        g.drawText("Clip", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
+        g.drawText("NaN", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
+        g.drawText("RMS", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
+        g.drawText("Dir", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
+        g.drawText("Jmp", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
+        g.drawText("Trn", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
+        g.drawText("Rst", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
+        g.drawText("DC", headerRow, juce::Justification::centredLeft);
         
         area.removeFromTop(1);
         
-        // Data rows for each buffer
+        // Data rows for each buffer - single row per pad
         for (int i = 0; i < app.channelStrips.size(); ++i)
         {
             if (area.getHeight() < lineH)
@@ -75,35 +80,43 @@ public:
             const auto& stats = buffer->getTearingStats();
             
             const int totalEvents = stats.getTotalEvents();
+            const int criticalEvents = stats.emptyOutputBuffers.load() + stats.discontinuities.load() 
+                                      + stats.nanOrInfSamples.load();
+            const int mediumEvents = stats.mediumDiscontinuities.load() + stats.rmsJumps.load() 
+                                   + stats.partialUnderfills.load();
             
             // Color code based on severity
             if (totalEvents == 0)
                 g.setColour(Theme::textSubtle());
-            else if (totalEvents < 10)
+            else if (criticalEvents > 0)
+                g.setColour(Theme::bad());
+            else if (mediumEvents > 5 || totalEvents > 20)
                 g.setColour(Theme::warn());
             else
-                g.setColour(Theme::bad());
+                g.setColour(Theme::text());
             
             auto row = area.removeFromTop(lineH);
             
-            // Pad number
-            g.drawText(juce::String(i + 1), row.removeFromLeft(30), juce::Justification::centredLeft);
-            
-            // Stats columns
-            g.drawText(juce::String(stats.emptyOutputBuffers.load()), row.removeFromLeft(45), juce::Justification::centredLeft);
-            g.drawText(juce::String(stats.partialUnderfills.load()), row.removeFromLeft(45), juce::Justification::centredLeft);
-            g.drawText(juce::String(stats.discontinuities.load()), row.removeFromLeft(40), juce::Justification::centredLeft);
-            g.drawText(juce::String(stats.directionFlips.load()), row.removeFromLeft(35), juce::Justification::centredLeft);
-            g.drawText(juce::String(stats.sliceJumps.load()), row.removeFromLeft(40), juce::Justification::centredLeft);
-            g.drawText(juce::String(stats.modeTransitions.load()), row.removeFromLeft(45), juce::Justification::centredLeft);
-            g.drawText(juce::String(stats.soundTouchResets.load()), row.removeFromLeft(45), juce::Justification::centredLeft);
-            g.drawText(juce::String(stats.zeroSampleRuns.load()), row.removeFromLeft(45), juce::Justification::centredLeft);
-            g.drawText(juce::String(stats.clippedSamples.load()), row.removeFromLeft(40), juce::Justification::centredLeft);
-            g.drawText(juce::String(stats.nanOrInfSamples.load()), row, juce::Justification::centredLeft);
+            // All columns in one row
+            g.drawText(juce::String(i + 1), row.removeFromLeft(18), juce::Justification::centredLeft);
+            g.drawText(juce::String(stats.emptyOutputBuffers.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(stats.partialUnderfills.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(stats.discontinuities.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(stats.mediumDiscontinuities.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(stats.minorDiscontinuities.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(stats.zeroSampleRuns.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(stats.clippedSamples.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(stats.nanOrInfSamples.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(stats.rmsJumps.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(stats.directionFlips.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(stats.sliceJumps.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(stats.modeTransitions.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(stats.soundTouchResets.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(stats.dcOffsetDrifts.load()), row, juce::Justification::centredLeft);
         }
         
         // Summary at bottom
-        if (area.getHeight() >= lineH * 2)
+        if (area.getHeight() >= lineH * 3)
         {
             area.removeFromTop(4);
             g.setColour(Theme::border());
@@ -111,18 +124,48 @@ public:
             area.removeFromTop(4);
             
             int totalAllPads = 0;
+            int totalCritical = 0;
+            int totalMedium = 0;
+            int totalMinor = 0;
+            
             for (int i = 0; i < app.channelStrips.size(); ++i)
             {
                 const auto& strip = *app.channelStrips[i];
                 if (const auto* buffer = strip.getAudioBuffer())
-                    totalAllPads += buffer->getTearingStats().getTotalEvents();
+                {
+                    const auto& stats = buffer->getTearingStats();
+                    totalAllPads += stats.getTotalEvents();
+                    totalCritical += stats.emptyOutputBuffers.load() + stats.discontinuities.load() 
+                                   + stats.nanOrInfSamples.load();
+                    totalMedium += stats.mediumDiscontinuities.load() + stats.rmsJumps.load() 
+                                 + stats.partialUnderfills.load() + stats.dcOffsetDrifts.load();
+                    totalMinor += stats.minorDiscontinuities.load() + stats.directionFlips.load() 
+                                + stats.sliceJumps.load() + stats.modeTransitions.load() 
+                                + stats.soundTouchResets.load();
+                }
             }
             
-            g.setColour(totalAllPads == 0 ? Theme::textSubtle() : Theme::warn());
-            g.setFont(juce::FontOptions(13.0f).withStyle("Bold"));
-            g.drawText("Total Events: " + juce::String(totalAllPads), 
-                      area.removeFromTop(lineH), 
-                      juce::Justification::centredLeft);
+            g.setFont(juce::FontOptions(12.0f).withStyle("Bold"));
+            
+            // Color-coded summary by severity
+            auto summaryRow = area.removeFromTop(lineH);
+            g.setColour(Theme::text());
+            g.drawText("Total: " + juce::String(totalAllPads), summaryRow.removeFromLeft(100), juce::Justification::centredLeft);
+            
+            if (totalCritical > 0)
+                g.setColour(Theme::bad());
+            else
+                g.setColour(Theme::textSubtle());
+            g.drawText("Critical: " + juce::String(totalCritical), summaryRow.removeFromLeft(90), juce::Justification::centredLeft);
+            
+            if (totalMedium > 0)
+                g.setColour(Theme::warn());
+            else
+                g.setColour(Theme::textSubtle());
+            g.drawText("Medium: " + juce::String(totalMedium), summaryRow.removeFromLeft(90), juce::Justification::centredLeft);
+            
+            g.setColour(Theme::textSubtle());
+            g.drawText("Minor: " + juce::String(totalMinor), summaryRow, juce::Justification::centredLeft);
         }
 #else
         // Release build message

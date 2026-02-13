@@ -60,6 +60,23 @@ public:
         addAndMakeVisible(modifierSelectionViewport);
         addAndMakeVisible(fxStatusPanel);
         addAndMakeVisible(tearingDebugPanel);
+        
+        // Add resizer bars
+        addAndMakeVisible(horizontalDivider);
+        addAndMakeVisible(verticalDivider1);
+        addAndMakeVisible(verticalDivider2);
+        
+        // Setup horizontal layout (left history panel vs right panels)
+        horizontalLayout.setItemLayout(0, 200, -1.0, 400);  // Left panel: min 200, preferred 400
+        horizontalLayout.setItemLayout(1, 8, 8, 8);         // Divider: fixed 8px
+        horizontalLayout.setItemLayout(2, 200, -1.0, 400);  // Right panel: min 200, preferred 400
+        
+        // Setup vertical layout (modifier selection, fx status, tearing debug)
+        verticalLayout.setItemLayout(0, 100, -1.0, 200);    // Modifier selection: min 100, preferred 200
+        verticalLayout.setItemLayout(1, 8, 8, 8);           // Divider 1: fixed 8px
+        verticalLayout.setItemLayout(2, 80, -1.0, 120);     // FX Status: min 80, preferred 120
+        verticalLayout.setItemLayout(3, 8, 8, 8);           // Divider 2: fixed 8px
+        verticalLayout.setItemLayout(4, 100, -1.0, -1.0);   // Tearing Debug: min 100, take remaining space
 
         addAndMakeVisible(modifiersToggle);
         modifiersToggle.setToggleState(app.settings.modifiersEnabled, juce::dontSendNotification);
@@ -221,22 +238,62 @@ public:
 
         area.removeFromTop(6);
         auto bottomArea = area;
-        auto rightPanel = bottomArea.removeFromRight(bottomArea.getWidth() / 3).reduced(4);
-        auto rightTop = rightPanel.removeFromTop(int(rightPanel.getHeight() * 0.4f));
-
+        
+        // Use stretchable layout for horizontal split (history | divider | right panels)
+        juce::Component* horizontalComps[] = { &modifierHistory, &horizontalDivider, nullptr };
+        juce::Rectangle<int> horizontalBounds[] = { {}, {}, {} };
+        
+        horizontalLayout.layOutComponents(horizontalComps, 3,
+                                         bottomArea.getX(), bottomArea.getY(),
+                                         bottomArea.getWidth(), bottomArea.getHeight(),
+                                         false, true);
+        
+        // Get the right panel area (component index 2)
+        auto rightPanel = horizontalBounds[2].isEmpty() ? 
+            juce::Rectangle<int>(bottomArea.getX() + bottomArea.getWidth() / 2, bottomArea.getY(),
+                                bottomArea.getWidth() / 2, bottomArea.getHeight())
+            : horizontalBounds[2];
+        
+        // Find actual bounds from the layout
+        rightPanel = juce::Rectangle<int>();
+        for (int i = 0; i < 3; ++i)
+        {
+            if (horizontalComps[i] == nullptr)
+            {
+                // This is the space for the right panel (after divider)
+                int x = bottomArea.getX();
+                int y = bottomArea.getY();
+                int w = 0;
+                
+                // Calculate based on layout items
+                juce::Component* items[] = { &modifierHistory, &horizontalDivider, nullptr };
+                horizontalLayout.layOutComponents(items, 3,
+                                                 bottomArea.getX(), bottomArea.getY(),
+                                                 bottomArea.getWidth(), bottomArea.getHeight(),
+                                                 false, true);
+                
+                x = horizontalDivider.getRight();
+                w = bottomArea.getRight() - x;
+                rightPanel = juce::Rectangle<int>(x, y, w, bottomArea.getHeight());
+                break;
+            }
+        }
+        
+        rightPanel = rightPanel.reduced(4);
+        
+        // Use stretchable layout for vertical split in right panel
+        juce::Component* verticalComps[] = { &modifierSelectionViewport, &verticalDivider1, 
+                                            &fxStatusPanel, &verticalDivider2, &tearingDebugPanel };
+        
+        verticalLayout.layOutComponents(verticalComps, 5,
+                                       rightPanel.getX(), rightPanel.getY(),
+                                       rightPanel.getWidth(), rightPanel.getHeight(),
+                                       true, true);
+        
+        // Update modifier selection panel size for scrolling
         int toggleCount = modifierSelectionPanel.getNumChildComponents();
-        int desiredHeight = juce::jmax(rightTop.getHeight() - 60, toggleCount * 26 + 20);
-        modifierSelectionPanel.setSize(rightTop.getWidth() - 8, desiredHeight);
-        modifierSelectionViewport.setBounds(rightTop);
-
-        rightPanel.removeFromTop(4);
-        auto fxPanel = rightPanel.removeFromTop(int(rightPanel.getHeight() * 0.35f));
-        fxStatusPanel.setBounds(fxPanel);
-        
-        rightPanel.removeFromTop(4);
-        tearingDebugPanel.setBounds(rightPanel);
-        
-        modifierHistory.setBounds(bottomArea.reduced(2));
+        int desiredHeight = juce::jmax(modifierSelectionViewport.getHeight() - 20, toggleCount * 26 + 20);
+        modifierSelectionPanel.setSize(modifierSelectionViewport.getWidth() - 8, desiredHeight);
     }
 
     // ModifierSchedulerListener
@@ -282,6 +339,13 @@ private:
     juce::Viewport modifierSelectionViewport;
     FxStatusPanel fxStatusPanel;
     TearingDebugPanel tearingDebugPanel;
+
+    // Resizable layout
+    juce::StretchableLayoutManager horizontalLayout;
+    juce::StretchableLayoutResizerBar horizontalDivider { &horizontalLayout, 1, false };
+    juce::StretchableLayoutManager verticalLayout;
+    juce::StretchableLayoutResizerBar verticalDivider1 { &verticalLayout, 1, true };
+    juce::StretchableLayoutResizerBar verticalDivider2 { &verticalLayout, 2, true };
 
     juce::ToggleButton modifiersToggle { "Modifiers" };
 

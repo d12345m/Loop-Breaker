@@ -30,8 +30,11 @@ namespace TearingDebug
     // RMS jump detection threshold (ratio between consecutive blocks)
     constexpr float kRmsJumpThreshold = 3.0f;  // 3x RMS change is suspicious
     
-    // DC offset drift threshold
-    constexpr float kDcOffsetThreshold = 0.25f;  // 25% DC drift is problematic (increased from 0.1)
+    // DC offset drift threshold — SoundTouch's overlap-add and RateTransposer
+    // interpolation routinely shift block-level DC, especially with extreme rate
+    // values (e.g. 0.25) where heavy interpolation is involved.  Keep this high
+    // enough to avoid flooding the counter with false positives.
+    constexpr float kDcOffsetThreshold = 0.40f;  // 40% DC drift (increased from 0.25)
     
     // Check if a sample value is valid (not NaN or Inf)
     inline bool isValidSample(float s)
@@ -214,9 +217,15 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
     {
         const int curSamples = outputBuffer.getNumSamples();
         const int prevSamples = previousBlockNumSamples;
+        // Scale crossfade duration based on how extreme the speed is.
+        // At speed=1.0 the old 10ms is fine, but at speed=0.25 or 4.0 the
+        // repitch->stretch transition is much more dramatic (playhead speed
+        // changes by 4x) and SoundTouch needs more time to settle.
+        const double speedFactor = juce::jlimit(1.0, 4.0, 1.0 / juce::jmin(snap.speedMag(), 1.0));
+        const double crossfadeMs = juce::jlimit(10.0, 30.0, 10.0 * speedFactor);
         const int fadeSamples = juce::jmin(curSamples,
                                            juce::jmin(prevSamples,
-                                                     juce::jmax(1, (int)(hostSampleRate * 0.01)))); // 10ms
+                                                     juce::jmax(1, (int)(hostSampleRate * crossfadeMs / 1000.0))));
 
         if (fadeSamples > 0
             && previousBlockBuffer.getNumChannels() >= outputBuffer.getNumChannels())
@@ -432,11 +441,21 @@ void AudioBuffer::setPitchSemiTones(double semiTones)
     const bool newPitchActive = std::abs(semiTones - 0.0) > 1.0e-6;
     const bool stretchActive = std::abs(stretchRatio.load() - 1.0) > 1.0e-6;
 
-    // Reset SoundTouch only when toggling overall "stretcher usage" on/off.
+    // Reset SoundTouch when toggling overall "stretcher usage" on/off.
     const bool oldUse = (stretchActive || oldPitchActive);
     const bool newUse = (stretchActive || newPitchActive);
     if (oldUse != newUse)
+    {
         stretcherNeedsReset.store(true);
+    }
+    // Also reset when the pitch changes significantly while the stretcher is
+    // already running. Without this, SoundTouch's internal pipeline contains
+    // audio processed with the old pitch/tempo parameters, producing a burst
+    // of discontinuities until the pipeline flushes naturally.
+    else if (oldUse && newUse && std::abs(semiTones - oldPitch) > 0.5)
+    {
+        stretcherNeedsReset.store(true);
+    }
 }
 
 AudioBuffer::LoadedAudioData::Ptr AudioBuffer::getAudioDataSnapshot() const
@@ -753,9 +772,19 @@ void AudioBuffer::setStretchRatio(double ratio)
     // a volume spike or burst of old audio on the first output block.
     const bool wasStretching = std::abs(oldRatio - 1.0) > 1.0e-6;
     const bool nowStretching = std::abs(ratio  - 1.0) > 1.0e-6;
+    const bool pitchActive = std::abs(pitchSemiTones.load()) > 1.0e-6;
 
     if (wasStretching != nowStretching)
+    {
         stretcherNeedsReset.store(true);
+    }
+    // Also reset when the ratio changes significantly while the stretcher is
+    // already running (e.g. stretch active + pitch active, and stretch value
+    // changes). This avoids stale pipeline audio causing transient artifacts.
+    else if ((wasStretching || pitchActive) && std::abs(ratio - oldRatio) > 0.05)
+    {
+        stretcherNeedsReset.store(true);
+    }
 }
 
 void AudioBuffer::setLooping(bool shouldLoop)
@@ -1204,24 +1233,39 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         return framesFilled;
     };
 
-    // On the very first block after a reset, schedule a short fade-in (~20ms)
-    // to mask any startup transient from SoundTouch's empty internal buffers.
+    // On the very first block after a reset, schedule a fade-in to mask any
+    // startup transient from SoundTouch's settling overlap-add algorithm.
+    // For extreme rate/tempo combos (e.g. rate=0.25 + tempo=2.0), the TDStretch
+    // takes longer to find good splice matches, so scale the fade-in accordingly.
     if (! stretcherPrimed)
     {
         stretcherPrimed = true;
-        stretchFadeInRemaining = juce::jmax (1, (int) (hostSampleRate * 0.02));
+        const double settleMs = juce::jlimit (20.0, 40.0,
+                                              20.0 * juce::jmax (1.0, clampedRatio)
+                                                   * juce::jmax (1.0, 1.0 / juce::jmax (0.25, clampedRate)));
+        stretchFadeInRemaining = juce::jmax (1, (int) (hostSampleRate * settleMs / 1000.0));
 
         // T2: Pre-prime SoundTouch with enough input to fill its internal latency
         // pipeline.  Without this, the first 1–2 output blocks after a reset are
         // partially empty (underruns), which sounds like crackles or brief silence.
         //
-        // getLatencySamples() underestimates when rate/tempo/pitch are > 1 because
-        // it doesn't fully account for the rate transposer's input consumption.
-        // Scale by the effective consumption ratio so the TDStretch + RateTransposer
-        // pipeline is fully warm on the first drain.
+        // getLatencySamples() sums TDStretch + RateTransposer latencies, but
+        // the units are mixed when rate != 1.0:
+        //   - TDStretch reports in its INPUT samples (= RateTransposer output)
+        //   - RateTransposer reports in raw input samples
+        // When rate < 1.0: RateTransposer EXPANDS input (e.g. rate=0.25 → 4x),
+        //   so TDStretch's reported latency in RateTransposer-output-samples
+        //   corresponds to far fewer raw input samples.  rawLatency overestimates.
+        // When rate > 1.0: RateTransposer COMPRESSES input, so TDStretch needs
+        //   more raw input.  rawLatency underestimates.
+        // The totalTempoRatioForIO captures the net input:output ratio, so scaling
+        // by it handles rate > 1.0.  For rate < 1.0 we already have enough with
+        // just rawLatency, but add a moderate 50% extra to give TDStretch's overlap-
+        // add algorithm more context for finding good splice matches at startup.
         const int rawLatency = juce::jmax (0, stretcher.getLatencySamples());
+        const double primeScale = juce::jmax (totalTempoRatioForIO, 1.5);
         const int primeSamples = juce::jmax (rawLatency,
-                                             (int) std::ceil (rawLatency * totalTempoRatioForIO));
+                                             (int) std::ceil (rawLatency * primeScale));
         if (primeSamples > 0)
         {
             // Ensure scratch is large enough for the priming chunk.
@@ -1309,14 +1353,16 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
     }
 
     // Apply fade-in if this is the first block after priming — but only when
-    // there is NO mode-transition crossfade about to run in processBlock.
-    // The processBlock crossfade already blends the previous repitch block into
-    // this stretch block; applying a fade-from-silence here would fight with it
+    // there is NO crossfade about to run that already handles the transition.
+    // - Mode-transition crossfade (processBlock): blends previous repitch block into this stretch block.
+    // - Parameter-change crossfade (below): blends previous stretch block into this newly-reset stretch block.
+    // In both cases, applying a fade-from-silence here would fight with the crossfade
     // and cause a volume dip / click at the transition point.
     const bool modeTransitionCrossfadeWillRun = (lastBlockUsedStretch == false) && previousBlockValid;
-    if (modeTransitionCrossfadeWillRun)
+    const bool paramChangeCrossfadeWillRun = didReset && previousBlockValid;
+    if (modeTransitionCrossfadeWillRun || paramChangeCrossfadeWillRun)
     {
-        // Skip the fade-in entirely; processBlock's crossfade handles the blend.
+        // Skip the fade-in entirely; a crossfade handles the blend.
         stretchFadeInRemaining = 0;
     }
     else if (stretchFadeInRemaining > 0 && framesWritten > 0)
@@ -1334,19 +1380,27 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         stretchFadeInRemaining -= fadeLen;
     }
 
-    // T8: When the playback direction changed this block (detected via T1 reset +
-    // direction != lastStretchDirection from previous block), crossfade the tail
-    // of the previous block into the head of the current block.
-    // The mode-transition crossfade in processBlock handles repitch<->stretch,
-    // but direction flips within the stretch path need their own crossfade.
-    if (didReset && previousBlockValid
+    // T8: When a SoundTouch reset occurred this block (direction flip, param
+    // change while already in stretch mode), crossfade the tail of the previous
+    // stretch block into the head of the current block.  Scale the fade length
+    // with the effective rate — extreme combos like rate=0.25+tempo=2.0 need
+    // more overlap because SoundTouch's internal pipeline takes longer to settle.
+    //
+    // IMPORTANT: Only apply when the previous block was ALSO stretch
+    // (lastBlockUsedStretch == true).  If we're transitioning from repitch → stretch,
+    // processBlock's own mode-transition crossfade already handles the blend.
+    // Firing both would double-crossfade, biasing 75% toward the old signal at the
+    // midpoint and masking the new stretch output too aggressively.
+    if (didReset && lastBlockUsedStretch && previousBlockValid
         && previousBlockBuffer.getNumChannels() >= outputBuffer.getNumChannels())
     {
         const int curSamples = framesWritten;
         const int prevSamples = previousBlockNumSamples;
+        const double maxRatio = juce::jmax(std::abs(clampedRatio), 1.0 / juce::jmax(0.25, clampedRate));
+        const double crossfadeMs = juce::jlimit(10.0, 30.0, 10.0 * maxRatio);
         const int fadeSamples = juce::jmin (curSamples,
                                             juce::jmin (prevSamples,
-                                                        juce::jmax (1, (int) (hostSampleRate * 0.01)))); // 10ms
+                                                        juce::jmax (1, (int) (hostSampleRate * crossfadeMs / 1000.0))));
         if (fadeSamples > 0)
         {
             const int prevStart = juce::jmax (0, prevSamples - fadeSamples);

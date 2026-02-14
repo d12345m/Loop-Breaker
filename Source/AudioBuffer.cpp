@@ -868,6 +868,13 @@ void AudioBuffer::resetToDefaults()
     isInCrossfade = false;
     crossfadePosition = 0;
     previousSliceIndex = -1;
+    
+    // Reset ping pong state
+    pingPongEnabled.store(false);
+    pingPongDivision.store(0.25);
+    pingPongPeriodSamples.store(0.0);
+    pingPongPhasePosition.store(0.0);
+    pingPongGoingForward.store(true);
 }
 
 void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer, const StretchSnapshot& snap)

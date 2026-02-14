@@ -569,45 +569,45 @@ void AudioBuffer::processWithRepitching(juce::AudioBuffer<float>& outputBuffer)
             }
         }
         
-        // Ping pong mode: oscillate forward and backward within a fraction of the loop/buffer
-        // Note: In repitch mode, we need to modify the speed smoother's target, not just flip step
+        // Ping pong mode: oscillate forward and backward at musical note divisions
         const bool pingPongOn = pingPongEnabled.load();
         if (pingPongOn)
         {
-            const double fraction = pingPongFraction.load();
-            const bool loopWindowOn = loopWindowEnabled.load();
-            // Determine the ping pong boundaries based on loop window or full buffer
-            const int64_t ppStart = loopWindowOn ? loopStartSamples.load() : 0;
-            const int64_t ppFullRange = loopWindowOn ? (loopEndSamples.load() - ppStart) : fileLengthSamples;
-            const int64_t ppRange = (int64_t)(ppFullRange * fraction);
-            const int64_t ppEnd = ppStart + juce::jmax<int64_t>(1, ppRange);
-            
-            const bool goingForward = pingPongGoingForward.load();
-            
-            if (goingForward && speed >= 0.0)
+            const double periodSamples = pingPongPeriodSamples.load();
+            if (periodSamples > 0.0)
             {
-                // Moving forward: check if we hit the end of ping pong range
-                if (currentPos >= (double)ppEnd)
+                double phase = pingPongPhasePosition.load();
+                const bool goingForward = pingPongGoingForward.load();
+                
+                // Increment phase by the step taken (in file samples)
+                const double stepSize = std::abs(speed) * (fileSampleRate / hostSampleRate);
+                phase += stepSize;
+                
+                // Check if we've completed one direction and need to reverse
+                if (phase >= periodSamples)
                 {
-                    // Bounce back - reverse direction
-                    pingPongGoingForward.store(false);
-                    currentPos = juce::jmax((double)ppStart, (double)ppEnd - (currentPos - (double)ppEnd));
-                    // Flip speed sign
-                    params.speed = -std::abs(params.speed);
-                    speedSmoother.setCurrentAndTargetValue(params.speed);
+                    // Reset phase and flip direction
+                    phase = std::fmod(phase, periodSamples);
+                    pingPongPhasePosition.store(phase);
+                    
+                    if (goingForward)
+                    {
+                        // Switch to backward
+                        pingPongGoingForward.store(false);
+                        params.speed = -std::abs(params.speed);
+                        speedSmoother.setCurrentAndTargetValue(params.speed);
+                    }
+                    else
+                    {
+                        // Switch to forward
+                        pingPongGoingForward.store(true);
+                        params.speed = std::abs(params.speed);
+                        speedSmoother.setCurrentAndTargetValue(params.speed);
+                    }
                 }
-            }
-            else if (!goingForward && speed < 0.0)
-            {
-                // Moving backward: check if we hit the start of ping pong range
-                if (currentPos <= (double)ppStart)
+                else
                 {
-                    // Bounce forward - reverse direction
-                    pingPongGoingForward.store(true);
-                    currentPos = juce::jmin((double)ppEnd, (double)ppStart + ((double)ppStart - currentPos));
-                    // Flip speed sign back to positive
-                    params.speed = std::abs(params.speed);
-                    speedSmoother.setCurrentAndTargetValue(params.speed);
+                    pingPongPhasePosition.store(phase);
                 }
             }
         }
@@ -1254,42 +1254,42 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                 }
             }
             
-            // Ping pong mode: oscillate forward and backward within a fraction of the loop/buffer
+            // Ping pong mode: oscillate forward and backward at musical note divisions
             const bool pingPongOn = pingPongEnabled.load();
             if (pingPongOn)
             {
-                const double fraction = pingPongFraction.load();
-                // Determine the ping pong boundaries based on loop window or full buffer
-                const int64_t ppStart = loopWindowOn ? loopStart : 0;
-                const int64_t ppFullRange = loopWindowOn ? (loopEnd - loopStart) : fileLengthSamples;
-                const int64_t ppRange = (int64_t)(ppFullRange * fraction);
-                const int64_t ppEnd = ppStart + juce::jmax<int64_t>(1, ppRange);
-                
-                const bool goingForward = pingPongGoingForward.load();
-                
-                if (goingForward && step >= 0.0)
+                const double periodSamples = pingPongPeriodSamples.load();
+                if (periodSamples > 0.0)
                 {
-                    // Moving forward: check if we hit the end of ping pong range
-                    if (currentPos >= (double)ppEnd)
+                    double phase = pingPongPhasePosition.load();
+                    const bool goingForward = pingPongGoingForward.load();
+                    
+                    // Increment phase by the step taken (in file samples)
+                    phase += std::abs(step);
+                    
+                    // Check if we've completed one direction and need to reverse
+                    if (phase >= periodSamples)
                     {
-                        // Bounce back - reverse direction by flipping params.speed
-                        pingPongGoingForward.store(false);
-                        // Reflect position back into bounds
-                        currentPos = juce::jmax((double)ppStart, (double)ppEnd - (currentPos - (double)ppEnd));
-                        // Note: Can't modify 'step' (it's const), so we flip params.speed for next frame
-                        params.speed = -std::abs(params.speed);
+                        // Reset phase and flip direction
+                        phase = std::fmod(phase, periodSamples);
+                        pingPongPhasePosition.store(phase);
+                        
+                        if (goingForward)
+                        {
+                            // Switch to backward
+                            pingPongGoingForward.store(false);
+                            params.speed = -std::abs(params.speed);
+                        }
+                        else
+                        {
+                            // Switch to forward
+                            pingPongGoingForward.store(true);
+                            params.speed = std::abs(params.speed);
+                        }
                     }
-                }
-                else if (!goingForward && step < 0.0)
-                {
-                    // Moving backward: check if we hit the start of ping pong range
-                    if (currentPos <= (double)ppStart)
+                    else
                     {
-                        // Bounce forward - reverse direction
-                        pingPongGoingForward.store(true);
-                        currentPos = juce::jmin((double)ppEnd, (double)ppStart + ((double)ppStart - currentPos));
-                        // Flip speed back to positive for next frame
-                        params.speed = std::abs(params.speed);
+                        pingPongPhasePosition.store(phase);
                     }
                 }
             }
@@ -2032,7 +2032,7 @@ void AudioBuffer::releaseResources()
 //==============================================================================
 // Ping pong playback mode
 //==============================================================================
-void AudioBuffer::setPingPongMode(bool enabled, double fraction)
+void AudioBuffer::setPingPongMode(bool enabled, double divisionBars, double bpm, double sampleRate)
 {
     // When enabling ping pong, cancel reverse mode (absolute value of speed)
     if (enabled && params.speed < 0.0)
@@ -2041,12 +2041,20 @@ void AudioBuffer::setPingPongMode(bool enabled, double fraction)
     }
     
     pingPongEnabled.store(enabled);
-    pingPongFraction.store(juce::jlimit(0.03125, 1.0, fraction));
+    pingPongDivision.store(juce::jlimit(0.0625, 4.0, divisionBars)); // 1/16 to 4 bars
     
     if (enabled)
     {
-        // Start going forward
+        // Calculate period in samples for one direction
+        // divisionBars is how long to go in one direction before reversing
+        const double secondsPerBar = (60.0 / bpm) * 4.0; // 4 beats per bar
+        const double periodSeconds = divisionBars * secondsPerBar;
+        pingPongPeriodSamples.store(periodSeconds * sampleRate);
+        
+        // Start going forward at beginning of cycle
         pingPongGoingForward.store(true);
+        pingPongPhasePosition.store(0.0);
+        
         // Make sure speed is positive
         if (params.speed < 0.0)
             params.speed = std::abs(params.speed);

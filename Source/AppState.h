@@ -388,25 +388,29 @@ private:
     void applyPingPong(const ModifierDescriptor& desc, const juce::Array<int>& targets)
     {
         if (targets.isEmpty()) return;
-        // Use planned fraction if provided; else pick a random one
-        double fraction = 1.0;
-        if (desc.plannedPingPongFraction.has_value())
+        // Use planned division if provided; else pick a random one
+        // Divisions are in bars: whole note=1.0, half=0.5, quarter=0.25, eighth=0.125, sixteenth=0.0625
+        double division = 0.25; // Default to quarter note
+        if (desc.plannedPingPongDivision.has_value())
         {
-            fraction = desc.plannedPingPongFraction.value();
+            division = desc.plannedPingPongDivision.value();
         }
         else
         {
-            // Random selection: whole, half, quarter, 1/8, 1/16, 1/32
+            // Random selection: whole, half, quarter, 1/8, 1/16
             juce::Random r;
-            const double fractions[] = { 1.0, 0.5, 0.25, 0.125, 0.0625, 0.03125 };
-            fraction = fractions[r.nextInt(6)];
+            const double divisions[] = { 1.0, 0.5, 0.25, 0.125, 0.0625 };
+            division = divisions[r.nextInt(5)];
         }
+        
+        const double bpm = settings.bpm;
         
         for (int idx : targets)
         {
             if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
             {
-                b->setPingPongMode(true, fraction);
+                const double sampleRate = b->getFileSampleRate();
+                b->setPingPongMode(true, division, bpm, sampleRate);
                 if (!b->isPlaying()) b->play();
             }
         }

@@ -255,9 +255,9 @@ public:
     int64_t getLoopEndSamples() const { return loopEndSamples.load(); }
     
     // Ping pong playback controls
-    void setPingPongMode(bool enabled, double fraction = 1.0);
+    void setPingPongMode(bool enabled, double divisionBars = 0.25, double bpm = 120.0, double hostSampleRate = 44100.0);
     bool isPingPongModeEnabled() const { return pingPongEnabled.load(); }
-    double getPingPongFraction() const { return pingPongFraction.load(); }
+    double getPingPongDivision() const { return pingPongDivision.load(); }
     
 private:
     //==============================================================================
@@ -396,9 +396,11 @@ private:
     std::atomic<int64_t> loopStartSamples { 0 };
     std::atomic<int64_t> loopEndSamples { 0 };
     
-    // Ping pong playback mode: oscillates forward/backward within a specified fraction
+    // Ping pong playback mode: oscillates forward/backward at musical note divisions
     std::atomic<bool> pingPongEnabled { false };
-    std::atomic<double> pingPongFraction { 1.0 };  // 1.0=whole, 0.5=half, 0.25=quarter, etc.
+    std::atomic<double> pingPongDivision { 0.25 };  // Musical division in bars (1.0=whole, 0.5=half, 0.25=quarter, etc.)
+    std::atomic<double> pingPongPeriodSamples { 0.0 }; // Period in samples for one direction
+    std::atomic<double> pingPongPhasePosition { 0.0 }; // Position within current ping pong cycle
     std::atomic<bool> pingPongGoingForward { true };
     
     // Notification helpers

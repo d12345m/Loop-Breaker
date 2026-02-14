@@ -89,8 +89,8 @@ struct ModifierDescriptor
     std::optional<int> plannedBurstBars;         // e.g., 1, 2, 4
     // For temporary global filters: choose whether to jump immediately to target, then ramp back
     std::optional<bool> plannedImmediateJump;    // true: jump to target then ramp back; false: ramp up then ramp down
-    // For PingPong: fraction of buffer/part to use (1.0=whole, 0.5=half, 0.25=quarter, etc.)
-    std::optional<double> plannedPingPongFraction; // e.g., 1.0, 0.5, 0.25, 0.125, 0.0625, 0.03125
+    // For PingPong: musical note division for oscillation (e.g., 1.0=whole, 0.5=half, 0.25=quarter, 0.125=eighth, 0.0625=sixteenth)
+    std::optional<double> plannedPingPongDivision; // Musical division in bars
 };
 
 // Execution context passed to modifiers when ultimately applied.

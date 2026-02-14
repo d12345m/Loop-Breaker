@@ -254,6 +254,11 @@ public:
     int64_t getLoopStartSamples() const { return loopStartSamples.load(); }
     int64_t getLoopEndSamples() const { return loopEndSamples.load(); }
     
+    // Ping pong playback controls
+    void setPingPongMode(bool enabled, double fraction = 1.0);
+    bool isPingPongModeEnabled() const { return pingPongEnabled.load(); }
+    double getPingPongFraction() const { return pingPongFraction.load(); }
+    
 private:
     //==============================================================================
     // Core audio data
@@ -390,6 +395,11 @@ private:
     std::atomic<bool> loopWindowEnabled { false };
     std::atomic<int64_t> loopStartSamples { 0 };
     std::atomic<int64_t> loopEndSamples { 0 };
+    
+    // Ping pong playback mode: oscillates forward/backward within a specified fraction
+    std::atomic<bool> pingPongEnabled { false };
+    std::atomic<double> pingPongFraction { 1.0 };  // 1.0=whole, 0.5=half, 0.25=quarter, etc.
+    std::atomic<bool> pingPongGoingForward { true };
     
     // Notification helpers
     void notifyPlaybackStateChanged();

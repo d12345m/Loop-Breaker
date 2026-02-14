@@ -44,6 +44,14 @@ namespace {
         bool begin(const ModifierContext& ctx) override;
     };
 
+    // PingPong: oscillate playback forward and backward within a buffer fraction
+    class PingPongModifier : public SimpleModifierBase
+    {
+    public:
+        PingPongModifier() : SimpleModifierBase({ ModifierType::PingPong, ModifierCategory::BufferTransform, "PingPong", "Oscillate forward/backward playback" }) {}
+        bool begin(const ModifierContext& ctx) override;
+    };
+
     ModifierDescriptor makeDescriptor(ModifierType t, ModifierCategory c, const juce::String& name, const juce::String& desc)
     {
         return { t, c, name, desc };
@@ -66,6 +74,7 @@ juce::OwnedArray<IModifier> ModifierFactory::createAllPrototypes()
     add(ModifierType::PitchUpOctave, ModifierCategory::BufferTransform, "+Oct", "Pitch up one octave");
     add(ModifierType::PitchDownOctave, ModifierCategory::BufferTransform, "-Oct", "Pitch down one octave");
     add(ModifierType::BeatSliceRandom, ModifierCategory::BufferTransform, "Slice", "Random beat slicing");
+    add(ModifierType::PingPong, ModifierCategory::BufferTransform, "PingPong", "Oscillate forward/backward playback");
 
     // Buffer FX
     add(ModifierType::BufferDelayOn, ModifierCategory::BufferEffect, "Delay On", "Enable delay wet signal (randomized params)");
@@ -106,6 +115,7 @@ std::unique_ptr<IModifier> ModifierFactory::createInstance(ModifierType type)
                 case ModifierType::Reverse:   return std::make_unique<ReverseModifier>();
                 case ModifierType::Speed:     return std::make_unique<SpeedModifier>();
                 case ModifierType::ResetAll:  return std::make_unique<ResetAllModifier>();
+                case ModifierType::PingPong:  return std::make_unique<PingPongModifier>();
                 default: return std::unique_ptr<IModifier>(new SimpleModifierBase(m->getDescriptor()));
             }
         }
@@ -130,6 +140,12 @@ bool SpeedModifier::begin(const ModifierContext& ctx)
 }
 
 bool ResetAllModifier::begin(const ModifierContext& ctx)
+{
+    juce::ignoreUnused(ctx);
+    return true;
+}
+
+bool PingPongModifier::begin(const ModifierContext& ctx)
 {
     juce::ignoreUnused(ctx);
     return true;

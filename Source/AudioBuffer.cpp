@@ -568,6 +568,50 @@ void AudioBuffer::processWithRepitching(juce::AudioBuffer<float>& outputBuffer)
                     currentPos = (double) end;
             }
         }
+        
+        // Ping pong mode: oscillate forward and backward within a fraction of the loop/buffer
+        // Note: In repitch mode, we need to modify the speed smoother's target, not just flip step
+        const bool pingPongOn = pingPongEnabled.load();
+        if (pingPongOn)
+        {
+            const double fraction = pingPongFraction.load();
+            const bool loopWindowOn = loopWindowEnabled.load();
+            // Determine the ping pong boundaries based on loop window or full buffer
+            const int64_t ppStart = loopWindowOn ? loopStartSamples.load() : 0;
+            const int64_t ppFullRange = loopWindowOn ? (loopEndSamples.load() - ppStart) : fileLengthSamples;
+            const int64_t ppRange = (int64_t)(ppFullRange * fraction);
+            const int64_t ppEnd = ppStart + juce::jmax<int64_t>(1, ppRange);
+            
+            const bool goingForward = pingPongGoingForward.load();
+            
+            if (goingForward && speed >= 0.0)
+            {
+                // Moving forward: check if we hit the end of ping pong range
+                if (currentPos >= (double)ppEnd)
+                {
+                    // Bounce back - reverse direction
+                    pingPongGoingForward.store(false);
+                    currentPos = juce::jmax((double)ppStart, (double)ppEnd - (currentPos - (double)ppEnd));
+                    // Flip speed sign
+                    params.speed = -std::abs(params.speed);
+                    speedSmoother.setCurrentAndTargetValue(params.speed);
+                }
+            }
+            else if (!goingForward && speed < 0.0)
+            {
+                // Moving backward: check if we hit the start of ping pong range
+                if (currentPos <= (double)ppStart)
+                {
+                    // Bounce forward - reverse direction
+                    pingPongGoingForward.store(true);
+                    currentPos = juce::jmin((double)ppEnd, (double)ppStart + ((double)ppStart - currentPos));
+                    // Flip speed sign back to positive
+                    params.speed = std::abs(params.speed);
+                    speedSmoother.setCurrentAndTargetValue(params.speed);
+                }
+            }
+        }
+        
         // Clamp to file bounds as a safety
         currentPos = juce::jlimit(0.0, static_cast<double>(fileLengthSamples - 1), currentPos);
         
@@ -1207,6 +1251,46 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                         startBoundaryCrossfadeLocal ((double) loopEnd);
                     else if (currentPos > (double) loopEnd)
                         currentPos = (double) loopEnd;
+                }
+            }
+            
+            // Ping pong mode: oscillate forward and backward within a fraction of the loop/buffer
+            const bool pingPongOn = pingPongEnabled.load();
+            if (pingPongOn)
+            {
+                const double fraction = pingPongFraction.load();
+                // Determine the ping pong boundaries based on loop window or full buffer
+                const int64_t ppStart = loopWindowOn ? loopStart : 0;
+                const int64_t ppFullRange = loopWindowOn ? (loopEnd - loopStart) : fileLengthSamples;
+                const int64_t ppRange = (int64_t)(ppFullRange * fraction);
+                const int64_t ppEnd = ppStart + juce::jmax<int64_t>(1, ppRange);
+                
+                const bool goingForward = pingPongGoingForward.load();
+                
+                if (goingForward && step >= 0.0)
+                {
+                    // Moving forward: check if we hit the end of ping pong range
+                    if (currentPos >= (double)ppEnd)
+                    {
+                        // Bounce back - reverse direction by flipping params.speed
+                        pingPongGoingForward.store(false);
+                        // Reflect position back into bounds
+                        currentPos = juce::jmax((double)ppStart, (double)ppEnd - (currentPos - (double)ppEnd));
+                        // Note: Can't modify 'step' (it's const), so we flip params.speed for next frame
+                        params.speed = -std::abs(params.speed);
+                    }
+                }
+                else if (!goingForward && step < 0.0)
+                {
+                    // Moving backward: check if we hit the start of ping pong range
+                    if (currentPos <= (double)ppStart)
+                    {
+                        // Bounce forward - reverse direction
+                        pingPongGoingForward.store(true);
+                        currentPos = juce::jmin((double)ppEnd, (double)ppStart + ((double)ppStart - currentPos));
+                        // Flip speed back to positive for next frame
+                        params.speed = std::abs(params.speed);
+                    }
                 }
             }
 
@@ -1943,4 +2027,28 @@ void AudioBuffer::releaseResources()
     previousBlockBuffer.setSize(0, 0);
     previousBlockValid = false;
     resetCrossfadePending = false;
+}
+
+//==============================================================================
+// Ping pong playback mode
+//==============================================================================
+void AudioBuffer::setPingPongMode(bool enabled, double fraction)
+{
+    // When enabling ping pong, cancel reverse mode (absolute value of speed)
+    if (enabled && params.speed < 0.0)
+    {
+        params.speed = std::abs(params.speed);
+    }
+    
+    pingPongEnabled.store(enabled);
+    pingPongFraction.store(juce::jlimit(0.03125, 1.0, fraction));
+    
+    if (enabled)
+    {
+        // Start going forward
+        pingPongGoingForward.store(true);
+        // Make sure speed is positive
+        if (params.speed < 0.0)
+            params.speed = std::abs(params.speed);
+    }
 }

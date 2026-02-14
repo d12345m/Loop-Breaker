@@ -146,6 +146,9 @@ struct AppState : public ModifierSchedulerListener
             case ModifierType::BeatSliceRandom:
                 applyBeatSliceRandom(desc, targets);
                 break;
+            case ModifierType::PingPong:
+                applyPingPong(desc, targets);
+                break;
             case ModifierType::BufferReverbOn:
                 applyBufferReverbOn(desc, targets);
                 break;
@@ -377,6 +380,33 @@ private:
                 if (slices < 2) continue;
                 b->setNumSlices(slices);
                 b->startContinuousRandomSlicing();
+                if (!b->isPlaying()) b->play();
+            }
+        }
+    }
+
+    void applyPingPong(const ModifierDescriptor& desc, const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        // Use planned fraction if provided; else pick a random one
+        double fraction = 1.0;
+        if (desc.plannedPingPongFraction.has_value())
+        {
+            fraction = desc.plannedPingPongFraction.value();
+        }
+        else
+        {
+            // Random selection: whole, half, quarter, 1/8, 1/16, 1/32
+            juce::Random r;
+            const double fractions[] = { 1.0, 0.5, 0.25, 0.125, 0.0625, 0.03125 };
+            fraction = fractions[r.nextInt(6)];
+        }
+        
+        for (int idx : targets)
+        {
+            if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
+            {
+                b->setPingPongMode(true, fraction);
                 if (!b->isPlaying()) b->play();
             }
         }

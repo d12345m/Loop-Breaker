@@ -38,6 +38,7 @@ public:
         addToggle(ModifierType::PitchUpOctave, "+Oct");
         addToggle(ModifierType::PitchDownOctave, "-Oct");
         addToggle(ModifierType::QuarterNoteBurst, "Burst (quarter)");
+        addToggle(ModifierType::PingPong, "PingPong");
     // Buffer FX (placeholders)
     addToggle(ModifierType::BufferReverbOn, "Reverb On");
     addToggle(ModifierType::BufferDelayOn, "Delay On");

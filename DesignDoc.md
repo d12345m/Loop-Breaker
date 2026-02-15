@@ -103,12 +103,6 @@ There should be an options area where users can set:
 
 7.) Multi-output routing mode: - Master-only (all buffers mixed to main out) - Multi-out (each buffer to its own DAW output bus)
 
-## Project Settings
-
-There should be project settings also:
-
-1.) Load Project 2.) New Project 3.) Save Project 4.) Rename Project
-
 ## Platform Targeting Notes
 
 - Primary: VST3 plugin (desktop DAWs).

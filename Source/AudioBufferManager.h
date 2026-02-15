@@ -84,6 +84,12 @@ public:
     juce::Array<int> getLoadedBufferIndices() const;
     juce::Array<int> getPlayingBufferIndices() const;
     
+    /// Returns true if background decode jobs are in-flight or pending application.
+    bool hasAnyPendingLoads() const
+    {
+        return pendingFifo.getNumReady() > 0 || loaderPool.getNumJobs() > 0;
+    }
+    
     //==============================================================================
     // AudioBufferListener overrides (for receiving notifications from individual buffers)
     void audioBufferPlaybackStarted(int bufferIndex) override;

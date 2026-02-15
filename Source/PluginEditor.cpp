@@ -273,6 +273,8 @@ private:
 
     std::unique_ptr<juce::FileChooser> fileChooser;
 
+    bool padPathsSynced = false; // true once pad file paths have been synced to the UI after state restore
+
     void refreshHostTransportReadout()
     {
         const auto state = processor.getLastHostTransportState();
@@ -372,6 +374,48 @@ private:
                 padGrid.setMidiNoteForPad(padIndex, learnedNote);
                 padGrid.setMidiLearnForPad(padIndex, false);
                 processor.setMidiLearnMode(false, -1);
+            }
+        }
+
+        // Sync pad file paths and MIDI notes from settings.
+        // This covers the case where setStateInformation is called after the
+        // editor was created (some DAWs restore state lazily).
+        if (! padPathsSynced)
+        {
+            bool anyPathSet = false;
+            for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
+            {
+                if (i < app.settings.padFilePaths.size() && app.settings.padFilePaths[i].isNotEmpty())
+                {
+                    anyPathSet = true;
+                    break;
+                }
+            }
+
+            // Wait until paths are populated AND at least one buffer has finished loading
+            bool anyBufferLoaded = false;
+            for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
+            {
+                if (auto* b = app.bufferManager.getBuffer(i); b && b->hasAudioLoaded())
+                {
+                    anyBufferLoaded = true;
+                    break;
+                }
+            }
+
+            if (anyPathSet && anyBufferLoaded)
+            {
+                padGrid.setPadFilePaths(app.settings.padFilePaths);
+                for (int i = 0; i < 8; ++i)
+                    padGrid.setMidiNoteForPad(i, app.settings.midiNoteMap[i]);
+                // Sync UI controls to restored settings
+                modifiersToggle.setToggleState(app.settings.modifiersEnabled, juce::dontSendNotification);
+                {
+                    int loadedParts = juce::jlimit(1, 4, app.settings.parts.getNumParts());
+                    partsCountBox.setSelectedId(loadedParts, juce::dontSendNotification);
+                }
+                barsBetweenModifiersSlider.setValue(app.settings.barsBetweenModifiers, juce::dontSendNotification);
+                padPathsSynced = true;
             }
         }
 

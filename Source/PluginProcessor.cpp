@@ -158,7 +158,24 @@ void BufferTestAudioProcessor::prepareToPlay (double sampleRate, int samplesPerB
 
 void BufferTestAudioProcessor::releaseResources()
 {
+    // Check if there are pad paths that need reloading before killing jobs.
+    // releaseResources kills background loader threads, so we must re-arm
+    // the reload flag so that the next prepareToPlay / processBlock cycle
+    // re-queues the loads.
+    bool hasPaths = false;
+    for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
+    {
+        if (i < app.settings.padFilePaths.size() && app.settings.padFilePaths[i].isNotEmpty())
+        {
+            hasPaths = true;
+            break;
+        }
+    }
+
     app.bufferManager.releaseResources();
+
+    if (hasPaths)
+        pendingRestoreReload.store(true);
 }
 
 bool BufferTestAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -439,6 +456,26 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             app.bufferManager.stopAll();
     }
 
+    // Self-healing: if pad file paths exist in settings but the corresponding
+    // buffers have no audio loaded and no background loads are in flight,
+    // re-trigger the load.  This covers edge cases where releaseResources
+    // killed in-flight loads, or DAW lifecycle events caused the initial
+    // reload to be missed.
+    {
+        bool needsReload = false;
+        for (int i = 0; i < AudioBufferManager::MAX_BUFFERS && !needsReload; ++i)
+        {
+            if (i < app.settings.padFilePaths.size()
+                && app.settings.padFilePaths[i].isNotEmpty()
+                && ! app.bufferManager.getBuffer(i)->hasAudioLoaded())
+            {
+                needsReload = true;
+            }
+        }
+        if (needsReload && ! app.bufferManager.hasAnyPendingLoads())
+            reloadBuffersFromPadPaths();
+    }
+
     if (! hostPlaying)
     {
         // Stop modifier queue when the host transport is stopped.
@@ -599,11 +636,11 @@ juce::AudioProcessorEditor* BufferTestAudioProcessor::createEditor()
 
 void BufferTestAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-    // Persist the minimal state required to restore loaded samples when the DAW session reopens.
-    // (Absolute file paths; if a file is missing on restore, the pad will remain empty.)
+    // Persist session state required to restore the plugin when the DAW session reopens.
     juce::DynamicObject::Ptr obj = new juce::DynamicObject();
-    obj->setProperty("v", 1);
+    obj->setProperty("v", 2);
 
+    // Pad file paths (absolute; if missing on restore the pad will remain empty)
     juce::Array<juce::var> pads;
     pads.ensureStorageAllocated(AudioBufferManager::MAX_BUFFERS);
     for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
@@ -612,6 +649,24 @@ void BufferTestAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 
     // Modifier probability weights
     obj->setProperty("modProbs", app.settings.modifierProbabilities.toVar());
+
+    // Session settings
+    obj->setProperty("bpm", app.settings.bpm);
+    obj->setProperty("barsBetweenModifiers", app.settings.barsBetweenModifiers);
+    obj->setProperty("modifiersEnabled", app.settings.modifiersEnabled);
+    obj->setProperty("numParts", app.settings.parts.getNumParts());
+    obj->setProperty("activePart", app.settings.parts.activePart);
+    obj->setProperty("projectName", app.settings.projectName);
+
+    // MIDI note mappings
+    juce::Array<juce::var> midiNotes;
+    midiNotes.ensureStorageAllocated(8);
+    for (int i = 0; i < 8; ++i)
+        midiNotes.add(app.settings.midiNoteMap[i]);
+    obj->setProperty("midiNotes", juce::var(midiNotes));
+
+    // Playback enabled state
+    obj->setProperty("playbackEnabled", transportPlaybackEnabled.load());
 
     const juce::String json = juce::JSON::toString(juce::var(obj.get()), false);
     destData.replaceWith(json.toRawUTF8(), (size_t) json.getNumBytesAsUTF8());
@@ -642,7 +697,7 @@ void BufferTestAudioProcessor::setStateInformation (const void* data, int sizeIn
     if (arr == nullptr)
         return;
 
-    // Update settings
+    // Update pad file paths
     app.settings.padFilePaths.clearQuick();
     for (int i = 0; i < arr->size(); ++i)
         app.settings.padFilePaths.add(arr->getReference(i).toString());
@@ -656,6 +711,34 @@ void BufferTestAudioProcessor::setStateInformation (const void* data, int sizeIn
     // Restore modifier probability weights
     if (obj->hasProperty("modProbs"))
         app.settings.modifierProbabilities.fromVar(obj->getProperty("modProbs"));
+
+    // Restore session settings (v2+)
+    if (obj->hasProperty("bpm"))
+        app.settings.bpm = (double) obj->getProperty("bpm");
+    if (obj->hasProperty("barsBetweenModifiers"))
+        app.settings.barsBetweenModifiers = (int) obj->getProperty("barsBetweenModifiers");
+    if (obj->hasProperty("modifiersEnabled"))
+        app.settings.modifiersEnabled = (bool) obj->getProperty("modifiersEnabled");
+    if (obj->hasProperty("numParts"))
+        app.settings.parts.numParts = juce::jlimit(1, 4, (int) obj->getProperty("numParts"));
+    if (obj->hasProperty("activePart"))
+        app.settings.parts.activePart = juce::jlimit(0, 3, (int) obj->getProperty("activePart"));
+    if (obj->hasProperty("projectName"))
+        app.settings.projectName = obj->getProperty("projectName").toString();
+    if (obj->hasProperty("playbackEnabled"))
+        transportPlaybackEnabled.store((bool) obj->getProperty("playbackEnabled"));
+
+    // Restore MIDI note mappings
+    if (obj->hasProperty("midiNotes"))
+    {
+        auto midiVar = obj->getProperty("midiNotes");
+        if (midiVar.isArray())
+        {
+            auto* midiArr = midiVar.getArray();
+            for (int i = 0; i < juce::jmin((int) midiArr->size(), 8); ++i)
+                app.settings.midiNoteMap[i] = (int) midiArr->getReference(i);
+        }
+    }
 
     // Defer reloading buffers until we are on the audio thread (prepareToPlay/processBlock).
     pendingRestoreReload.store(true);

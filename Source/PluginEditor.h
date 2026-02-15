@@ -4,6 +4,7 @@
 
 class BufferTestAudioProcessor;
 class ModifierProbabilityPanel;
+class DebugPanelContent;
 
 class BufferTestAudioProcessorEditor : public juce::AudioProcessorEditor
 {
@@ -19,6 +20,7 @@ private:
 
     std::unique_ptr<juce::Component> content;
     std::unique_ptr<ModifierProbabilityPanel> probabilityPanel;
+    std::unique_ptr<DebugPanelContent> debugPanel;
     std::unique_ptr<juce::TabbedComponent> tabComponent;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BufferTestAudioProcessorEditor)

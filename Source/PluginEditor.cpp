@@ -154,6 +154,17 @@ public:
             padGrid.setMidiNoteForPad(padIndex, -1);
         };
 
+        padGrid.onClearSample = [this](int padIndex)
+        {
+            // Clear the buffer
+            app.bufferManager.clearBuffer(padIndex);
+            
+            // Clear the stored file path
+            ensurePadFilePathsSized();
+            app.settings.padFilePaths.set(padIndex, {});
+            padGrid.setPadFilePath(padIndex, {});
+        };
+
         // Initialize pad MIDI notes from settings
         for (int i = 0; i < 8; ++i)
             padGrid.setMidiNoteForPad(i, app.settings.midiNoteMap[i]);

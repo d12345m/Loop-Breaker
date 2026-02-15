@@ -31,9 +31,9 @@ public:
             btn->setClickingTogglesState(true);
             btn->onClick = [this, btn]
             { 
-                // Skip selection change if Shift (MIDI learn) or Cmd (clear) was held
+                // Skip selection change if Shift (MIDI learn), Cmd (clear MIDI), or Ctrl (clear sample) was held
                 auto mods = juce::ModifierKeys::currentModifiers;
-                if (mods.isShiftDown() || mods.isCommandDown() || mods.isAltDown())
+                if (mods.isShiftDown() || mods.isCommandDown() || mods.isAltDown() || mods.isCtrlDown())
                 {
                     // Revert the toggle since we don't want to change selection
                     btn->setToggleState(!btn->getToggleState(), juce::dontSendNotification);
@@ -112,6 +112,7 @@ public:
 
     std::function<void(int padIndex)> onMidiLearnRequest;
     std::function<void(int padIndex)> onClearMidiNote;
+    std::function<void(int padIndex)> onClearSample;
 
     // Provide an AudioFormatManager to use for reading files (prepared by the app)
     void setAudioFormatManager(juce::AudioFormatManager* afm)
@@ -634,6 +635,12 @@ private:
         {
             if (onClearMidiNote)
                 onClearMidiNote(clickedPadIndex);
+        }
+        // Ctrl+click to clear sample from pad
+        else if (e.mods.isCtrlDown())
+        {
+            if (onClearSample)
+                onClearSample(clickedPadIndex);
         }
     }
 };

@@ -10,9 +10,12 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "ModifierProbabilityManager.h"
 
 struct SessionSettings
 {
+    // Modifier probability weights (per-type slider values)
+    ModifierProbabilityManager modifierProbabilities;
     // Musical timing
     double bpm = 120.0;                 // Beats per minute
     int timeSigNumerator = 4;           // e.g. 4 in 4/4

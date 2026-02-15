@@ -7,6 +7,7 @@
 #include "ModifierSelectionPanel.h"
 #include "FxStatusPanel.h"
 #include "TearingDebugPanel.h"
+#include "ModifierProbabilityPanel.h"
 #include "Theme.h"
 
 namespace
@@ -608,7 +609,20 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
     : juce::AudioProcessorEditor (&p), processor (p)
 {
     content = std::make_unique<PluginEditorContent>(processor);
-    addAndMakeVisible(*content);
+    probabilityPanel = std::make_unique<ModifierProbabilityPanel>(
+        processor.getAppState().settings.modifierProbabilities);
+
+    tabComponent = std::make_unique<juce::TabbedComponent>(juce::TabbedButtonBar::TabsAtTop);
+    auto tabBg = Theme::bg().brighter(0.05f);
+    tabComponent->addTab("Session",   tabBg, content.get(), false);
+    tabComponent->addTab("Modifiers", tabBg, probabilityPanel.get(), false);
+
+    // Style the tab bar
+    auto& tabBar = tabComponent->getTabbedButtonBar();
+    tabBar.setColour(juce::TabbedButtonBar::tabOutlineColourId, Theme::border());
+    tabBar.setColour(juce::TabbedButtonBar::frontOutlineColourId, Theme::accent());
+
+    addAndMakeVisible(tabComponent.get());
 
     setSize (1200, 800);
     setResizable(true, true);
@@ -624,6 +638,6 @@ void BufferTestAudioProcessorEditor::paint (juce::Graphics& g)
 
 void BufferTestAudioProcessorEditor::resized()
 {
-    if (content)
-        content->setBounds(getLocalBounds());
+    if (tabComponent)
+        tabComponent->setBounds(getLocalBounds());
 }

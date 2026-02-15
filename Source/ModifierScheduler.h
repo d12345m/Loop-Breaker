@@ -12,6 +12,7 @@
 #include <JuceHeader.h>
 #include "Modifier.h"
 #include "SessionSettings.h"
+#include "ModifierProbabilityManager.h"
 
 class ModifierSchedulerListener
 {

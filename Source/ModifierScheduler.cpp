@@ -474,25 +474,43 @@ ModifierDescriptor ModifierScheduler::pickRandomDescriptor() const
                     || t == ModifierType::SwitchPart
                     || t == ModifierType::QuarterNoteBurst);
             if (!allowed) continue;
-            // Gate SwitchPart: only selectable when more than one part is configured
-            if (t == ModifierType::SwitchPart && !moreThanOnePart) continue;
+            // SwitchPart gated by parts count is handled inside weighted selection
             candidateIndices.add(i);
         }
     }
-    // Fallback (when not restricting): include all descriptors but still gate SwitchPart by parts count
+    // Fallback (when not restricting): include all descriptors
     if (candidateIndices.isEmpty())
     {
         for (int i = 0; i < prototypeCache.size(); ++i)
-        {
-            auto t = prototypeCache[i]->getDescriptor().type;
-            if (t == ModifierType::SwitchPart && !moreThanOnePart)
-                continue;
             candidateIndices.add(i);
-        }
     }
+
+    // Use weighted random selection via ModifierProbabilityManager.
+    // SwitchPart is auto-excluded when moreThanOnePart is false.
+    const auto& probMgr = settings.modifierProbabilities;
+    auto typeForIndex = [this](int idx) -> ModifierType {
+        return prototypeCache[idx]->getDescriptor().type;
+    };
+
     const juce::SpinLock::ScopedLockType lock(rngLock);
-    int choice = rng.nextInt(candidateIndices.size());
-    return prototypeCache[candidateIndices[choice]]->getDescriptor();
+    int chosen = probMgr.chooseWeighted(candidateIndices, typeForIndex, moreThanOnePart, rng);
+
+    // If every candidate has weight 0, fall back to uniform random (safety net)
+    if (chosen < 0)
+    {
+        // Filter out SwitchPart if needed
+        juce::Array<int> fallback;
+        for (int ci : candidateIndices)
+        {
+            auto t = prototypeCache[ci]->getDescriptor().type;
+            if (t == ModifierType::SwitchPart && !moreThanOnePart) continue;
+            fallback.add(ci);
+        }
+        if (fallback.isEmpty()) fallback = candidateIndices;
+        chosen = fallback[rng.nextInt(fallback.size())];
+    }
+
+    return prototypeCache[chosen]->getDescriptor();
 }
 ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDescriptor& base) const
 {

@@ -610,6 +610,9 @@ void BufferTestAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
         pads.add(app.settings.padFilePaths[i]);
     obj->setProperty("pads", juce::var(pads));
 
+    // Modifier probability weights
+    obj->setProperty("modProbs", app.settings.modifierProbabilities.toVar());
+
     const juce::String json = juce::JSON::toString(juce::var(obj.get()), false);
     destData.replaceWith(json.toRawUTF8(), (size_t) json.getNumBytesAsUTF8());
 }
@@ -649,6 +652,10 @@ void BufferTestAudioProcessor::setStateInformation (const void* data, int sizeIn
     if (app.settings.padFilePaths.size() > AudioBufferManager::MAX_BUFFERS)
         app.settings.padFilePaths.removeRange(AudioBufferManager::MAX_BUFFERS,
                                               app.settings.padFilePaths.size() - AudioBufferManager::MAX_BUFFERS);
+
+    // Restore modifier probability weights
+    if (obj->hasProperty("modProbs"))
+        app.settings.modifierProbabilities.fromVar(obj->getProperty("modProbs"));
 
     // Defer reloading buffers until we are on the audio thread (prepareToPlay/processBlock).
     pendingRestoreReload.store(true);

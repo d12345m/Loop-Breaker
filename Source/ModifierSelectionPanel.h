@@ -14,6 +14,9 @@ public:
         auto addToggle = [&](ModifierType type, const juce::String& label)
         {
             auto* t = new juce::ToggleButton(label);
+            t->setColour(juce::ToggleButton::textColourId, juce::Colours::black);
+            t->setColour(juce::ToggleButton::tickColourId, juce::Colours::black);
+            t->setColour(juce::ToggleButton::tickDisabledColourId, juce::Colours::black);
             toggles.add(t);
             t->onClick = [this, type, t]
             {

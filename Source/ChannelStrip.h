@@ -20,8 +20,9 @@ struct EffectChainPlaceholder
     bool lowPassEnabled = false;
     bool highPassEnabled = false;
     bool tremoloEnabled = false;
+    bool chorusEnabled = false;
 
-    void reset() { delayEnabled = reverbEnabled = lowPassEnabled = highPassEnabled = tremoloEnabled = false; }
+    void reset() { delayEnabled = reverbEnabled = lowPassEnabled = highPassEnabled = tremoloEnabled = chorusEnabled = false; }
 };
 
 class ChannelStrip
@@ -72,6 +73,13 @@ public:
             updateLowPassCoeffs(params.lowPassCutoff);
             updateHighPassCoeffs(params.highPassCutoff);
             updateDelayHighCutCoeffs(params.delayFeedbackHighCutHz);
+
+            // (Re)allocate chorus delay buffer
+            const int maxChorusDelaySamples = (int) std::ceil((kMaxChorusDelayMs / 1000.0) * juce::jmax(1.0, lastSampleRate));
+            chorusDelayBufferSize = maxChorusDelaySamples + blockSize + 1;
+            chorusDelayWritePos = 0;
+            chorusDelayBuffer.setSize(2, chorusDelayBufferSize, false, false, true);
+            chorusDelayBuffer.clear();
         }
     }
 
@@ -230,6 +238,63 @@ public:
         }
 
         // --- Reverb Processing ---
+        // --- Chorus Processing (modulated short delay) ---
+        if (effects().chorusEnabled && chorusDelayBufferSize > 0)
+        {
+            // Ensure chorus buffer matches channel count
+            if (chorusDelayBuffer.getNumChannels() != numChannels || chorusDelayBuffer.getNumSamples() != chorusDelayBufferSize)
+            {
+                chorusDelayBuffer.setSize(numChannels, chorusDelayBufferSize, false, false, true);
+                chorusDelayBuffer.clear();
+                chorusDelayWritePos = 0;
+            }
+
+            const float baseDelaySamples = (float)((params.chorusDelayMs / 1000.0) * juce::jmax(1.0, lastSampleRate));
+            const float maxModSamples = (float)((params.chorusDepth * 5.0 / 1000.0) * juce::jmax(1.0, lastSampleRate)); // up to 5ms modulation
+            const float lfoInc = (float)(2.0 * juce::MathConstants<double>::pi * juce::jmax(0.01f, params.chorusRateHz) / juce::jmax(1.0, lastSampleRate));
+            const float wet = juce::jlimit(0.0f, 1.0f, params.chorusMix);
+            const float dry = 1.0f;
+
+            for (int i = 0; i < numSamples; ++i)
+            {
+                int writePos = chorusDelayWritePos;
+                // LFO modulation (sine)
+                float lfoVal = std::sin(chorusLfoPhase);
+                float modDelaySamples = baseDelaySamples + maxModSamples * lfoVal;
+                modDelaySamples = juce::jlimit(0.5f, (float)(chorusDelayBufferSize - 2), modDelaySamples);
+
+                for (int ch = 0; ch < numChannels; ++ch)
+                {
+                    auto* chorusData = chorusDelayBuffer.getWritePointer(ch);
+                    float inSample = tempBuffer.getSample(ch, i);
+
+                    // Write dry sample to chorus delay buffer
+                    chorusData[writePos] = inSample;
+
+                    // Fractional read (linear interpolation)
+                    double readPos = (double)writePos - (double)modDelaySamples;
+                    while (readPos < 0.0) readPos += (double)chorusDelayBufferSize;
+                    int idx0 = (int)readPos;
+                    int idx1 = idx0 + 1; if (idx1 >= chorusDelayBufferSize) idx1 = 0;
+                    float frac = (float)(readPos - (double)idx0);
+                    float delayed = chorusData[idx0] * (1.0f - frac) + chorusData[idx1] * frac;
+
+                    // Mix: dry + wet chorus signal
+                    float out = inSample * dry + delayed * wet;
+                    tempBuffer.setSample(ch, i, out);
+                }
+
+                // Advance LFO phase (per second voice; adding slight offset for stereo width)
+                chorusLfoPhase += lfoInc;
+                if (chorusLfoPhase > juce::MathConstants<float>::twoPi)
+                    chorusLfoPhase -= juce::MathConstants<float>::twoPi;
+
+                if (++chorusDelayWritePos >= chorusDelayBufferSize)
+                    chorusDelayWritePos = 0;
+            }
+        }
+
+        // --- Reverb Processing (continued) ---
         if (!effects().reverbEnabled)
             return; // skip reverb portion if disabled (delay may still have processed)
 
@@ -362,6 +427,11 @@ public:
         float highPassCutoff = 20.0f;
         float tremoloDepth = 0.0f;
         float tremoloRateHz = 4.0f; // default rate if not set from BPM
+        // Chorus
+        float chorusDepth = 0.5f;    // LFO modulation depth (0..1)
+        float chorusRateHz = 1.0f;   // LFO rate
+        float chorusMix = 0.5f;      // wet/dry mix (0..1)
+        float chorusDelayMs = 7.0f;  // base delay for chorus modulation (ms)
     };
 
     void reset()
@@ -375,6 +445,7 @@ public:
         lowPassCutoffEnv = {};
         highPassCutoffEnv = {};
         tremoloDepthEnv = {};
+        chorusMixEnv = {};
         if (buffer) buffer->resetToDefaults();
     }
 
@@ -415,6 +486,11 @@ public:
     void setTremoloDepthEnvelope(float start, float target, float durationBars)
     {
         tremoloDepthEnv = { start, target, durationBars, 0.0f, EffectEnvelope::Curve::Linear };
+    }
+
+    void setChorusMixEnvelope(float start, float target, float durationBars)
+    {
+        chorusMixEnv = { start, target, durationBars, 0.0f, EffectEnvelope::Curve::Linear };
     }
 
     // Advance envelopes by given bars; update current parameter values
@@ -468,6 +544,12 @@ public:
         // Tremolo depth
         params.tremoloDepth = tremoloDepthEnv.isActive() ? tremoloDepthEnv.current(params.tremoloDepth) : params.tremoloDepth;
         if (tremoloDepthEnv.isActive()) tremoloDepthEnv.advance(barsDelta);
+        // Chorus mix
+        params.chorusMix = chorusMixEnv.isActive() ? chorusMixEnv.current(params.chorusMix) : params.chorusMix;
+        if (chorusMixEnv.isActive()) chorusMixEnv.advance(barsDelta);
+        // Auto-disable chorus when mix reaches zero and no active envelope
+        if (chain.chorusEnabled && !chorusMixEnv.isActive() && params.chorusMix <= 0.0001f)
+            chain.chorusEnabled = false;
     }
 
     const FxParams& getFxParams() const { return params; }
@@ -484,6 +566,7 @@ private:
     EffectEnvelope lowPassCutoffEnv;
     EffectEnvelope highPassCutoffEnv;
     EffectEnvelope tremoloDepthEnv;
+    EffectEnvelope chorusMixEnv;
     juce::dsp::Reverb reverb;
     juce::dsp::Limiter<float> limiter;
     bool reverbPrepared = false;
@@ -531,6 +614,12 @@ private:
     float wowPhase = 0.0f;
     float flutterPhase = 0.0f;
     float tremoloPhase = 0.0f;
+    // Chorus DSP state
+    juce::AudioBuffer<float> chorusDelayBuffer;
+    int chorusDelayBufferSize = 0;
+    int chorusDelayWritePos = 0;
+    float chorusLfoPhase = 0.0f;
+    static constexpr double kMaxChorusDelayMs = 30.0; // max modulated delay for chorus
     // Ducking envelope state
     float duckEnv = 0.0f;
     float duckAttackCoeff = 0.0f;

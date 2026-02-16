@@ -43,6 +43,7 @@ enum class ModifierType
     BufferTremolo,
     BufferDelayDubBurst,
     BufferDuckingOn,
+    BufferChorusOn,
 
     // Master FX modifiers
     MasterHighPassOn,
@@ -89,6 +90,10 @@ struct ModifierDescriptor
     std::optional<int> plannedBurstBars;         // e.g., 1, 2, 4
     // For temporary global filters: choose whether to jump immediately to target, then ramp back
     std::optional<bool> plannedImmediateJump;    // true: jump to target then ramp back; false: ramp up then ramp down
+    // Chorus parameters (set by scheduler variant randomization)
+    std::optional<double> plannedChorusDepth;     // 0.0..1.0 modulation depth
+    std::optional<double> plannedChorusRateHz;    // LFO rate in Hz
+    std::optional<double> plannedChorusMix;       // wet/dry mix 0.0..1.0
     // For PingPong: musical note division for oscillation (e.g., 1.0=whole, 0.5=half, 0.25=quarter, 0.125=eighth, 0.0625=sixteenth)
     std::optional<double> plannedPingPongDivision; // Musical division in bars
 };

@@ -216,6 +216,9 @@ struct AppState : public ModifierSchedulerListener
             case ModifierType::BufferTremolo:
                 applyBufferTremoloOn(targets);
                 break;
+            case ModifierType::BufferChorusOn:
+                applyBufferChorusOn(desc, targets);
+                break;
             case ModifierType::SwitchPart:
             {
                 // Choose a different part than current and switch immediately
@@ -709,6 +712,43 @@ private:
                 auto& strip = *channelStrips[idx];
                 strip.setTremoloDepthEnvelope(strip.getFxParams().tremoloDepth, 0.0f, 1.5f);
                 strip.effects().tremoloEnabled = true; // keep on during ramp
+            }
+        }
+    }
+
+    void applyBufferChorusOn(const ModifierDescriptor& desc, const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        for (int idx : targets)
+        {
+            if (juce::isPositiveAndBelow(idx, channelStrips.size()))
+            {
+                auto& strip = *channelStrips[idx];
+                strip.effects().chorusEnabled = true;
+                // Set chorus parameters from planned values or defaults
+                float targetMix = desc.plannedChorusMix.has_value() ? (float)desc.plannedChorusMix.value() : 0.5f;
+                float depth = desc.plannedChorusDepth.has_value() ? (float)desc.plannedChorusDepth.value() : 0.5f;
+                float rateHz = desc.plannedChorusRateHz.has_value() ? (float)desc.plannedChorusRateHz.value() : 1.0f;
+                float durationBars = desc.plannedFxFadeBars.has_value() ? (float)desc.plannedFxFadeBars.value() : 1.0f;
+                strip.getMutableFxParams().chorusDepth = depth;
+                strip.getMutableFxParams().chorusRateHz = rateHz;
+                // Ramp mix from current to target over durationBars
+                strip.setChorusMixEnvelope(strip.getFxParams().chorusMix, targetMix, durationBars);
+            }
+        }
+    }
+
+    void applyBufferChorusOff(const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        for (int idx : targets)
+        {
+            if (juce::isPositiveAndBelow(idx, channelStrips.size()))
+            {
+                auto& strip = *channelStrips[idx];
+                // Ramp mix down to 0 over 2 bars; auto-disable will clear flag
+                strip.setChorusMixEnvelope(strip.getFxParams().chorusMix, 0.0f, 2.0f);
+                strip.effects().chorusEnabled = true; // keep on during ramp
             }
         }
     }

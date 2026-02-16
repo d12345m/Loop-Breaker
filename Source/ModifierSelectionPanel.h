@@ -54,6 +54,7 @@ public:
     addToggle(ModifierType::MasterHighPassOn, "Master HPF");
     // PingPong and Wow/Flutter are randomized within Delay variants; no separate toggles.
     addToggle(ModifierType::BufferTremolo, "Tremolo On");
+    addToggle(ModifierType::BufferChorusOn, "Chorus On");
     // Ducking is enabled by default; GUI toggle removed.
     // Speed variants removed; Speed is randomized at runtime.
     addToggle(ModifierType::ResetAll, "Reset");

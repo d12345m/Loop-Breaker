@@ -380,6 +380,13 @@ void ModifierScheduler::forceUpcomingVariant(ModifierType type, const juce::Stri
                 base.plannedWet = wet;
                 base.description = base.description + " -> Reverb " + juce::String((int)std::round(wet * 100.0)) + "%";
             }
+            else if (type == ModifierType::BufferChorusOn)
+            {
+                double mix = variant.getDoubleValue();
+                mix = juce::jlimit(0.0, 1.0, mix);
+                base.plannedChorusMix = mix;
+                base.description = base.description + " -> Chorus " + juce::String((int)std::round(mix * 100.0)) + "%";
+            }
             else if (type == ModifierType::BeatSliceRandom)
             {
                 base.plannedSliceDivision = variant; // expect one of division labels
@@ -471,6 +478,7 @@ ModifierDescriptor ModifierScheduler::pickRandomDescriptor() const
                 || t == ModifierType::MasterLowPassOn
                 || t == ModifierType::MasterHighPassOn
                 || t == ModifierType::BufferTremolo
+                || t == ModifierType::BufferChorusOn
                     || t == ModifierType::SwitchPart
                     || t == ModifierType::QuarterNoteBurst);
             if (!allowed) continue;
@@ -614,6 +622,27 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
             modified.plannedBurstBars = bars;
             modified.description = base.description + " -> " + juce::String(bars) + (bars == 1 ? " bar" : " bars");
         }
+    else if (base.type == ModifierType::BufferChorusOn)
+    {
+        static const double depths[] { 0.25, 0.5, 0.75, 1.0 };
+        static const double rates[]  { 0.5, 1.0, 1.5, 2.0, 3.0 };
+        static const double mixes[]  { 0.25, 0.5, 0.75, 1.0 };
+        static const double fades[]  { 0.0, 1.0, 2.0 };
+        const juce::SpinLock::ScopedLockType lock(rngLock);
+        double depth = depths[rng.nextInt((int)std::size(depths))];
+        double rate  = rates[rng.nextInt((int)std::size(rates))];
+        double mix   = mixes[rng.nextInt((int)std::size(mixes))];
+        double fadeBars = fades[rng.nextInt((int)std::size(fades))];
+        modified.plannedChorusDepth = depth;
+        modified.plannedChorusRateHz = rate;
+        modified.plannedChorusMix = mix;
+        modified.plannedFxFadeBars = fadeBars;
+        juce::String fadeLabel = fadeBars <= 0.0 ? "instant" : (fadeBars == 1.0 ? "1 bar" : juce::String((int)fadeBars) + " bars");
+        modified.description = base.description + " -> Chorus "
+            + juce::String((int)std::round(mix * 100.0)) + "% | depth "
+            + juce::String(depth, 2) + " | "
+            + juce::String(rate, 1) + "Hz | " + fadeLabel;
+    }
     return modified;
 }
 

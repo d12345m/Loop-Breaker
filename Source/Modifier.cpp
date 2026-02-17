@@ -86,6 +86,7 @@ juce::OwnedArray<IModifier> ModifierFactory::createAllPrototypes()
     add(ModifierType::BufferVolumeRampDown, ModifierCategory::BufferEffect, "FadeDn", "Volume ramp down");
     add(ModifierType::BufferTremolo, ModifierCategory::BufferEffect, "Trem On", "Tremolo modulation");
     add(ModifierType::BufferChorusOn, ModifierCategory::BufferEffect, "Chorus On", "Chorus modulation (random depth/rate/mix)");
+    add(ModifierType::BufferAutoPan, ModifierCategory::BufferEffect, "Auto-Pan", "LFO-driven stereo panning");
 
     // Master FX
     add(ModifierType::MasterHighPassOn, ModifierCategory::MasterEffect, "Master HPF", "Master high pass on");

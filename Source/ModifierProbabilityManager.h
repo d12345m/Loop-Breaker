@@ -123,6 +123,7 @@ public:
             case ModifierType::BufferVolumeRampDown:return "Volume Ramp Down";
             case ModifierType::BufferTremolo:       return "Tremolo";
             case ModifierType::BufferChorusOn:       return "Chorus";
+            case ModifierType::BufferAutoPan:         return "Auto-Pan";
             case ModifierType::BufferDuckingOn:     return "Ducking";
             case ModifierType::MasterHighPassOn:    return "Master High-Pass";
             case ModifierType::MasterLowPassOn:     return "Master Low-Pass";
@@ -155,6 +156,7 @@ public:
             case ModifierType::BufferVolumeRampDown:
             case ModifierType::BufferTremolo:
             case ModifierType::BufferChorusOn:
+            case ModifierType::BufferAutoPan:
             case ModifierType::BufferDuckingOn:
                 return "Channel Effect";
 
@@ -194,6 +196,7 @@ public:
             ModifierType::BufferVolumeRampDown,
             ModifierType::BufferTremolo,
             ModifierType::BufferChorusOn,
+            ModifierType::BufferAutoPan,
             ModifierType::BufferDuckingOn,
             // Master FX
             ModifierType::MasterHighPassOn,

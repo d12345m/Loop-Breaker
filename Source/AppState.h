@@ -219,6 +219,9 @@ struct AppState : public ModifierSchedulerListener
             case ModifierType::BufferChorusOn:
                 applyBufferChorusOn(desc, targets);
                 break;
+            case ModifierType::BufferAutoPan:
+                applyBufferAutoPan(desc, targets);
+                break;
             case ModifierType::SwitchPart:
             {
                 // Choose a different part than current and switch immediately
@@ -753,6 +756,45 @@ private:
         }
     }
 
+    void applyBufferAutoPan(const ModifierDescriptor& desc, const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        const double spbar = settings.getSecondsPerBar();
+        for (int idx : targets)
+        {
+            if (juce::isPositiveAndBelow(idx, channelStrips.size()))
+            {
+                auto& strip = *channelStrips[idx];
+                strip.effects().autoPanEnabled = true;
+                float targetMix = desc.plannedPanMix.has_value() ? (float)desc.plannedPanMix.value() : 0.5f;
+                float depth = desc.plannedPanDepth.has_value() ? (float)desc.plannedPanDepth.value() : 1.0f;
+                float rateHz = desc.plannedPanRateHz.has_value() ? (float)desc.plannedPanRateHz.value() : 2.0f;
+                float durationBars = desc.plannedFxFadeBars.has_value() ? (float)desc.plannedFxFadeBars.value() : 1.0f;
+                strip.getMutableFxParams().panDepth = depth;
+                strip.getMutableFxParams().panRateHz = rateHz;
+                // Store period in bars for BPM resync (derive from rate and current tempo)
+                if (spbar > 0.0 && rateHz > 0.0f)
+                    strip.getMutableFxParams().panPeriodBars = (float)(1.0 / (rateHz * spbar));
+                // Ramp mix from current to target
+                strip.setPanMixEnvelope(strip.getFxParams().panMix, targetMix, durationBars);
+            }
+        }
+    }
+
+    void applyBufferAutoPanOff(const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        for (int idx : targets)
+        {
+            if (juce::isPositiveAndBelow(idx, channelStrips.size()))
+            {
+                auto& strip = *channelStrips[idx];
+                strip.setPanMixEnvelope(strip.getFxParams().panMix, 0.0f, 2.0f);
+                strip.effects().autoPanEnabled = true; // keep on during ramp
+            }
+        }
+    }
+
     void applyBufferDuckingOn(const juce::Array<int>& targets)
     {
         if (targets.isEmpty()) return;
@@ -805,6 +847,12 @@ public:
                 const double flutterHz = spbar > 0.0 ? (1.0 / (spbar * flutterBars)) : 0.5;
                 strip.getMutableFxParams().wowRateHz = (float) wowHz;
                 strip.getMutableFxParams().flutterRateHz = (float) flutterHz;
+            }
+            // Auto-pan: recompute rateHz from stored periodBars
+            if (strip.effects().autoPanEnabled && strip.getFxParams().panPeriodBars > 0.0f)
+            {
+                const double rateHz = spbar > 0.0 ? (1.0 / (spbar * strip.getFxParams().panPeriodBars)) : 2.0;
+                strip.getMutableFxParams().panRateHz = (float) rateHz;
             }
         }
     }

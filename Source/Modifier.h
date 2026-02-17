@@ -44,6 +44,7 @@ enum class ModifierType
     BufferDelayDubBurst,
     BufferDuckingOn,
     BufferChorusOn,
+    BufferAutoPan,
 
     // Master FX modifiers
     MasterHighPassOn,
@@ -94,6 +95,10 @@ struct ModifierDescriptor
     std::optional<double> plannedChorusDepth;     // 0.0..1.0 modulation depth
     std::optional<double> plannedChorusRateHz;    // LFO rate in Hz
     std::optional<double> plannedChorusMix;       // wet/dry mix 0.0..1.0
+    // Auto-pan parameters
+    std::optional<double> plannedPanRateHz;       // LFO rate in Hz (tempo-synced)
+    std::optional<double> plannedPanDepth;        // 0.0..1.0 how far L/R the pan sweeps
+    std::optional<double> plannedPanMix;          // 0.0..1.0 wet/dry blend (0 = bypass)
     // For PingPong: musical note division for oscillation (e.g., 1.0=whole, 0.5=half, 0.25=quarter, 0.125=eighth, 0.0625=sixteenth)
     std::optional<double> plannedPingPongDivision; // Musical division in bars
 };

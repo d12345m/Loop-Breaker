@@ -35,15 +35,16 @@ public:
                 + (fx.lowPassEnabled ? "LPF " : "")
                 + (fx.highPassEnabled ? "HPF " : "")
                 + (fx.tremoloEnabled ? "Trem " : "")
-                + (fx.chorusEnabled ? "Chorus " : "");
+                + (fx.chorusEnabled ? "Chorus " : "")
+                + (fx.autoPanEnabled ? "Pan " : "");
             auto row = area.removeFromTop(lineH);
             g.setColour(Theme::textSubtle());
             g.drawText(line, row, juce::Justification::centredLeft);
             // Params line
-            juce::String p = juce::String::formatted(" rvb=%.2f pd=%.0fms fb=%.2f lpf=%.0f hpf=%.0f trem=%.2f chor=%.2f",
+            juce::String p = juce::String::formatted(" rvb=%.2f pd=%.0fms fb=%.2f lpf=%.0f hpf=%.0f trem=%.2f chor=%.2f pan=%.2f",
                                                      params.reverbWet, params.reverbPreDelayMs, params.delayFeedback,
                                                      params.lowPassCutoff, params.highPassCutoff,
-                                                     params.tremoloDepth, params.chorusMix);
+                                                     params.tremoloDepth, params.chorusMix, params.panMix);
             g.drawText(p, row.withX(row.getX()+180), juce::Justification::centredLeft);
         }
     }

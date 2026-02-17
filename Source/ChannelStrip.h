@@ -21,8 +21,9 @@ struct EffectChainPlaceholder
     bool highPassEnabled = false;
     bool tremoloEnabled = false;
     bool chorusEnabled = false;
+    bool autoPanEnabled = false;
 
-    void reset() { delayEnabled = reverbEnabled = lowPassEnabled = highPassEnabled = tremoloEnabled = chorusEnabled = false; }
+    void reset() { delayEnabled = reverbEnabled = lowPassEnabled = highPassEnabled = tremoloEnabled = chorusEnabled = autoPanEnabled = false; }
 };
 
 class ChannelStrip
@@ -294,6 +295,44 @@ public:
             }
         }
 
+        // --- Auto-Pan Processing (LFO-driven L/R gain) ---
+        if (effects().autoPanEnabled && numChannels >= 2)
+        {
+            const float mix = juce::jlimit(0.0f, 1.0f, params.panMix);
+            const float depth = juce::jlimit(0.0f, 1.0f, params.panDepth);
+            const float lfoInc = (float)(2.0 * juce::MathConstants<double>::pi * juce::jmax(0.01f, params.panRateHz) / juce::jmax(1.0, lastSampleRate));
+
+            auto* dataL = tempBuffer.getWritePointer(0);
+            auto* dataR = tempBuffer.getWritePointer(1);
+
+            for (int i = 0; i < numSamples; ++i)
+            {
+                // Sine LFO: positive half → right, negative half → left
+                float lfoVal = std::sin(panLfoPhase); // -1..+1
+
+                // Constant-power panning: 0.5 + 0.5*lfo gives 0..1 range
+                float panPos = 0.5f + 0.5f * lfoVal * depth; // 0..1 (0=full L, 1=full R)
+
+                // Constant-power gains using sin/cos quarter-cycle
+                float gainL = std::cos(panPos * juce::MathConstants<float>::halfPi);
+                float gainR = std::sin(panPos * juce::MathConstants<float>::halfPi);
+
+                // Blend panned signal with dry (centre) signal
+                float dryL = dataL[i];
+                float dryR = dataR[i];
+                float mono = (dryL + dryR) * 0.5f;
+                float wetL = mono * gainL;
+                float wetR = mono * gainR;
+
+                dataL[i] = dryL * (1.0f - mix) + wetL * mix;
+                dataR[i] = dryR * (1.0f - mix) + wetR * mix;
+
+                panLfoPhase += lfoInc;
+                if (panLfoPhase > juce::MathConstants<float>::twoPi)
+                    panLfoPhase -= juce::MathConstants<float>::twoPi;
+            }
+        }
+
         // --- Reverb Processing (continued) ---
         if (!effects().reverbEnabled)
             return; // skip reverb portion if disabled (delay may still have processed)
@@ -432,6 +471,11 @@ public:
         float chorusRateHz = 1.0f;   // LFO rate
         float chorusMix = 0.5f;      // wet/dry mix (0..1)
         float chorusDelayMs = 7.0f;  // base delay for chorus modulation (ms)
+        // Auto-pan
+        float panRateHz = 2.0f;      // LFO rate (tempo-synced)
+        float panDepth = 1.0f;       // 0..1 how far L/R the sweep goes
+        float panMix = 0.5f;         // 0..1 wet/dry (0 = bypass)
+        float panPeriodBars = 0.0f;  // musical period in bars (for BPM resync)
     };
 
     void reset()
@@ -446,6 +490,7 @@ public:
         highPassCutoffEnv = {};
         tremoloDepthEnv = {};
         chorusMixEnv = {};
+        panMixEnv = {};
         if (buffer) buffer->resetToDefaults();
     }
 
@@ -491,6 +536,11 @@ public:
     void setChorusMixEnvelope(float start, float target, float durationBars)
     {
         chorusMixEnv = { start, target, durationBars, 0.0f, EffectEnvelope::Curve::Linear };
+    }
+
+    void setPanMixEnvelope(float start, float target, float durationBars)
+    {
+        panMixEnv = { start, target, durationBars, 0.0f, EffectEnvelope::Curve::Linear };
     }
 
     // Advance envelopes by given bars; update current parameter values
@@ -550,6 +600,12 @@ public:
         // Auto-disable chorus when mix reaches zero and no active envelope
         if (chain.chorusEnabled && !chorusMixEnv.isActive() && params.chorusMix <= 0.0001f)
             chain.chorusEnabled = false;
+        // Pan mix
+        params.panMix = panMixEnv.isActive() ? panMixEnv.current(params.panMix) : params.panMix;
+        if (panMixEnv.isActive()) panMixEnv.advance(barsDelta);
+        // Auto-disable auto-pan when mix reaches zero and no active envelope
+        if (chain.autoPanEnabled && !panMixEnv.isActive() && params.panMix <= 0.0001f)
+            chain.autoPanEnabled = false;
     }
 
     const FxParams& getFxParams() const { return params; }
@@ -567,6 +623,7 @@ private:
     EffectEnvelope highPassCutoffEnv;
     EffectEnvelope tremoloDepthEnv;
     EffectEnvelope chorusMixEnv;
+    EffectEnvelope panMixEnv;
     juce::dsp::Reverb reverb;
     juce::dsp::Limiter<float> limiter;
     bool reverbPrepared = false;
@@ -620,6 +677,8 @@ private:
     int chorusDelayWritePos = 0;
     float chorusLfoPhase = 0.0f;
     static constexpr double kMaxChorusDelayMs = 30.0; // max modulated delay for chorus
+    // Auto-pan LFO
+    float panLfoPhase = 0.0f;
     // Ducking envelope state
     float duckEnv = 0.0f;
     float duckAttackCoeff = 0.0f;

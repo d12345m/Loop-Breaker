@@ -387,6 +387,13 @@ void ModifierScheduler::forceUpcomingVariant(ModifierType type, const juce::Stri
                 base.plannedChorusMix = mix;
                 base.description = base.description + " -> Chorus " + juce::String((int)std::round(mix * 100.0)) + "%";
             }
+            else if (type == ModifierType::BufferAutoPan)
+            {
+                double mix = variant.getDoubleValue();
+                mix = juce::jlimit(0.0, 1.0, mix);
+                base.plannedPanMix = mix;
+                base.description = base.description + " -> Pan " + juce::String((int)std::round(mix * 100.0)) + "%";
+            }
             else if (type == ModifierType::BeatSliceRandom)
             {
                 base.plannedSliceDivision = variant; // expect one of division labels
@@ -479,6 +486,7 @@ ModifierDescriptor ModifierScheduler::pickRandomDescriptor() const
                 || t == ModifierType::MasterHighPassOn
                 || t == ModifierType::BufferTremolo
                 || t == ModifierType::BufferChorusOn
+                || t == ModifierType::BufferAutoPan
                     || t == ModifierType::SwitchPart
                     || t == ModifierType::QuarterNoteBurst);
             if (!allowed) continue;
@@ -642,6 +650,37 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
             + juce::String((int)std::round(mix * 100.0)) + "% | depth "
             + juce::String(depth, 2) + " | "
             + juce::String(rate, 1) + "Hz | " + fadeLabel;
+    }
+    else if (base.type == ModifierType::BufferAutoPan)
+    {
+        // Musical divisions: 1/4 note = 0.25 bars, 1/2 note, 1 bar, 2 bars
+        static const double divBars[] { 0.25, 0.5, 1.0, 2.0 };
+        static const double depths[] { 0.5, 0.75, 1.0 };
+        static const double mixes[]  { 0.5, 0.75, 1.0 };
+        static const double fades[]  { 0.0, 1.0, 2.0 };
+        const juce::SpinLock::ScopedLockType lock(rngLock);
+        double divisionBars = divBars[rng.nextInt((int)std::size(divBars))];
+        double depth = depths[rng.nextInt((int)std::size(depths))];
+        double mix   = mixes[rng.nextInt((int)std::size(mixes))];
+        double fadeBars = fades[rng.nextInt((int)std::size(fades))];
+        // Convert division in bars to rateHz using current BPM
+        double spbar = settings.getSecondsPerBar();
+        double rateHz = (spbar > 0.0 && divisionBars > 0.0) ? (1.0 / (spbar * divisionBars)) : 2.0;
+        modified.plannedPanRateHz = rateHz;
+        modified.plannedPanDepth = depth;
+        modified.plannedPanMix = mix;
+        modified.plannedFxFadeBars = fadeBars;
+        // Build description with musical division label
+        juce::String divLabel;
+        if (divisionBars <= 0.25) divLabel = "1/4 note";
+        else if (divisionBars <= 0.5) divLabel = "1/2 note";
+        else if (divisionBars <= 1.0) divLabel = "1 bar";
+        else divLabel = juce::String((int)divisionBars) + " bars";
+        juce::String fadeLabel2 = fadeBars <= 0.0 ? "instant" : (fadeBars == 1.0 ? "1 bar" : juce::String((int)fadeBars) + " bars");
+        modified.description = base.description + " -> Pan "
+            + juce::String((int)std::round(mix * 100.0)) + "% | depth "
+            + juce::String(depth, 2) + " | "
+            + divLabel + " | " + fadeLabel2;
     }
     return modified;
 }

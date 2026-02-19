@@ -1,8 +1,8 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "PluginProcessor.h"
 
-class BufferTestAudioProcessor;
 class ModifierProbabilityPanel;
 class DebugPanelContent;
 
@@ -22,6 +22,8 @@ private:
     std::unique_ptr<ModifierProbabilityPanel> probabilityPanel;
     std::unique_ptr<DebugPanelContent> debugPanel;
     std::unique_ptr<juce::TabbedComponent> tabComponent;
+
+    MOONBASE_DECLARE_AND_INIT_ACTIVATION_UI (processor);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BufferTestAudioProcessorEditor)
 };

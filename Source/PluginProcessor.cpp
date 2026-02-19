@@ -144,6 +144,8 @@ void BufferTestAudioProcessor::changeProgramName (int, const juce::String&)
 
 void BufferTestAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    MOONBASE_PREPARE_TO_PLAY (sampleRate, samplesPerBlock);
+
     app.bufferManager.prepare(sampleRate, samplesPerBlock);
 
     // Set a grace period to ignore transport-stop signals that may occur during bus reconfig.
@@ -622,6 +624,8 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
         }
         app.advanceFxEnvelopes(blockSeconds);
     }
+
+    MOONBASE_PROCESS (buffer);
 }
 
 bool BufferTestAudioProcessor::hasEditor() const

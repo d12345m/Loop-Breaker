@@ -601,4 +601,6 @@ void BufferTestAudioProcessorEditor::resized()
 {
     if (tabComponent)
         tabComponent->setBounds(getLocalBounds());
+
+    MOONBASE_RESIZE_ACTIVATION_UI
 }

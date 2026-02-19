@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <JUCERPROJECT id="vFjAY7" name="TestPlugin" projectType="audioplug" useAppConfig="0"
-              addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1" pluginName="TestPlugin"
-              pluginDesc="TestPlugin" pluginManufacturer="GlowMachineAudio" pluginManufacturerCode="GloM"
-              pluginCode="TsPl" pluginIsSynth="0" pluginWantsMidiIn="1" pluginProducesMidiOut="0"
-              pluginIsMidiEffectPlugin="0" pluginEditorRequiresKeys="0" pluginAUExportPrefix="TestPluginAU"
+              addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1" companyName="GlowMachineAudio"
+              pluginName="TestPlugin"
+              pluginDesc="TestPlugin" pluginManufacturer="GlowMachineAudio"
+              pluginManufacturerCode="GloM" pluginCode="TsPl" pluginIsSynth="0"
+              pluginWantsMidiIn="1" pluginProducesMidiOut="0" pluginIsMidiEffectPlugin="0"
+              pluginEditorRequiresKeys="0" pluginAUExportPrefix="TestPluginAU"
               pluginAAXIdentifier="com.glowmachineaudio.TestPlugin" pluginRTASCategory=""
               pluginVSTCategory="kPlugCategEffect" pluginVST3Category="Fx"
               pluginFormats="buildVST3" pluginCharacteristicsValue="pluginWantsMidiIn">
@@ -59,6 +61,10 @@
       <FILE id="modifierSchedulerTests" name="ModifierSchedulerTests.cpp"
             compile="1" resource="0" file="Source/ModifierSchedulerTests.cpp"/>
     </GROUP>
+    <GROUP id="{MOONBASE_RES}" name="Resources">
+      <FILE id="moonbaseConfig" name="moonbase_api_config.json" compile="0"
+            resource="1" file="Resources/moonbase_api_config.json"/>
+    </GROUP>
   </MAINGROUP>
   <MODULES>
     <MODULE id="juce_audio_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
@@ -69,21 +75,24 @@
     <MODULE id="juce_audio_processors" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_audio_utils" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_core" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_cryptography" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_data_structures" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_dsp" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_events" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_graphics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_gui_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_gui_extra" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_product_unlocking" showAllCode="1" useLocalCopy="0"
+            useGlobalPath="1"/>
+    <MODULE id="moonbase_JUCEClient" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
   </MODULES>
   <JUCEOPTIONS JUCE_STRICT_REFCOUNTEDPOINTER="1"/>
   <EXPORTFORMATS>
-    <XCODE_MAC targetFolder="Builds/MacOSX" bundleIdentifier="com.glowmachineaudio.TestPlugin">
+    <XCODE_MAC targetFolder="Builds/MacOSX" bundleIdentifier="com.glowmachineaudio.TestPlugin"
+              extraCompilerFlags="-I$(SRCROOT)/../../Submodules">
       <CONFIGURATIONS>
-        <CONFIGURATION isDebug="1" name="Debug" defines="JUCE_UNIT_TESTS=1"
-                       headerPath="$(SRCROOT)/../../ThirdParty/soundtouch/include"/>
-        <CONFIGURATION isDebug="0" name="Release"
-                       headerPath="$(SRCROOT)/../../ThirdParty/soundtouch/include"/>
+        <CONFIGURATION isDebug="1" name="Debug" defines="JUCE_UNIT_TESTS=1" headerPath="$(SRCROOT)/../../ThirdParty/soundtouch/include"/>
+        <CONFIGURATION isDebug="0" name="Release" headerPath="$(SRCROOT)/../../ThirdParty/soundtouch/include"/>
       </CONFIGURATIONS>
       <MODULEPATHS>
         <MODULEPATH id="juce_audio_basics" path="/Users/derekmiller/JUCE/modules"/>
@@ -99,6 +108,9 @@
         <MODULEPATH id="juce_graphics" path="/Users/derekmiller/JUCE/modules"/>
         <MODULEPATH id="juce_gui_basics" path="/Users/derekmiller/JUCE/modules"/>
         <MODULEPATH id="juce_gui_extra" path="/Users/derekmiller/JUCE/modules"/>
+        <MODULEPATH id="juce_product_unlocking" path="/Users/derekmiller/JUCE/modules"/>
+        <MODULEPATH id="moonbase_JUCEClient" path="/Users/derekmiller/Documents/JUCE/BufferTest/Submodules"/>
+        <MODULEPATH id="juce_cryptography" path="../../../JUCE/modules"/>
       </MODULEPATHS>
     </XCODE_MAC>
   </EXPORTFORMATS>

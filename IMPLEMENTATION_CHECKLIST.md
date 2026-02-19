@@ -310,21 +310,22 @@ Third-party alternatives popular in the JUCE community:
 | **Gumroad**                            | Simple storefront + payments. No native plugin licensing — pair with JUCE's `OnlineUnlockStatus`.                                                                                                    | 10% flat per sale                                                |
 | **Roll your own**                      | JUCE `OnlineUnlockStatus` + simple web backend + Stripe for payments                                                                                                                                 | Stripe fees (~2.9% + $0.30)                                      |
 
-Decision needed: choose between Moonbase (turnkey) vs roll-your-own (JUCE built-in + custom server + Stripe).
+**Decision (2026-02-18): Use [Moonbase.sh](https://moonbase.sh) as the licensing, storefront, and payment provider.** Rationale: turnkey end-to-end solution (storefront, RSA-signed license tokens, online/offline activation, trials, Merchant of Record with VAT handling). Free tier is sufficient during development. Avoids building and hosting a custom server backend.
 
-- [ ] Decide licensing strategy: Moonbase.sh (turnkey) vs JUCE `OnlineUnlockStatus` + custom server vs other
-- [ ] If roll-your-own: implement server backend for license validation (PHP/Node/Python)
-- [ ] If roll-your-own: generate RSA key pair using JUCE `KeyGeneration`, embed public key in plugin
-- [ ] If Moonbase: integrate Moonbase SDK, set up storefront & product
-- [ ] Implement `OnlineUnlockStatus` subclass in plugin (or equivalent from chosen provider)
-- [ ] Add registration/unlock UI overlay in plugin editor (use `OnlineUnlockForm` or custom)
-- [ ] Trial mode support (time-limited or feature-limited demo)
-- [ ] Test license flow: purchase → activate → offline use → machine transfer → revoke
+- [x] Decide licensing strategy → **Moonbase.sh**
+- [ ] Create Moonbase account & set up product for BufferTest
+- [ ] Integrate Moonbase SDK into the plugin (license validation on startup)
+- [ ] Implement in-plugin activation UI (email/key entry overlay in plugin editor)
+- [ ] Support offline license activation (Moonbase RSA-signed tokens)
+- [ ] Configure trial mode in Moonbase (time-limited or feature-limited demo)
+- [ ] Test full license flow: purchase → activate → offline use → machine transfer → revoke
+- [ ] Handle license failure gracefully in plugin (locked/demo state, no crash, clear messaging)
 
 ### 18c. Purchase Flow & Distribution
 
-- [ ] Set up web store (Moonbase storefront, Gumroad, or custom site + Stripe)
-- [ ] Distribution: host downloadable installers (own site, Moonbase hosting, or GitHub Releases)
+- [ ] Set up Moonbase storefront (product page, pricing variations, discount/upgrade rules)
+- [ ] Configure Moonbase payment processing (pricing in USD/EUR, subscription vs lifetime options)
+- [ ] Host downloadable installers via Moonbase hosting (or own site with Moonbase handling licensing)
 - [ ] Auto-update mechanism (future — evaluate Sparkle on macOS, WinSparkle on Windows, or manual check)
 
 ### 18d. JUCE License for This Project

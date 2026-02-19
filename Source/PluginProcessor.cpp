@@ -1,6 +1,35 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+// ---------------------------------------------------------------------------
+// Build the APVTS parameter layout – one AudioParameterFloat per modifier type
+// ---------------------------------------------------------------------------
+juce::AudioProcessorValueTreeState::ParameterLayout
+BufferTestAudioProcessor::createParamLayout()
+{
+    std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
+    const auto& types = ModifierProbabilityManager::allModifierTypes();
+    for (auto type : types)
+    {
+        const juce::String id   = "prob_" + juce::String (static_cast<int> (type));
+        const juce::String name = ModifierProbabilityManager::getDisplayName (type) + " Probability";
+        params.push_back (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { id, 1 },
+            name,
+            juce::NormalisableRange<float> (0.0f, 1.0f),   // continuous – full MIDI CC resolution
+            1.0f,                                           // default: max probability
+            juce::AudioParameterFloatAttributes{}
+                .withLabel ("%")
+                .withStringFromValueFunction ([](float v, int) {
+                    const int pct = juce::roundToInt (v * 100.0f);
+                    return pct <= 0 ? juce::String ("OFF")
+                                    : juce::String (pct) + "%";
+                })
+        ));
+    }
+    return { params.begin(), params.end() };
+}
+
 BufferTestAudioProcessor::BufferTestAudioProcessor()
         : juce::AudioProcessor (BusesProperties()
                                                      #if ! JucePlugin_IsMidiEffect
@@ -20,6 +49,7 @@ BufferTestAudioProcessor::BufferTestAudioProcessor()
                                                          .withOutput ("Ch8",  juce::AudioChannelSet::stereo(), true)
                                                      #endif
                                                          )
+        , apvts (*this, nullptr, "BufferTestParams", createParamLayout())
 {
     formatManager.registerBasicFormats();
 }
@@ -256,7 +286,54 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                     }
                 }
             }
+
+            // MIDI CC: control modifier probability sliders
+            if (msg.isController())
+            {
+                const int   cc        = msg.getControllerNumber();
+                const float normValue = msg.getControllerValue() / 127.0f;
+
+                const int learnIdx = midiCCLearnParamIndex.load();
+                if (learnIdx >= 0)
+                {
+                    // CC learn mode: record which CC was moved and assign it
+                    const auto& types = ModifierProbabilityManager::allModifierTypes();
+                    if (learnIdx < static_cast<int> (types.size()))
+                    {
+                        app.settings.midiProbCCMap[learnIdx] = cc;
+                        learnedMidiCC.store (cc);             // signals the UI
+                        midiCCLearnParamIndex.store (-1);     // exit learn mode
+                    }
+                }
+                else
+                {
+                    // Normal operation: look up the CC in the map and update the matching param
+                    const auto& types = ModifierProbabilityManager::allModifierTypes();
+                    for (int idx = 0; idx < static_cast<int> (types.size()); ++idx)
+                    {
+                        if (app.settings.midiProbCCMap[idx] == cc)
+                        {
+                            const juce::String paramId = "prob_" + juce::String (static_cast<int> (types[idx]));
+                            if (auto* param = apvts.getParameter (paramId))
+                                param->setValueNotifyingHost (normValue);
+                            break;
+                        }
+                    }
+                }
+            }
+
             // Note-off is ignored in toggle mode
+        }
+    }
+
+    // Sync APVTS parameter values → probManager (trivial: 22 atomic float reads per block)
+    {
+        const auto& types = ModifierProbabilityManager::allModifierTypes();
+        for (auto type : types)
+        {
+            const juce::String id = "prob_" + juce::String (static_cast<int> (type));
+            if (auto* rawVal = apvts.getRawParameterValue (id))
+                app.settings.modifierProbabilities.setWeight (type, rawVal->load());
         }
     }
 
@@ -651,8 +728,28 @@ void BufferTestAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
         pads.add(app.settings.padFilePaths[i]);
     obj->setProperty("pads", juce::var(pads));
 
-    // Modifier probability weights
-    obj->setProperty("modProbs", app.settings.modifierProbabilities.toVar());
+    // Modifier probability weights – read directly from APVTS (source of truth)
+    {
+        auto* proObj = new juce::DynamicObject();
+        const auto& types = ModifierProbabilityManager::allModifierTypes();
+        for (auto type : types)
+        {
+            const juce::String id = "prob_" + juce::String (static_cast<int> (type));
+            if (auto* rawVal = apvts.getRawParameterValue (id))
+                proObj->setProperty (juce::Identifier ("t" + juce::String (static_cast<int> (type))),
+                                     static_cast<double> (rawVal->load()));
+        }
+        obj->setProperty ("modProbs", juce::var (proObj));
+    }
+
+    // MIDI CC mappings for probability sliders
+    {
+        juce::Array<juce::var> ccArr;
+        ccArr.ensureStorageAllocated (SessionSettings::kNumModifierTypes);
+        for (int i = 0; i < SessionSettings::kNumModifierTypes; ++i)
+            ccArr.add (app.settings.midiProbCCMap[i]);
+        obj->setProperty ("midiProbCC", juce::var (ccArr));
+    }
 
     // Session settings
     obj->setProperty("bpm", app.settings.bpm);
@@ -714,7 +811,34 @@ void BufferTestAudioProcessor::setStateInformation (const void* data, int sizeIn
 
     // Restore modifier probability weights
     if (obj->hasProperty("modProbs"))
+    {
         app.settings.modifierProbabilities.fromVar(obj->getProperty("modProbs"));
+
+        // Push restored values into the APVTS so sliders and DAW automation are in sync
+        const auto& types = ModifierProbabilityManager::allModifierTypes();
+        for (auto type : types)
+        {
+            const juce::String id = "prob_" + juce::String (static_cast<int> (type));
+            if (auto* param = apvts.getParameter (id))
+                param->setValueNotifyingHost (app.settings.modifierProbabilities.getWeight (type));
+        }
+    }
+
+    // Restore MIDI CC mappings for probability sliders
+    if (obj->hasProperty ("midiProbCC"))
+    {
+        auto ccVar = obj->getProperty ("midiProbCC");
+        if (ccVar.isArray())
+        {
+            if (auto* ccArr = ccVar.getArray())
+            {
+                const int n = juce::jmin (static_cast<int> (ccArr->size()),
+                                          SessionSettings::kNumModifierTypes);
+                for (int i = 0; i < n; ++i)
+                    app.settings.midiProbCCMap[i] = static_cast<int> (ccArr->getReference (i));
+            }
+        }
+    }
 
     // Restore session settings (v2+)
     if (obj->hasProperty("bpm"))

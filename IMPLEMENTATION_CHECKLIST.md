@@ -352,11 +352,11 @@ Rollback Plan:
 
 Goal: allow external MIDI control and DAW automation of modifier probability sliders and key parameters.
 
-- [ ] Expose modifier probability sliders as automatable plugin parameters (AudioProcessorValueTreeState or equivalent)
-- [ ] Add MIDI CC mapping to probability sliders (enable MIDI faders, knobs, LFOs to control probabilities)
-- [ ] Define MIDI learn workflow for probability controls (click control → move MIDI CC → mapped)
-- [ ] Ensure MIDI-driven parameter changes are thread-safe and applied on the audio thread
-- [ ] Document supported MIDI CC ranges and default mappings
+- [x] Expose modifier probability sliders as automatable plugin parameters (`AudioProcessorValueTreeState` with one `AudioParameterFloat` per modifier type, IDs `prob_N`)
+- [x] Add MIDI CC mapping to probability sliders (enable MIDI faders, knobs, LFOs to control probabilities) — CC→param map stored in `SessionSettings::midiProbCCMap`, handled in `processBlock`
+- [x] Define MIDI learn workflow for probability controls — click CC button on Modifiers tab, move a hardware/software CC; click again to cancel; right-click to clear
+- [x] Ensure MIDI-driven parameter changes are thread-safe and applied on the audio thread — APVTS atomics used throughout; APVTS values synced → `probManager` each block
+- [ ] Document supported MIDI CC ranges and default mappings (CC 0-127, all unassigned by default)
 - [ ] Test with common DAW automation lanes and external MIDI controllers
 
 ---
@@ -394,3 +394,5 @@ Add clarifications inline as decisions are made.
 
 - 2026-02-09: Pivot decision: prioritize VST3 plugin target; added checklist sections for VST enablement, multi-output routing, and drag-and-drop sample loading.
 - 2026-02-18: Added items: plugin window modifier behavior (suppress when editor closed), pitch shift artifact investigation & range limits, MIDI CC / automation for probability sliders, documentation & attribution section, installer / licensing / distribution items, UI enhancement goals (custom styles, loop circle, header layout, modifier naming).
+
+- 2026-02-19: Implemented MIDI CC control for modifier probability sliders (Section 22). Added `AudioProcessorValueTreeState` to `PluginProcessor` exposing all 22 modifier probability parameters for DAW automation. Added MIDI CC learn per slider in the Modifiers tab (click CC button → move hardware/software CC → auto-mapped; right-click to clear). CC assignments persisted in plugin state JSON. `processBlock` syncs CC→APVTS→probManager on audio thread.

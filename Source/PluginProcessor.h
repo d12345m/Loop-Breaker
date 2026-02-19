@@ -2,6 +2,7 @@
 
 #include <JuceHeader.h>
 #include "AppState.h"
+#include "ModifierProbabilityManager.h"
 
 class BufferTestAudioProcessor : public juce::AudioProcessor
 {
@@ -60,7 +61,7 @@ public:
         return midiPadToggleRequests[padIndex].exchange(false);
     }
 
-    // MIDI learn mode
+    // MIDI learn mode (pad notes)
     void setMidiLearnMode(bool enabled, int padIndex = -1)
     {
         midiLearnEnabled.store(enabled);
@@ -74,6 +75,26 @@ public:
     int checkAndClearLearnedNote()
     {
         return learnedMidiNote.exchange(-1);
+    }
+
+    // APVTS – exposes probability sliders as automatable plugin parameters
+    juce::AudioProcessorValueTreeState& getAPVTS() { return apvts; }
+
+    // MIDI CC learn for probability sliders
+    // paramIndex = index into ModifierProbabilityManager::allModifierTypes(), -1 = cancel
+    void setMidiCCLearnMode(int paramIndex)
+    {
+        midiCCLearnParamIndex.store(paramIndex);
+    }
+
+    int getMidiCCLearnParamIndex() const { return midiCCLearnParamIndex.load(); }
+    bool isMidiCCLearnActive() const    { return midiCCLearnParamIndex.load() >= 0; }
+
+    // Returns the CC# just assigned via learn (-1 if none), clears the pending value.
+    // Call from UI thread only.
+    int checkAndClearLearnedCC()
+    {
+        return learnedMidiCC.exchange(-1);
     }
 
     enum class HostTransportState : int
@@ -101,6 +122,10 @@ public:
     }
 
 private:
+    // APVTS must be declared before AppState so its parameters exist before
+    // any scheduler or UI component tries to reference them.
+    juce::AudioProcessorValueTreeState apvts;
+
     AppState app;
     juce::AudioFormatManager formatManager;
 
@@ -143,6 +168,12 @@ private:
     std::atomic<bool> midiLearnEnabled { false };
     std::atomic<int> midiLearnPadIndex { -1 };
     std::atomic<int> learnedMidiNote { -1 };
+
+    // MIDI CC learn state for modifier probability sliders
+    std::atomic<int> midiCCLearnParamIndex { -1 }; // which param index is being learned
+    std::atomic<int> learnedMidiCC { -1 };          // the CC# just captured (UI polls & clears)
+
+    static juce::AudioProcessorValueTreeState::ParameterLayout createParamLayout();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BufferTestAudioProcessor)
 };

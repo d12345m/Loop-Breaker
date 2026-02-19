@@ -53,6 +53,16 @@ struct SessionSettings
     // MIDI note mappings (per pad). -1 means unassigned. Defaults to General MIDI drum map (36-43)
     std::array<int, 8> midiNoteMap { 36, 37, 38, 39, 40, 41, 42, 43 };
 
+    // MIDI CC mappings for modifier probability sliders.
+    // Index i corresponds to ModifierProbabilityManager::allModifierTypes()[i].
+    // Value is CC number (0-127), or -1 if unassigned.
+    static constexpr int kNumModifierTypes = 22;
+    std::array<int, kNumModifierTypes> midiProbCCMap = []() {
+        std::array<int, kNumModifierTypes> a;
+        a.fill(-1);
+        return a;
+    }();
+
     // Persistence meta
     juce::String projectName { "Untitled Project" };
     juce::String projectId { juce::Uuid().toString() };

@@ -585,6 +585,13 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
 
     addAndMakeVisible(tabComponent.get());
 
+    // Moonbase: enable update badge and disable analytics
+    if (activationUI)
+        activationUI->enableUpdateBadge();
+
+    if (processor.moonbaseClient)
+        processor.moonbaseClient->setTransmitAnalytics (false, false);
+
     setSize (1200, 800);
     setResizable(true, true);
     setResizeLimits(920, 600, 2400, 1600);

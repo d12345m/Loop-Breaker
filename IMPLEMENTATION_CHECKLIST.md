@@ -274,10 +274,10 @@ Third-party alternatives popular in the JUCE community:
 **Decision (2026-02-18): Use [Moonbase.sh](https://moonbase.sh) as the licensing, storefront, and payment provider.** Rationale: turnkey end-to-end solution (storefront, RSA-signed license tokens, online/offline activation, trials, Merchant of Record with VAT handling). Free tier is sufficient during development. Avoids building and hosting a custom server backend.
 
 - [x] Decide licensing strategy → **Moonbase.sh**
-- [ ] Create Moonbase account & set up product for BufferTest
-- [ ] Integrate Moonbase SDK into the plugin (license validation on startup)
-- [ ] Implement in-plugin activation UI (email/key entry overlay in plugin editor)
-- [ ] Support offline license activation (Moonbase RSA-signed tokens)
+- [x] Create Moonbase account & set up product for BufferTest
+- [x] Integrate Moonbase SDK into the plugin (license validation on startup)
+- [x] Implement in-plugin activation UI (email/key entry overlay in plugin editor)
+- [x] Support offline license activation (Moonbase RSA-signed tokens)
 - [ ] Configure trial mode in Moonbase (time-limited or feature-limited demo)
 - [ ] Test full license flow: purchase → activate → offline use → machine transfer → revoke
 - [ ] Handle license failure gracefully in plugin (locked/demo state, no crash, clear messaging)

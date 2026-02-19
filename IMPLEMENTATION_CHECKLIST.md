@@ -56,6 +56,9 @@ The project is pivoting from “iOS-first app” to “VST3 plugin-first”. Sta
 - [ ] Keep click-to-load fallback (FileChooser) for hosts where drag/drop is limited
 - [ ] Visual affordance for drop target (per-pad highlight on drag enter)
 - [ ] Failure UX: unsupported format / missing file / permission error (non-modal, logged)
+- [ ] Modifier display tied to plugin window state: suppress modifier application when editor window is closed
+- [ ] Upcoming modifier label hidden / inactive when plugin window is not shown
+- [ ] Ensure modifiers resume immediately when editor window is re-opened
 
 #### Modifier History Panel Enhancements (incremental)
 
@@ -160,6 +163,9 @@ Constraints:
 - [ ] If stretch not available: fallback rate-change only (already present)
 - [ ] Pitch up/down octave independent of speed if timestretch available
 - [ ] Cache/resample strategy performance test per buffer
+- [ ] Investigate and fix octave pitch shift audio artifacts (crackle/distortion on Oct+/Oct−)
+- [ ] Consider limiting pitch range (e.g., max ±2 octaves) to reduce artifact severity
+- [ ] Validate pitch shift quality across different sample rates and buffer sizes
 
 ---
 
@@ -212,6 +218,12 @@ Status: deferred while VST3 plugin is the primary target.
 - [ ] Adaptive contrast & accessible font sizing
 - [ ] Pad color states: idle, selected, recently modified, active playback
 - [ ] Animations (GPU safe, avoid heavy repaints every frame)
+- [ ] Custom control styles (knobs, sliders, buttons) beyond default JUCE LookAndFeel
+- [ ] Animated transitions and feedback (smooth pad interactions, modifier trigger visuals)
+- [ ] Loop progress visualization: circular/ring display instead of linear progress bar
+- [ ] Header area layout improvements (element sizing, spacing, visual hierarchy)
+- [ ] Improved modifier naming and value display (human-readable labels, formatted parameter values)
+- [ ] Better variable/value presentation for modifier parameters in UI
 
 ---
 
@@ -274,6 +286,11 @@ Status: deferred while VST3 plugin is the primary target.
 - [ ] Conditional compilation flags for dev tools
 - [ ] CI pipeline (future) – build & run tests on push
 - [ ] Crash reporting integration (future consideration)
+- [ ] Installer creation: macOS .pkg / Windows installer (investigate JUCE-compatible tooling)
+- [ ] Licensing / copy protection strategy (serial key, iLok, or third-party; research JUCE ecosystem options)
+- [ ] Purchase flow integration (web store, license validation, trial mode)
+- [ ] Distribution & update mechanism (auto-update, download portal)
+- [ ] Investigate whether JUCE has built-in support for any of the above (licensing, installer, etc.)
 
 ---
 
@@ -320,6 +337,29 @@ Rollback Plan:
 
 ---
 
+## 22. MIDI Integration & Automation
+
+Goal: allow external MIDI control and DAW automation of modifier probability sliders and key parameters.
+
+- [ ] Expose modifier probability sliders as automatable plugin parameters (AudioProcessorValueTreeState or equivalent)
+- [ ] Add MIDI CC mapping to probability sliders (enable MIDI faders, knobs, LFOs to control probabilities)
+- [ ] Define MIDI learn workflow for probability controls (click control → move MIDI CC → mapped)
+- [ ] Ensure MIDI-driven parameter changes are thread-safe and applied on the audio thread
+- [ ] Document supported MIDI CC ranges and default mappings
+- [ ] Test with common DAW automation lanes and external MIDI controllers
+
+---
+
+## 23. Documentation & Attribution
+
+- [ ] Document keyboard shortcuts (README or in-plugin help overlay)
+- [ ] Add attribution for third-party libraries (timestretching algorithm, SoundTouch, etc.)
+- [ ] In-plugin About/Credits panel with version info and third-party attributions
+- [ ] User guide / quick-start documentation (PDF, web page, or in-repo markdown)
+- [ ] Developer documentation: build instructions, architecture overview, contribution guide
+
+---
+
 ---
 
 ## Open Questions (Need clarification)
@@ -342,3 +382,4 @@ Add clarifications inline as decisions are made.
 - 2025-10-01: Implemented experimental reverse & speed-jump crossfades (artifact mitigation); decision made to defer & plan rollback; checklist updated to reflect true current state.
 
 - 2026-02-09: Pivot decision: prioritize VST3 plugin target; added checklist sections for VST enablement, multi-output routing, and drag-and-drop sample loading.
+- 2026-02-18: Added items: plugin window modifier behavior (suppress when editor closed), pitch shift artifact investigation & range limits, MIDI CC / automation for probability sliders, documentation & attribution section, installer / licensing / distribution items, UI enhancement goals (custom styles, loop circle, header layout, modifier naming).

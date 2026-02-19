@@ -26,6 +26,10 @@ Sometimes the modifier will affect the audio buffer (as in the case of buffer sl
 
 The upcoming modifier is displayed at the top of the UI and is randomly chosen.
 
+### Plugin Window & Modifier Behavior
+
+Modifiers should only be displayed and applied while the plugin's editor window is open. If the host closes or hides the plugin window, modifier application is suspended and the upcoming modifier label is hidden. Modifier scheduling resumes immediately when the window is re-opened.
+
 ## Sample Loading UX (Plugin)
 
 In plugin form, loading audio samples should work without relying on mobile-only pickers.
@@ -50,6 +54,8 @@ Buffer modifiers:
 4.) Pitch up one octave.
 
 5.) Pitch down one octave.
+
+> **Note:** Octave pitch shifting currently causes audible artifacts (crackle). The pitch range may be limited (e.g., ±2 octaves maximum) depending on the quality achievable with the chosen timestretching/pitch-shifting algorithm.
 
     Beat slicing - the buffer will be logically subdivided into 1/4 note, 1/8 note, 1/8 note triplet, 1/16 note, 1/32 note, and 1/64 note segments and the segments will be read in a random order. This must be done carefully and only use the original buffer.
 
@@ -102,6 +108,42 @@ There should be an options area where users can set:
 6.) About
 
 7.) Multi-output routing mode: - Master-only (all buffers mixed to main out) - Multi-out (each buffer to its own DAW output bus)
+
+## MIDI Control & Automation
+
+Modifier probability sliders should be controllable via MIDI CC, allowing users to:
+
+- Assign DAW MIDI faders or knobs to probability controls
+- Drive probabilities with LFOs or other MIDI automation sources
+- Use host parameter automation alongside direct MIDI CC control
+
+The plugin should expose probability sliders as automatable parameters so that both DAW automation lanes and external MIDI controllers can adjust them.
+
+## Documentation
+
+The project should include user-facing documentation covering:
+
+- Keyboard shortcuts and UI interactions
+- Attribution for third-party code (e.g., timestretching algorithm)
+- Quick-start guide for loading samples and using the modifier system
+
+An in-plugin "About" panel should display version information and third-party attributions.
+
+## UI Enhancements
+
+Planned improvements to the user interface:
+
+- Custom visual styles for controls (moving beyond default JUCE LookAndFeel)
+- Animations and smooth transitions for pad interactions and modifier triggers
+- Loop progress visualization using a circular/ring display instead of a linear bar
+- Improved sizing and layout of header area elements
+- Better human-readable names and formatted values for modifier parameters
+
+## Installation & Distribution
+
+- Determine an installer strategy for macOS (e.g., .pkg) and Windows
+- Investigate JUCE ecosystem options for licensing, copy protection, and purchase flow (serial keys, iLok, third-party solutions)
+- Define update/distribution mechanism
 
 ## Platform Targeting Notes
 

@@ -286,11 +286,60 @@ Status: deferred while VST3 plugin is the primary target.
 - [ ] Conditional compilation flags for dev tools
 - [ ] CI pipeline (future) – build & run tests on push
 - [ ] Crash reporting integration (future consideration)
-- [ ] Installer creation: macOS .pkg / Windows installer (investigate JUCE-compatible tooling)
-- [ ] Licensing / copy protection strategy (serial key, iLok, or third-party; research JUCE ecosystem options)
-- [ ] Purchase flow integration (web store, license validation, trial mode)
-- [ ] Distribution & update mechanism (auto-update, download portal)
-- [ ] Investigate whether JUCE has built-in support for any of the above (licensing, installer, etc.)
+
+### 18a. Installer Creation
+
+Research (2026-02-18): JUCE has no built-in installer tool but provides an [official tutorial](https://juce.com/tutorials/tutorial_app_plugin_packaging/) covering the process end-to-end.
+
+- [ ] **macOS**: Create `.pkg` installer using [Packages](http://s.sudre.free.fr/Software/Packages/about.html) (free). Target: `/Library/Audio/Plug-Ins/VST3/` (system) or `~/Library/Audio/Plug-Ins/VST3/` (user). Wrap in `.dmg` disk image.
+- [ ] **Windows**: Create `.exe` installer using [Inno Setup](http://www.jrsoftware.org/isinfo.php) (free). Target: `C:\Program Files\Common Files\VST3\`.
+- [ ] Alternative macOS option: simple drag-and-drop `.dmg` with folder alias to VST3 directory
+- [ ] Code-sign macOS build (Apple Developer ID + `codesign` + notarization via `xcrun notarytool`)
+- [ ] Code-sign Windows build (`signtool` + EV certificate if needed)
+
+### 18b. Licensing & Copy Protection
+
+Research (2026-02-18): JUCE provides a **built-in licensing framework** via `OnlineUnlockStatus`, `OnlineUnlockForm`, `KeyGeneration`, and `RSAKey` classes. This is an RSA key-pair system where the plugin embeds a public key and your server holds the private key. Users authenticate via email+password, the server returns a signed key file cached locally for offline use. **You must build and host your own server backend** (PHP/Node/Python). There is no built-in storefront, trial management, or payment processing.
+
+Third-party alternatives popular in the JUCE community:
+
+| Service                                | Scope                                                                                                                                                                                                | Cost                                                             |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| **[Moonbase.sh](https://moonbase.sh)** | End-to-end: storefront, RSA-signed license tokens, online/offline activation, trials, payment processing (Merchant of Record, handles VAT). SDKs available. Recommended by multiple JUCE forum devs. | Free tier (10k validations/mo), then €5/10k; 5% + €1/transaction |
+| **PACE / iLok**                        | Industry-standard dongle + cloud licensing. Very secure but expensive and complex (users must install iLok License Manager).                                                                         | Enterprise pricing (~$1k+ setup)                                 |
+| **Gumroad**                            | Simple storefront + payments. No native plugin licensing — pair with JUCE's `OnlineUnlockStatus`.                                                                                                    | 10% flat per sale                                                |
+| **Roll your own**                      | JUCE `OnlineUnlockStatus` + simple web backend + Stripe for payments                                                                                                                                 | Stripe fees (~2.9% + $0.30)                                      |
+
+Decision needed: choose between Moonbase (turnkey) vs roll-your-own (JUCE built-in + custom server + Stripe).
+
+- [ ] Decide licensing strategy: Moonbase.sh (turnkey) vs JUCE `OnlineUnlockStatus` + custom server vs other
+- [ ] If roll-your-own: implement server backend for license validation (PHP/Node/Python)
+- [ ] If roll-your-own: generate RSA key pair using JUCE `KeyGeneration`, embed public key in plugin
+- [ ] If Moonbase: integrate Moonbase SDK, set up storefront & product
+- [ ] Implement `OnlineUnlockStatus` subclass in plugin (or equivalent from chosen provider)
+- [ ] Add registration/unlock UI overlay in plugin editor (use `OnlineUnlockForm` or custom)
+- [ ] Trial mode support (time-limited or feature-limited demo)
+- [ ] Test license flow: purchase → activate → offline use → machine transfer → revoke
+
+### 18c. Purchase Flow & Distribution
+
+- [ ] Set up web store (Moonbase storefront, Gumroad, or custom site + Stripe)
+- [ ] Distribution: host downloadable installers (own site, Moonbase hosting, or GitHub Releases)
+- [ ] Auto-update mechanism (future — evaluate Sparkle on macOS, WinSparkle on Windows, or manual check)
+
+### 18d. JUCE License for This Project
+
+Note (2026-02-18): JUCE 8 itself requires a license for closed-source commercial distribution:
+
+| Tier    | Cost                                  | Revenue Cap   |
+| ------- | ------------------------------------- | ------------- |
+| Starter | Free                                  | $20,000/year  |
+| Indie   | $40/user/month (or $800 perpetual)    | $300,000/year |
+| Pro     | $175/user/month (or $3,500 perpetual) | Unlimited     |
+
+- [ ] Start with Starter (free) during development
+- [ ] Upgrade to Indie before commercial release if revenue will exceed $20k
+- [ ] Document JUCE license tier in project README
 
 ---
 

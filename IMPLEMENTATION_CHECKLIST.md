@@ -52,22 +52,19 @@ The project is pivoting from “iOS-first app” to “VST3 plugin-first”. Sta
 
 ### Plugin Editor UX (NEW)
 
-- [ ] Add drag-and-drop sample loading onto pads (desktop OS file drop)
+- [x] Add drag-and-drop sample loading onto pads (desktop OS file drop)
 - [ ] Keep click-to-load fallback (FileChooser) for hosts where drag/drop is limited
-- [ ] Visual affordance for drop target (per-pad highlight on drag enter)
+- [x] Visual affordance for drop target (per-pad highlight on drag enter)
 - [ ] Failure UX: unsupported format / missing file / permission error (non-modal, logged)
-- [ ] Modifier display tied to plugin window state: suppress modifier application when editor window is closed
-- [ ] Upcoming modifier label hidden / inactive when plugin window is not shown
+- [ ] Modifier display tied to plugin window state: suppress modifier application when editor window is closed - this actually leads to weird issues where the modifiers are not applied or not displayed in certain situations.
+- [ ] Upcoming modifier label hidden / inactive when plugin window is not shown - this is also a bug.
 - [ ] Ensure modifiers resume immediately when editor window is re-opened
 
 #### Modifier History Panel Enhancements (incremental)
 
-- [ ] Clear button to manually purge history
-- [ ] Filter modes: All / Buffer-targeted only / Global-only
-- [ ] Display running count of total events (bounded by max entries)
-- [ ] Colour-code entries per modifier type (with legend)
-- [ ] Configurable max entries (auto-trim setting in SessionSettings)
-- [ ] (Persistence) integrate with existing project save once core persistence extended (see Section 8)
+- [x] Clear button to manually purge history
+- [x] Display running count of total events (bounded by max entries)
+- [x] Colour-code entries per modifier type (with legend)
 
 ### Nice to Have (Defer until basics work)
 
@@ -134,9 +131,9 @@ The project is pivoting from “iOS-first app” to “VST3 plugin-first”. Sta
 
 Goal: each of the 8 buffers can be routed to its own DAW output channel/bus.
 
-- [ ] Implement per-buffer output assignment (buffer i -> output bus j)
+- [x] Implement per-buffer output assignment (buffer i -> output bus j)
 - [ ] Ensure master FX chain is compatible with both master-only and multi-out modes
-- [ ] Verify behavior in at least one multi-out-capable host (manual QA checklist)
+- [x] Verify behavior in at least one multi-out-capable host (manual QA checklist)
 - [ ] Add debug display showing which outputs are currently active/enabled by host
 
 Constraints:
@@ -148,35 +145,16 @@ Constraints:
 
 ## 6. Beat Slicing & Advanced Buffer Modifiers
 
-- [ ] Extend slicing to musically quantized divisions (1/4, 1/8, 1/8T, 1/16, 1/32, 1/64)
-- [ ] Random reorder playback sequence generator (precomputed index map)
-- [ ] Ensure no new buffer copies (logical addressing only)
-- [ ] Crossfade strategy validation for tiny slice sizes (avoid clicks)
-- [ ] Configurable slice division selection (random vs chosen)
 - [ ] Unit test: determinism when seeded
+- [ ] New variation - repeater. repeat slice 2/4/8/16 times before moving to next slice.
 
 ---
 
 ## 7. Pitch & Time Features
 
-- [ ] Integrate a phase vocoder / elastique-like timestretch (investigate licensing; else open-source alternative)
-- [ ] If stretch not available: fallback rate-change only (already present)
-- [ ] Pitch up/down octave independent of speed if timestretch available
-- [ ] Cache/resample strategy performance test per buffer
 - [ ] Investigate and fix octave pitch shift audio artifacts (crackle/distortion on Oct+/Oct−)
 - [ ] Consider limiting pitch range (e.g., max ±2 octaves) to reduce artifact severity
 - [ ] Validate pitch shift quality across different sample rates and buffer sizes
-
----
-
-## 8. Persistence & Projects
-
-- [ ] Extend project JSON to include: buffer file paths, last slice count, per-part definitions
-- [ ] Save / load selected theme, BPM, time signature, barsBetweenModifiers
-- [ ] Save modifier history (for debugging) optionally
-- [ ] Implement New / Save / Load / Rename UI
-- [ ] iOS Documents directory integration
-- [ ] Handle missing files gracefully (placeholder state)
 
 ---
 
@@ -191,24 +169,7 @@ Constraints:
 
 ## 10. Multi‑Channel Recording
 
-- [ ] Architectural decision: multi-out vs offline stem render
-- [ ] If multi-out: add additional buses (desktop & iOS support differences)
-- [ ] If offline bounce: implement export pipeline mixing each buffer soloed
-- [ ] UI toggle for multi-channel mode
 - [ ] Ensure master FX applied post individual FX but pre master record (design doc constraint)
-
----
-
-## 11. iOS Platform Integration
-
-Status: deferred while VST3 plugin is the primary target.
-
-- [ ] (Deferred) Replace desktop file chooser with UIDocumentPicker bridge
-- [ ] (Deferred) Optimize UI layout for portrait/landscape
-- [ ] (Deferred) Touch interactions: larger pads, velocity? (future)
-- [ ] (Deferred) Background audio session category configuration
-- [ ] (Deferred) Power / CPU profiling on device
-- [ ] (Deferred) iOS specific entitlements (file access, audio)
 
 ---
 

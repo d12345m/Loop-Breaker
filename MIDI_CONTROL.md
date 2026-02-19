@@ -48,8 +48,5 @@ This mapping is compatible with most drum pad controllers like:
 
 Potential future additions:
 
-- Configurable note mapping
 - Gate mode (note-off deselects)
-- Velocity-sensitive selection
 - LED feedback to controllers
-- MIDI learn functionality

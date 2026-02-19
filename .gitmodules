@@ -1,3 +1,6 @@
 [submodule "ThirdParty/soundtouch"]
 	path = ThirdParty/soundtouch
 	url = https://codeberg.org/soundtouch/soundtouch.git
+[submodule "Submodules/moonbase_JUCEClient"]
+	path = Submodules/moonbase_JUCEClient
+	url = https://github.com/Moonbase-sh/moonbase_JUCEClient.git

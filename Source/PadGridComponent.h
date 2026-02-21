@@ -247,7 +247,8 @@ private:
     juce::StringArray padFileNames { "", "", "", "", "", "", "", "" };
     std::array<int, numPads> flashCounters { {0,0,0,0,0,0,0,0} };
     std::array<bool, numPads> playingStates { {false,false,false,false,false,false,false,false} };
-    std::array<int, numPads> midiNotes { {36, 37, 38, 39, 40, 41, 42, 43} };
+    // Bottom row left->right = 36-39 (pads 4-7), top row left->right = 40-43 (pads 0-3)
+    std::array<int, numPads> midiNotes { {40, 41, 42, 43, 36, 37, 38, 39} };
     std::array<bool, numPads> midiLearnActive { {false,false,false,false,false,false,false,false} };
 
     // Waveform state

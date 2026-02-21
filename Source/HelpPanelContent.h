@@ -242,14 +242,14 @@ private:
             Section s;
             s.heading = "MIDI Control";
             s.table = {
-                { "MIDI note 36 (C1)",   "Toggle pad 1" },
-                { "MIDI note 37 (C#1)",  "Toggle pad 2" },
-                { "MIDI note 38 (D1)",   "Toggle pad 3" },
-                { "MIDI note 39 (D#1)",  "Toggle pad 4" },
-                { "MIDI note 40 (E1)",   "Toggle pad 5" },
-                { "MIDI note 41 (F1)",   "Toggle pad 6" },
-                { "MIDI note 42 (F#1)",  "Toggle pad 7" },
-                { "MIDI note 43 (G1)",   "Toggle pad 8" },
+                { "Note 36 (C1)  - bottom-left",  "Toggle pad 5 (bottom row, col 1)" },
+                { "Note 37 (C#1) - bottom row",   "Toggle pad 6 (bottom row, col 2)" },
+                { "Note 38 (D1)  - bottom row",   "Toggle pad 7 (bottom row, col 3)" },
+                { "Note 39 (D#1) - bottom-right", "Toggle pad 8 (bottom row, col 4)" },
+                { "Note 40 (E1)  - top-left",     "Toggle pad 1 (top row, col 1)" },
+                { "Note 41 (F1)  - top row",      "Toggle pad 2 (top row, col 2)" },
+                { "Note 42 (F#1) - top row",      "Toggle pad 3 (top row, col 3)" },
+                { "Note 43 (G1)  - top-right",    "Toggle pad 4 (top row, col 4)" },
             };
             s.body =
                 "Use Shift+Click on any pad to re-assign it to a different MIDI note.  "

@@ -108,6 +108,24 @@ public:
         addAndMakeVisible(barsBetweenModifiersLabel);
         barsBetweenModifiersLabel.attachToComponent(&barsBetweenModifiersSlider, true);
 
+        // Master volume knob
+        addAndMakeVisible(masterVolumeSlider);
+        masterVolumeSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+        masterVolumeSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 54, 16);
+        masterVolumeSlider.setColour(juce::Slider::rotarySliderFillColourId, Theme::accent());
+        masterVolumeSlider.setColour(juce::Slider::rotarySliderOutlineColourId, Theme::panelAlt());
+        masterVolumeSlider.setColour(juce::Slider::thumbColourId, Theme::accent().brighter(0.2f));
+        masterVolumeSlider.setColour(juce::Slider::textBoxBackgroundColourId, Theme::panelAlt());
+        masterVolumeSlider.setColour(juce::Slider::textBoxTextColourId, Theme::text());
+        masterVolumeSlider.setColour(juce::Slider::textBoxOutlineColourId, Theme::border());
+        masterVolumeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+            processor.getAPVTS(), "masterVolume", masterVolumeSlider);
+        addAndMakeVisible(masterVolumeLabel);
+        masterVolumeLabel.setJustificationType(juce::Justification::centred);
+        masterVolumeLabel.setColour(juce::Label::textColourId, Theme::textSubtle());
+        masterVolumeLabel.setFont(juce::Font(juce::FontOptions().withHeight(11.0f)));
+        masterVolumeLabel.attachToComponent(&masterVolumeSlider, false);
+
         addAndMakeVisible(statusLabel);
         statusLabel.setJustificationType(juce::Justification::centredLeft);
         statusLabel.setColour(juce::Label::textColourId, Theme::textSubtle());
@@ -211,6 +229,7 @@ public:
 
         auto rightRegion = controlBar;
         implementedOnlyToggle.setBounds(rightRegion.removeFromRight(150).reduced(2));
+        masterVolumeSlider.setBounds(rightRegion.removeFromRight(64).reduced(2));
 
         auto row2 = area.removeFromTop(28).reduced(2);
         hostTransportLabel.setBounds(row2.removeFromRight(240).reduced(2));
@@ -271,6 +290,10 @@ private:
     juce::Label barsBetweenModifiersLabel { {}, "Bars/Mod" };
     juce::Label statusLabel { {}, "Status: Idle" };
     juce::Label hostTransportLabel { {}, "Host: Unknown" };
+
+    juce::Slider masterVolumeSlider;
+    juce::Label masterVolumeLabel { {}, "Vol" };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> masterVolumeAttachment;
 
     std::unique_ptr<juce::FileChooser> fileChooser;
 

@@ -27,6 +27,19 @@ BufferTestAudioProcessor::createParamLayout()
                 })
         ));
     }
+    // Master volume knob: -12 dB to +12 dB, default 0 dB
+    params.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "masterVolume", 1 },
+        "Master Volume",
+        juce::NormalisableRange<float> (-12.0f, 12.0f, 0.1f),
+        0.0f,
+        juce::AudioParameterFloatAttributes{}
+            .withLabel ("dB")
+            .withStringFromValueFunction ([](float v, int) {
+                return juce::String (v, 1) + " dB";
+            })
+    ));
+
     return { params.begin(), params.end() };
 }
 
@@ -646,6 +659,10 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
         // No reliable host tempo -> don't apply tempo-follow scaling.
         app.bufferManager.setTempoMultiplier(1.0);
     }
+
+    // Sync master volume from APVTS parameter (dB -> linear gain)
+    if (auto* mvParam = apvts.getRawParameterValue ("masterVolume"))
+        app.bufferManager.setMasterVolume (juce::Decibels::decibelsToGain (mvParam->load()));
 
     // Multi-out: main output bus is a stereo mix.
     // Individual pads 0..7 map to output buses Ch1..Ch8.

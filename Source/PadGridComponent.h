@@ -221,7 +221,8 @@ public:
         {
             for (int c = 0; c < cols; ++c)
             {
-                int idx = r * cols + c;
+                // Bottom row = pads 1-4 (idx 0-3), top row = pads 5-8 (idx 4-7)
+                int idx = (rows - 1 - r) * cols + c;
                 if (idx < padButtons.size())
                 {
                     juce::Rectangle<int> padRect(area.getX() + c * padW, area.getY() + r * padH, padW - 4, padH - 4);
@@ -247,8 +248,8 @@ private:
     juce::StringArray padFileNames { "", "", "", "", "", "", "", "" };
     std::array<int, numPads> flashCounters { {0,0,0,0,0,0,0,0} };
     std::array<bool, numPads> playingStates { {false,false,false,false,false,false,false,false} };
-    // Bottom row left->right = 36-39 (pads 4-7), top row left->right = 40-43 (pads 0-3)
-    std::array<int, numPads> midiNotes { {40, 41, 42, 43, 36, 37, 38, 39} };
+    // Bottom row left->right = 36-39 (pads 1-4, idx 0-3), top row left->right = 40-43 (pads 5-8, idx 4-7)
+    std::array<int, numPads> midiNotes { {36, 37, 38, 39, 40, 41, 42, 43} };
     std::array<bool, numPads> midiLearnActive { {false,false,false,false,false,false,false,false} };
 
     // Waveform state

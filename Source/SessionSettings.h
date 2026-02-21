@@ -51,8 +51,8 @@ struct SessionSettings
   juce::StringArray padFilePaths { "", "", "", "", "", "", "", "" };
 
     // MIDI note mappings (per pad). -1 means unassigned.
-    // Layout: bottom row left->right = 36-39, top row left->right = 40-43
-    std::array<int, 8> midiNoteMap { 40, 41, 42, 43, 36, 37, 38, 39 };
+    // Layout: bottom row left->right = 36-39 (pads 1-4), top row left->right = 40-43 (pads 5-8)
+    std::array<int, 8> midiNoteMap { 36, 37, 38, 39, 40, 41, 42, 43 };
 
     // MIDI CC mappings for modifier probability sliders.
     // Index i corresponds to ModifierProbabilityManager::allModifierTypes()[i].
@@ -60,6 +60,20 @@ struct SessionSettings
     static constexpr int kNumModifierTypes = 22;
     std::array<int, kNumModifierTypes> midiProbCCMap = []() {
         std::array<int, kNumModifierTypes> a;
+        a.fill(-1);
+        return a;
+    }();
+
+    // Per-pad target probability: controls the likelihood of each pad being
+    // auto-selected as a modifier target. 1.0 = always eligible, 0.0 = never.
+    static constexpr int kNumPads = 8;
+    std::array<float, kNumPads> padTargetProbabilities = { 1.0f, 1.0f, 1.0f, 1.0f,
+                                                           1.0f, 1.0f, 1.0f, 1.0f };
+
+    // MIDI CC mappings for pad target probability sliders.
+    // Index is pad index (0-7). Value is CC number (0-127), or -1 if unassigned.
+    std::array<int, kNumPads> midiPadProbCCMap = []() {
+        std::array<int, kNumPads> a;
         a.fill(-1);
         return a;
     }();

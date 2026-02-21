@@ -97,6 +97,21 @@ public:
         return learnedMidiCC.exchange(-1);
     }
 
+    // MIDI CC learn for pad target probability sliders
+    // padIndex = pad index (0-7), -1 = cancel
+    void setMidiPadProbCCLearnMode(int padIndex)
+    {
+        midiPadProbCCLearnIndex.store(padIndex);
+    }
+
+    int getMidiPadProbCCLearnIndex() const { return midiPadProbCCLearnIndex.load(); }
+    bool isMidiPadProbCCLearnActive() const { return midiPadProbCCLearnIndex.load() >= 0; }
+
+    int checkAndClearLearnedPadProbCC()
+    {
+        return learnedPadProbMidiCC.exchange(-1);
+    }
+
     enum class HostTransportState : int
     {
         Unknown = 0,
@@ -172,6 +187,10 @@ private:
     // MIDI CC learn state for modifier probability sliders
     std::atomic<int> midiCCLearnParamIndex { -1 }; // which param index is being learned
     std::atomic<int> learnedMidiCC { -1 };          // the CC# just captured (UI polls & clears)
+
+    // MIDI CC learn state for pad target probability sliders
+    std::atomic<int> midiPadProbCCLearnIndex { -1 }; // which pad index is being learned
+    std::atomic<int> learnedPadProbMidiCC { -1 };    // the CC# just captured (UI polls & clears)
 
     static juce::AudioProcessorValueTreeState::ParameterLayout createParamLayout();
 

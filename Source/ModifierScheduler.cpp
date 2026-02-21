@@ -692,16 +692,52 @@ juce::Array<int> ModifierScheduler::selectTargetBuffers(const ModifierDescriptor
     if (desc.category == ModifierCategory::MasterEffect || desc.category == ModifierCategory::GlobalUtility)
         return targets; // Empty means 'master/global'
 
-    // If user selected pads, use them; else select 1-4 semi-random
+    // If user selected pads, use them; else select 1-4 weighted-random
     if (!userSelectedBuffers.isEmpty())
         return userSelectedBuffers;
 
     const juce::SpinLock::ScopedLockType lock(rngLock);
-    int count = rng.nextInt({1, 4}); // 1..4
+
+    // Build pool of eligible pads (padTargetProbability > 0)
+    juce::Array<int>   eligible;
+    juce::Array<float> weights;
+    float totalWeight = 0.0f;
+
+    for (int i = 0; i < 8; ++i)
+    {
+        float w = settings.padTargetProbabilities[static_cast<size_t>(i)];
+        if (w > 0.0f)
+        {
+            eligible.add (i);
+            weights.add (w);
+            totalWeight += w;
+        }
+    }
+
+    if (eligible.isEmpty())
+        return targets; // all pads disabled – nothing to target
+
+    int maxCount = juce::jmin (4, eligible.size());
+    int count = rng.nextInt ({1, maxCount}); // 1..maxCount
+
     std::set<int> unique;
     while ((int)unique.size() < count)
-        unique.insert(rng.nextInt({0, 7}));
-    for (int v : unique) targets.add(v);
+    {
+        // Weighted random pick from eligible pool
+        float r = rng.nextFloat() * totalWeight;
+        float cumulative = 0.0f;
+        for (int j = 0; j < eligible.size(); ++j)
+        {
+            cumulative += weights[j];
+            if (r <= cumulative)
+            {
+                unique.insert (eligible[j]);
+                break;
+            }
+        }
+    }
+
+    for (int v : unique) targets.add (v);
     return targets;
 }
 

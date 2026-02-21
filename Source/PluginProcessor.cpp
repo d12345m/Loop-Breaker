@@ -27,6 +27,26 @@ BufferTestAudioProcessor::createParamLayout()
                 })
         ));
     }
+    // Per-pad target probability: controls likelihood of each pad being auto-selected
+    for (int i = 0; i < 8; ++i)
+    {
+        const juce::String id   = "padProb_" + juce::String (i);
+        const juce::String name = "Pad " + juce::String (i + 1) + " Target Probability";
+        params.push_back (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { id, 1 },
+            name,
+            juce::NormalisableRange<float> (0.0f, 1.0f),
+            1.0f,
+            juce::AudioParameterFloatAttributes{}
+                .withLabel ("%")
+                .withStringFromValueFunction ([](float v, int) {
+                    const int pct = juce::roundToInt (v * 100.0f);
+                    return pct <= 0 ? juce::String ("OFF")
+                                    : juce::String (pct) + "%";
+                })
+        ));
+    }
+
     // Master volume knob: -12 dB to +12 dB, default 0 dB
     params.push_back (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { "masterVolume", 1 },
@@ -307,6 +327,7 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                 const float normValue = msg.getControllerValue() / 127.0f;
 
                 const int learnIdx = midiCCLearnParamIndex.load();
+                const int padLearnIdx = midiPadProbCCLearnIndex.load();
                 if (learnIdx >= 0)
                 {
                     // CC learn mode: record which CC was moved and assign it
@@ -318,10 +339,21 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                         midiCCLearnParamIndex.store (-1);     // exit learn mode
                     }
                 }
+                else if (padLearnIdx >= 0)
+                {
+                    // CC learn mode for pad target probabilities
+                    if (padLearnIdx < 8)
+                    {
+                        app.settings.midiPadProbCCMap[static_cast<size_t>(padLearnIdx)] = cc;
+                        learnedPadProbMidiCC.store (cc);
+                        midiPadProbCCLearnIndex.store (-1);
+                    }
+                }
                 else
                 {
-                    // Normal operation: look up the CC in the map and update the matching param
+                    // Normal operation: look up the CC in the modifier prob map
                     const auto& types = ModifierProbabilityManager::allModifierTypes();
+                    bool handled = false;
                     for (int idx = 0; idx < static_cast<int> (types.size()); ++idx)
                     {
                         if (app.settings.midiProbCCMap[idx] == cc)
@@ -329,7 +361,23 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                             const juce::String paramId = "prob_" + juce::String (static_cast<int> (types[idx]));
                             if (auto* param = apvts.getParameter (paramId))
                                 param->setValueNotifyingHost (normValue);
+                            handled = true;
                             break;
+                        }
+                    }
+
+                    // Also check pad target probability CC map
+                    if (!handled)
+                    {
+                        for (int i = 0; i < 8; ++i)
+                        {
+                            if (app.settings.midiPadProbCCMap[static_cast<size_t>(i)] == cc)
+                            {
+                                const juce::String paramId = "padProb_" + juce::String (i);
+                                if (auto* param = apvts.getParameter (paramId))
+                                    param->setValueNotifyingHost (normValue);
+                                break;
+                            }
                         }
                     }
                 }
@@ -348,6 +396,14 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             if (auto* rawVal = apvts.getRawParameterValue (id))
                 app.settings.modifierProbabilities.setWeight (type, rawVal->load());
         }
+    }
+
+    // Sync APVTS pad target probability values → settings
+    for (int i = 0; i < 8; ++i)
+    {
+        const juce::String id = "padProb_" + juce::String (i);
+        if (auto* rawVal = apvts.getRawParameterValue (id))
+            app.settings.padTargetProbabilities[static_cast<size_t>(i)] = rawVal->load();
     }
 
     // Transport-tied playback: stop output when the host is stopped.
@@ -768,6 +824,30 @@ void BufferTestAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
         obj->setProperty ("midiProbCC", juce::var (ccArr));
     }
 
+    // Per-pad target probability weights – read directly from APVTS
+    {
+        juce::Array<juce::var> padProbArr;
+        padProbArr.ensureStorageAllocated (8);
+        for (int i = 0; i < 8; ++i)
+        {
+            const juce::String id = "padProb_" + juce::String (i);
+            if (auto* rawVal = apvts.getRawParameterValue (id))
+                padProbArr.add (static_cast<double> (rawVal->load()));
+            else
+                padProbArr.add (1.0);
+        }
+        obj->setProperty ("padProbs", juce::var (padProbArr));
+    }
+
+    // MIDI CC mappings for pad target probability sliders
+    {
+        juce::Array<juce::var> ccArr;
+        ccArr.ensureStorageAllocated (8);
+        for (int i = 0; i < 8; ++i)
+            ccArr.add (app.settings.midiPadProbCCMap[static_cast<size_t>(i)]);
+        obj->setProperty ("midiPadProbCC", juce::var (ccArr));
+    }
+
     // Session settings
     obj->setProperty("bpm", app.settings.bpm);
     obj->setProperty("barsBetweenModifiers", app.settings.barsBetweenModifiers);
@@ -853,6 +933,43 @@ void BufferTestAudioProcessor::setStateInformation (const void* data, int sizeIn
                                           SessionSettings::kNumModifierTypes);
                 for (int i = 0; i < n; ++i)
                     app.settings.midiProbCCMap[i] = static_cast<int> (ccArr->getReference (i));
+            }
+        }
+    }
+
+    // Restore per-pad target probability weights
+    if (obj->hasProperty ("padProbs"))
+    {
+        auto ppVar = obj->getProperty ("padProbs");
+        if (ppVar.isArray())
+        {
+            if (auto* ppArr = ppVar.getArray())
+            {
+                const int n = juce::jmin (static_cast<int> (ppArr->size()), 8);
+                for (int i = 0; i < n; ++i)
+                {
+                    const float val = static_cast<float> (static_cast<double> (ppArr->getReference (i)));
+                    app.settings.padTargetProbabilities[static_cast<size_t>(i)] = val;
+
+                    const juce::String id = "padProb_" + juce::String (i);
+                    if (auto* param = apvts.getParameter (id))
+                        param->setValueNotifyingHost (val);
+                }
+            }
+        }
+    }
+
+    // Restore MIDI CC mappings for pad target probability sliders
+    if (obj->hasProperty ("midiPadProbCC"))
+    {
+        auto ccVar = obj->getProperty ("midiPadProbCC");
+        if (ccVar.isArray())
+        {
+            if (auto* ccArr = ccVar.getArray())
+            {
+                const int n = juce::jmin (static_cast<int> (ccArr->size()), 8);
+                for (int i = 0; i < n; ++i)
+                    app.settings.midiPadProbCCMap[static_cast<size_t>(i)] = static_cast<int> (ccArr->getReference (i));
             }
         }
     }

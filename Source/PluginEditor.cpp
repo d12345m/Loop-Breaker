@@ -1,6 +1,7 @@
 #include "PluginEditor.h"
 #include "PluginProcessor.h"
 
+#include "HelpPanelContent.h"
 #include "UpcomingModifierDisplay.h"
 #include "PadGridComponent.h"
 #include "ModifierHistoryPanel.h"
@@ -598,9 +599,12 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
 
     tabComponent = std::make_unique<juce::TabbedComponent>(juce::TabbedButtonBar::TabsAtTop);
     auto tabBg = Theme::bg().brighter(0.05f);
+    helpPanel = std::make_unique<HelpPanelContent>();
+
     tabComponent->addTab("Session",   tabBg, content.get(), false);
     tabComponent->addTab("Modifiers", tabBg, probabilityPanel.get(), false);
     tabComponent->addTab("Debug",     tabBg, debugPanel.get(), false);
+    tabComponent->addTab("Help",      tabBg, helpPanel.get(), false);
 
     // Style the tab bar
     auto& tabBar = tabComponent->getTabbedButtonBar();

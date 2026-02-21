@@ -5,6 +5,7 @@
 
 class ModifierProbabilityPanel;
 class DebugPanelContent;
+class HelpPanelContent;
 
 class BufferTestAudioProcessorEditor : public juce::AudioProcessorEditor
 {
@@ -21,6 +22,7 @@ private:
     std::unique_ptr<juce::Component> content;
     std::unique_ptr<ModifierProbabilityPanel> probabilityPanel;
     std::unique_ptr<DebugPanelContent> debugPanel;
+    std::unique_ptr<HelpPanelContent> helpPanel;
     std::unique_ptr<juce::TabbedComponent> tabComponent;
 
     MOONBASE_DECLARE_AND_INIT_ACTIVATION_UI (processor);

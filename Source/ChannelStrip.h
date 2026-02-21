@@ -334,6 +334,17 @@ public:
             }
         }
 
+        // Apply volume ramp gain (before reverb and limiter) if active
+        if (chain.volumeRampEnabled && params.volumeGain < 0.9999f)
+            tempBuffer.applyGain(params.volumeGain);
+
+        // Apply limiter before reverb to keep wet-path clean
+        {
+            juce::dsp::AudioBlock<float> preReverbBlock(tempBuffer);
+            juce::dsp::ProcessContextReplacing<float> preReverbCtx(preReverbBlock);
+            limiter.process(preReverbCtx);
+        }
+
         // --- Reverb Processing (continued) ---
         if (!effects().reverbEnabled)
             return; // skip reverb portion if disabled (delay may still have processed)
@@ -409,11 +420,7 @@ public:
             }
         }
 
-        // Apply volume ramp gain (before limiter) if active
-        if (chain.volumeRampEnabled && params.volumeGain < 0.9999f)
-            tempBuffer.applyGain(params.volumeGain);
-
-        // Apply limiter at the end of the effect chain to prevent clipping
+        // Apply limiter again post-reverb to catch any energy added by the wet mix
         juce::dsp::AudioBlock<float> block(tempBuffer);
         juce::dsp::ProcessContextReplacing<float> context(block);
         limiter.process(context);

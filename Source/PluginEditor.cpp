@@ -582,31 +582,9 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
     content = std::make_unique<PluginEditorContent>(processor,
                                                     &debugPanel->getModifierHistory());
 
-    // Build MIDI CC control callbacks that proxy through to the processor
-    ModifierProbabilityPanel::MidiCCControl ccCtrl;
-    ccCtrl.startLearn = [&p](int idx)  { p.setMidiCCLearnMode (idx); };
-    ccCtrl.cancelLearn = [&p]()        { p.setMidiCCLearnMode (-1); };
-    ccCtrl.pollLearnedCC = [&p]()      { return p.checkAndClearLearnedCC(); };
-    ccCtrl.isLearning = [&p]()         { return p.isMidiCCLearnActive(); };
-    ccCtrl.getLearningParamIndex = [&p](){ return p.getMidiCCLearnParamIndex(); };
-    ccCtrl.getAssignedCC = [&p](int idx) -> int
-    {
-        const auto& types = ModifierProbabilityManager::allModifierTypes();
-        if (idx >= 0 && idx < static_cast<int> (types.size()))
-            return p.getAppState().settings.midiProbCCMap[idx];
-        return -1;
-    };
-    ccCtrl.clearAssignment = [&p](int idx)
-    {
-        const auto& types = ModifierProbabilityManager::allModifierTypes();
-        if (idx >= 0 && idx < static_cast<int> (types.size()))
-            p.getAppState().settings.midiProbCCMap[idx] = -1;
-    };
-
     probabilityPanel = std::make_unique<ModifierProbabilityPanel>(
         processor.getAppState().settings.modifierProbabilities,
-        processor.getAPVTS(),
-        std::move (ccCtrl));
+        processor.getAPVTS());
 
     tabComponent = std::make_unique<juce::TabbedComponent>(juce::TabbedButtonBar::TabsAtTop);
     auto tabBg = Theme::bg().brighter(0.05f);

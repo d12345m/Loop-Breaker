@@ -5,9 +5,8 @@
    Scrollable UI panel showing one row per modifier type with:
      - A probability slider bound to an AudioProcessorValueTreeState parameter
        (exposes DAW automation on the host side).
-     - A CC button for MIDI learn: click to enter learn mode, the next incoming
-       CC is assigned to that slider; click again to cancel; right-click to clear.
    Rows are grouped by category with section headers.
+   A "Pad Target Probability" section at the bottom controls per-pad weighting.
  ==============================================================================
 */
 
@@ -23,29 +22,13 @@ class ModifierProbabilityPanel : public juce::Component,
 {
 public:
     // -------------------------------------------------------------------------
-    // Callbacks wired up by the plugin editor to route CC learn through the
-    // processor (which lives on the audio thread side).
-    // -------------------------------------------------------------------------
-    struct MidiCCControl
-    {
-        std::function<void(int)>  startLearn;           // paramIndex -> start learn
-        std::function<void()>     cancelLearn;          // cancel any active learn
-        std::function<int()>      pollLearnedCC;        // returns CC# or -1; clears pending
-        std::function<bool()>     isLearning;           // true while learn is active
-        std::function<int()>      getLearningParamIndex;// which paramIndex is learning
-        std::function<int(int)>   getAssignedCC;        // paramIndex -> CC# or -1
-        std::function<void(int)>  clearAssignment;      // remove CC mapping for paramIndex
-    };
-
-    // -------------------------------------------------------------------------
     ModifierProbabilityPanel (ModifierProbabilityManager& manager,
-                              juce::AudioProcessorValueTreeState& apvtsRef,
-                              MidiCCControl ccControl)
+                              juce::AudioProcessorValueTreeState& apvtsRef)
         : probManager (manager)
         , apvts (apvtsRef)
-        , midiCC (std::move (ccControl))
     {
         buildRows();
+        buildPadRows();
 
         viewport.setViewedComponent (&content, false);
         viewport.setScrollBarsShown (true, false);
@@ -55,7 +38,7 @@ public:
         resetButton.onClick = [this] { resetAllToDefault(); };
         addAndMakeVisible (resetButton);
 
-        startTimerHz (10); // polls for CC learn completion at 10 Hz
+        startTimerHz (10);
     }
 
     ~ModifierProbabilityPanel() override { stopTimer(); }
@@ -79,7 +62,6 @@ public:
             if (auto* param = apvts.getParameter (id))
                 param->setValueNotifyingHost (probManager.getWeight (type));
         }
-        refreshCCButtons();
     }
 
 private:
@@ -96,16 +78,26 @@ private:
         std::unique_ptr<juce::Slider>  slider;
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> sliderAttachment;
         std::unique_ptr<juce::Label>   valueLabel;
-        std::unique_ptr<juce::TextButton> ccButton; // "CC:--" / "CC:42" / "LEARN..."
     };
 
     ModifierProbabilityManager&             probManager;
     juce::AudioProcessorValueTreeState&     apvts;
-    MidiCCControl                           midiCC;
     juce::Viewport                          viewport;
     juce::Component                         content;
     std::vector<Row>                        rows;
     juce::TextButton                        resetButton;
+
+    // Per-pad target probability rows
+    struct PadRow
+    {
+        int padIndex = 0;
+        std::unique_ptr<juce::Label>   nameLabel;
+        std::unique_ptr<juce::Slider>  slider;
+        std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> sliderAttachment;
+        std::unique_ptr<juce::Label>   valueLabel;
+    };
+    std::vector<PadRow> padRows;
+    juce::Label padSectionLabel;
 
     // -------------------------------------------------------------------------
     void buildRows()
@@ -161,59 +153,48 @@ private:
             content.addAndMakeVisible (row.valueLabel.get());
             updateValueLabel (row);
 
-            // -- MIDI CC learn button --
-            row.ccButton = std::make_unique<juce::TextButton>();
-            row.ccButton->setTooltip (
-                "Click to map a MIDI CC to this slider (move a CC after clicking).\n"
-                "Click again to cancel learn.\n"
-                "Right-click to clear assignment.");
-            const int idx = static_cast<int> (i);
-            row.ccButton->onClick = [this, idx]
-            {
-                if (! midiCC.startLearn) return;
-                const bool learning    = midiCC.isLearning    ? midiCC.isLearning()            : false;
-                const int  learnIdx    = midiCC.getLearningParamIndex
-                                         ? midiCC.getLearningParamIndex() : -1;
-                // Clicking the active learn button cancels; clicking another starts a new one.
-                if (learning && learnIdx == idx)
-                {
-                    if (midiCC.cancelLearn) midiCC.cancelLearn();
-                }
-                else
-                {
-                    if (learning && midiCC.cancelLearn) midiCC.cancelLearn();
-                    midiCC.startLearn (idx);
-                }
-                refreshCCButtons();
-            };
-            // Right-click clears assignment
-            row.ccButton->onStateChange = [this, idx] { };  // placeholder; handled below
-            content.addAndMakeVisible (row.ccButton.get());
-            updateCCButton (row);
-
             rows.push_back (std::move (row));
-        }
-
-        // Wire right-click clear after rows vector is stable
-        for (auto& r : rows)
-        {
-            r.ccButton->addMouseListener (this, false);
         }
     }
 
-    void mouseUp (const juce::MouseEvent& e) override
+    void buildPadRows()
     {
-        if (e.mods.isRightButtonDown())
+        padSectionLabel.setText ("Pad Target Probability", juce::dontSendNotification);
+        padSectionLabel.setFont (juce::FontOptions (15.0f, juce::Font::bold));
+        padSectionLabel.setColour (juce::Label::textColourId, Theme::text());
+        content.addAndMakeVisible (padSectionLabel);
+
+        for (int i = 0; i < 8; ++i)
         {
-            for (auto& row : rows)
-            {
-                if (e.eventComponent == row.ccButton.get())
-                {
-                    if (midiCC.clearAssignment) midiCC.clearAssignment (row.paramIndex);
-                    updateCCButton (row);
-                    return;
-                }
-            }
+            PadRow pr;
+            pr.padIndex = i;
+
+            pr.nameLabel = std::make_unique<juce::Label>();
+            pr.nameLabel->setText ("Pad " + juce::String (i + 1), juce::dontSendNotification);
+            pr.nameLabel->setFont (juce::FontOptions (14.0f));
+            pr.nameLabel->setColour (juce::Label::textColourId, Theme::textSubtle());
+            content.addAndMakeVisible (pr.nameLabel.get());
+
+            pr.slider = std::make_unique<juce::Slider> (juce::Slider::LinearHorizontal,
+                                                         juce::Slider::NoTextBox);
+            pr.slider->setRange (0.0, 1.0, 0.01);
+            pr.slider->setColour (juce::Slider::trackColourId,       Theme::accent());
+            pr.slider->setColour (juce::Slider::backgroundColourId,  Theme::panelAlt());
+            content.addAndMakeVisible (pr.slider.get());
+
+            const juce::String paramId = "padProb_" + juce::String (i);
+            pr.sliderAttachment =
+                std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
+                    apvts, paramId, *pr.slider);
+
+            pr.valueLabel = std::make_unique<juce::Label>();
+            pr.valueLabel->setFont (juce::FontOptions (13.0f));
+            pr.valueLabel->setColour (juce::Label::textColourId, Theme::textSubtle());
+            pr.valueLabel->setJustificationType (juce::Justification::centredLeft);
+            content.addAndMakeVisible (pr.valueLabel.get());
+            updatePadValueLabel (pr);
+
+            padRows.push_back (std::move (pr));
         }
     }
 
@@ -224,50 +205,9 @@ private:
         for (auto& row : rows)
             updateValueLabel (row);
 
-        // Check if a CC learn just completed
-        if (midiCC.pollLearnedCC)
-        {
-            if (midiCC.pollLearnedCC() >= 0)
-                refreshCCButtons();
-        }
-
-        // Update the learn-in-progress button label
-        if (midiCC.isLearning && midiCC.isLearning())
-        {
-            const int learnIdx = midiCC.getLearningParamIndex
-                                 ? midiCC.getLearningParamIndex() : -1;
-            for (auto& row : rows)
-                if (row.paramIndex == learnIdx)
-                    row.ccButton->setButtonText ("LEARN...");
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    void refreshCCButtons()
-    {
-        for (auto& row : rows)
-            updateCCButton (row);
-    }
-
-    void updateCCButton (Row& row)
-    {
-        if (! midiCC.getAssignedCC)
-        {
-            row.ccButton->setButtonText ("CC:--");
-            return;
-        }
-
-        const bool learning = midiCC.isLearning && midiCC.isLearning()
-                              && midiCC.getLearningParamIndex
-                              && midiCC.getLearningParamIndex() == row.paramIndex;
-        if (learning)
-        {
-            row.ccButton->setButtonText ("LEARN...");
-            return;
-        }
-
-        const int cc = midiCC.getAssignedCC (row.paramIndex);
-        row.ccButton->setButtonText (cc >= 0 ? "CC:" + juce::String (cc) : "CC:--");
+        // Refresh pad probability value labels
+        for (auto& pr : padRows)
+            updatePadValueLabel (pr);
     }
 
     void updateValueLabel (Row& row)
@@ -291,6 +231,24 @@ private:
             if (auto* param = apvts.getParameter (id))
                 param->setValueNotifyingHost (1.0f);
         }
+        for (int i = 0; i < 8; ++i)
+        {
+            const juce::String id = "padProb_" + juce::String (i);
+            if (auto* param = apvts.getParameter (id))
+                param->setValueNotifyingHost (1.0f);
+        }
+    }
+
+    void updatePadValueLabel (PadRow& pr)
+    {
+        const juce::String id = "padProb_" + juce::String (pr.padIndex);
+        float w = 1.0f;
+        if (auto* rawVal = apvts.getRawParameterValue (id))
+            w = rawVal->load();
+        const int pct = juce::roundToInt (w * 100.0f);
+        pr.valueLabel->setText (pct <= 0 ? "OFF"
+                                         : juce::String (pct) + "%",
+                                juce::dontSendNotification);
     }
 
     void layoutContent()
@@ -300,7 +258,6 @@ private:
         const int padding         = 6;
         const int labelWidth      = 150;
         const int valueLabelWidth = 48;
-        const int ccButtonWidth   = 78;
 
         const int contentWidth = viewport.getMaximumVisibleWidth();
         int y = padding;
@@ -323,15 +280,34 @@ private:
             row.nameLabel->setBounds (x, y, labelWidth, rowHeight);
             x += labelWidth + 4;
 
-            const int sliderWidth = contentWidth - x - valueLabelWidth - ccButtonWidth - padding - 8;
+            const int sliderWidth = contentWidth - x - valueLabelWidth - padding - 8;
             row.slider->setBounds (x, y, juce::jmax (20, sliderWidth), rowHeight);
             x += juce::jmax (20, sliderWidth) + 4;
 
             row.valueLabel->setBounds (x, y, valueLabelWidth, rowHeight);
-            x += valueLabelWidth + 4;
-
-            row.ccButton->setBounds (x, y, ccButtonWidth, rowHeight);
             y += rowHeight;
+        }
+
+        // Pad Target Probability section
+        if (!padRows.empty())
+        {
+            y += 8;
+            padSectionLabel.setBounds (padding, y, contentWidth - padding * 2, headerHeight);
+            y += headerHeight + 2;
+
+            for (auto& pr : padRows)
+            {
+                int x = padding + 8;
+                pr.nameLabel->setBounds (x, y, labelWidth, rowHeight);
+                x += labelWidth + 4;
+
+                const int sliderWidth = contentWidth - x - valueLabelWidth - padding - 8;
+                pr.slider->setBounds (x, y, juce::jmax (20, sliderWidth), rowHeight);
+                x += juce::jmax (20, sliderWidth) + 4;
+
+                pr.valueLabel->setBounds (x, y, valueLabelWidth, rowHeight);
+                y += rowHeight;
+            }
         }
 
         content.setSize (contentWidth, y + padding);

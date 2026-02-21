@@ -62,10 +62,6 @@ public:
         modifiersToggle.setToggleState(app.settings.modifiersEnabled, juce::dontSendNotification);
         modifiersToggle.onClick = [this]{ modifiersToggleChanged(); };
 
-        addAndMakeVisible(implementedOnlyToggle);
-        implementedOnlyToggle.setToggleState(true, juce::dontSendNotification);
-        implementedOnlyToggle.onClick = [this]{ implementedOnlyToggled(); };
-
         // Parts count selector
         addAndMakeVisible(partsCountBox);
         partsCountBox.addItem("1 part", 1);
@@ -228,7 +224,6 @@ public:
         barsBetweenModifiersSlider.setBounds(controlBar.removeFromLeft(220).reduced(2));
 
         auto rightRegion = controlBar;
-        implementedOnlyToggle.setBounds(rightRegion.removeFromRight(150).reduced(2));
         masterVolumeSlider.setBounds(rightRegion.removeFromRight(64).reduced(2));
 
         auto row2 = area.removeFromTop(28).reduced(2);
@@ -281,8 +276,6 @@ private:
     ModifierHistoryPanel* externalModifierHistory = nullptr;
 
     juce::ToggleButton modifiersToggle { "Modifiers" };
-
-    juce::ToggleButton implementedOnlyToggle { "Implemented Only" };
 
     juce::ComboBox partsCountBox;
     int pendingPartsCount = -1; // -1 = none; otherwise apply on next modifier trigger
@@ -503,11 +496,6 @@ private:
                 app.scheduler.stop();
         }
         refreshStatus();
-    }
-
-    void implementedOnlyToggled()
-    {
-        app.scheduler.setRestrictToImplemented(implementedOnlyToggle.getToggleState());
     }
 
     void partsCountChanged()

@@ -216,8 +216,8 @@ private:
                                           "when the transport is running" },
                 { "Bars / Mod slider",    "How many bars elapse between each modifier application "
                                           "(1-16 bars)" },
-                { "Implemented Only",     "When on, restricts the scheduler to modifiers that "
-                                          "are currently implemented" },
+                { "Master Volume knob",   "Boost or cut overall output level (-12 dB to +12 dB); "
+                                          "applies equally to all pads and output buses" },
             };
             contentHolder.sections.push_back(s);
         }
@@ -311,9 +311,8 @@ private:
                 "you can load new files at any time without interrupting playback.\n\n"
                 "- If a loaded file goes missing (e.g. sample drive unmounted) "
                 "the pad shows an error state and outputs silence.\n\n"
-                "- The 'Implemented Only' toggle in the Session tab is useful while "
-                "new modifiers are being added - it hides modifiers that are listed "
-                "but not yet fully functional.";
+                "- Use the Master Volume knob to compensate if the default -12 dB "
+                "per-pad headroom reduction makes the mix too quiet.";
             contentHolder.sections.push_back(s);
         }
 

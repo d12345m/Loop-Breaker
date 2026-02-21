@@ -216,6 +216,9 @@ struct AppState : public ModifierSchedulerListener
             case ModifierType::BufferTremolo:
                 applyBufferTremoloOn(targets);
                 break;
+            case ModifierType::BufferVolumeRampDown:
+                applyBufferVolumeRampDown(desc, targets);
+                break;
             case ModifierType::BufferChorusOn:
                 applyBufferChorusOn(desc, targets);
                 break;
@@ -268,6 +271,15 @@ private:
                 if (!b->isPlaying()) b->play();
             }
         }
+    }
+
+    // Utility: pick a random element from a small list of doubles
+    double pickRandom(std::initializer_list<double> options) const
+    {
+        juce::Array<double> arr;
+        for (auto v : options) arr.add(v);
+        juce::Random r;
+        return arr[r.nextInt(arr.size())];
     }
 
     void applyReverse(const juce::Array<int>& targets)
@@ -682,6 +694,34 @@ private:
                 // Reset HPF cutoff down to default (20 Hz) over 1 bar
                 strip.setHighPassCutoffEnvelope(strip.getFxParams().highPassCutoff, 20.0f, 1.0f);
                 strip.effects().highPassEnabled = true; // keep on during ramp
+            }
+        }
+    }
+
+    void applyBufferVolumeRampDown(const ModifierDescriptor& desc, const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+
+        // Duration of the ramp down phase in bars (randomly chosen from plausible options)
+        const float rampBars = desc.plannedFxFadeBars.has_value()
+                                   ? (float) desc.plannedFxFadeBars.value()
+                                   : (float) pickRandom({1.0, 2.0, 4.0});
+
+        // Hold at the low volume for a random number of bars (1-4)
+        const float holdBars = (float) pickRandom({1.0, 2.0, 3.0, 4.0});
+
+        // Target gain: how quiet the ramp gets (pick a random amount)
+        const float targetGain = 0.0f; // Fade to silence
+
+        // Ramp back up over the same number of bars as the ramp down
+        const float rampUpBars = rampBars;
+
+        for (int idx : targets)
+        {
+            if (juce::isPositiveAndBelow(idx, channelStrips.size()))
+            {
+                auto& strip = *channelStrips[idx];
+                strip.startTemporaryVolumeRamp(targetGain, rampBars, holdBars, rampUpBars);
             }
         }
     }

@@ -56,6 +56,7 @@ public:
     addToggle(ModifierType::BufferTremolo, "Tremolo On");
     addToggle(ModifierType::BufferChorusOn, "Chorus On");
     addToggle(ModifierType::BufferAutoPan, "Auto-Pan");
+    addToggle(ModifierType::BufferVolumeRampDown, "Vol Ramp Down");
     // Ducking is enabled by default; GUI toggle removed.
     // Speed variants removed; Speed is randomized at runtime.
     addToggle(ModifierType::ResetAll, "Reset");

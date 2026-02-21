@@ -22,8 +22,9 @@ struct EffectChainPlaceholder
     bool tremoloEnabled = false;
     bool chorusEnabled = false;
     bool autoPanEnabled = false;
+    bool volumeRampEnabled = false;
 
-    void reset() { delayEnabled = reverbEnabled = lowPassEnabled = highPassEnabled = tremoloEnabled = chorusEnabled = autoPanEnabled = false; }
+    void reset() { delayEnabled = reverbEnabled = lowPassEnabled = highPassEnabled = tremoloEnabled = chorusEnabled = autoPanEnabled = volumeRampEnabled = false; }
 };
 
 class ChannelStrip
@@ -408,6 +409,10 @@ public:
             }
         }
 
+        // Apply volume ramp gain (before limiter) if active
+        if (chain.volumeRampEnabled && params.volumeGain < 0.9999f)
+            tempBuffer.applyGain(params.volumeGain);
+
         // Apply limiter at the end of the effect chain to prevent clipping
         juce::dsp::AudioBlock<float> block(tempBuffer);
         juce::dsp::ProcessContextReplacing<float> context(block);
@@ -476,6 +481,7 @@ public:
         float panDepth = 1.0f;       // 0..1 how far L/R the sweep goes
         float panMix = 0.5f;         // 0..1 wet/dry (0 = bypass)
         float panPeriodBars = 0.0f;  // musical period in bars (for BPM resync)
+        float volumeGain = 1.0f;      // 0..1 overall channel gain (used by volume ramp modifier)
     };
 
     void reset()
@@ -491,6 +497,8 @@ public:
         tremoloDepthEnv = {};
         chorusMixEnv = {};
         panMixEnv = {};
+        volumeGainEnv = {};
+        tempVolRamp = {};
         if (buffer) buffer->resetToDefaults();
     }
 
@@ -541,6 +549,26 @@ public:
     void setPanMixEnvelope(float start, float target, float durationBars)
     {
         panMixEnv = { start, target, durationBars, 0.0f, EffectEnvelope::Curve::Linear };
+    }
+
+    void setVolumeGainEnvelope(float start, float target, float durationBars)
+    {
+        volumeGainEnv = { start, target, durationBars, 0.0f, EffectEnvelope::Curve::Linear };
+    }
+
+    // Temporary volume ramp: ramp down over rampDownBars, hold for holdBars, ramp back up over rampUpBars
+    void startTemporaryVolumeRamp(float targetGain, float rampDownBars, float holdBars, float rampUpBars)
+    {
+        chain.volumeRampEnabled = true;
+        tempVolRamp.active = true;
+        tempVolRamp.holdingStarted = false;
+        tempVolRamp.fallingStarted = false;
+        tempVolRamp.holdTarget = juce::jlimit(0.0f, 1.0f, targetGain);
+        tempVolRamp.holdBars = juce::jmax(0.0f, holdBars);
+        tempVolRamp.rampUpBars = juce::jmax(0.0f, rampUpBars);
+        tempVolRamp.returnTarget = params.volumeGain; // remember where we were
+        // Start the ramp down
+        setVolumeGainEnvelope(params.volumeGain, targetGain, juce::jmax(0.0f, rampDownBars));
     }
 
     // Advance envelopes by given bars; update current parameter values
@@ -606,6 +634,30 @@ public:
         // Auto-disable auto-pan when mix reaches zero and no active envelope
         if (chain.autoPanEnabled && !panMixEnv.isActive() && params.panMix <= 0.0001f)
             chain.autoPanEnabled = false;
+        // Volume gain ramp
+        params.volumeGain = volumeGainEnv.isActive() ? volumeGainEnv.current(params.volumeGain) : params.volumeGain;
+        if (volumeGainEnv.isActive()) volumeGainEnv.advance(barsDelta);
+        // Temp volume ramp state machine: ramp down -> hold -> ramp up
+        if (tempVolRamp.active && !tempVolRamp.holdingStarted && !volumeGainEnv.isActive())
+        {
+            // Ramp down finished; begin hold phase (set an envelope from target to target over holdBars)
+            tempVolRamp.holdingStarted = true;
+            if (tempVolRamp.holdBars > 0.0f)
+                setVolumeGainEnvelope(tempVolRamp.holdTarget, tempVolRamp.holdTarget, tempVolRamp.holdBars);
+            // If holdBars==0, fall through immediately to fallingStarted check next time
+        }
+        if (tempVolRamp.active && tempVolRamp.holdingStarted && !tempVolRamp.fallingStarted && !volumeGainEnv.isActive())
+        {
+            // Hold finished; begin ramp up
+            tempVolRamp.fallingStarted = true;
+            setVolumeGainEnvelope(params.volumeGain, tempVolRamp.returnTarget, tempVolRamp.rampUpBars);
+        }
+        // Auto-disable volume ramp when complete
+        if (chain.volumeRampEnabled && tempVolRamp.active && tempVolRamp.fallingStarted && !volumeGainEnv.isActive())
+        {
+            chain.volumeRampEnabled = false;
+            tempVolRamp.active = false;
+        }
     }
 
     const FxParams& getFxParams() const { return params; }
@@ -624,6 +676,7 @@ private:
     EffectEnvelope tremoloDepthEnv;
     EffectEnvelope chorusMixEnv;
     EffectEnvelope panMixEnv;
+    EffectEnvelope volumeGainEnv;
     juce::dsp::Reverb reverb;
     juce::dsp::Limiter<float> limiter;
     bool reverbPrepared = false;
@@ -697,6 +750,16 @@ private:
     struct TempFilterBurst { bool active = false; bool fallingStarted = false; float returnTarget = 0.0f; float fallDurationBars = 0.0f; };
     TempFilterBurst tempLpf;
     TempFilterBurst tempHpf;
+    // Volume ramp state: ramp down -> hold -> ramp up
+    struct TempVolRampState {
+        bool active = false;
+        bool holdingStarted = false;
+        bool fallingStarted = false;
+        float holdTarget = 0.0f;
+        float holdBars = 0.0f;
+        float rampUpBars = 0.0f;
+        float returnTarget = 1.0f;
+    } tempVolRamp;
 public:
     void startTemporaryLowPass(float riseTarget, float riseDurationBars, float returnTarget, float returnDurationBars)
     {

@@ -487,6 +487,7 @@ ModifierDescriptor ModifierScheduler::pickRandomDescriptor() const
                 || t == ModifierType::BufferTremolo
                 || t == ModifierType::BufferChorusOn
                 || t == ModifierType::BufferAutoPan
+                || t == ModifierType::BufferVolumeRampDown
                     || t == ModifierType::SwitchPart
                     || t == ModifierType::QuarterNoteBurst);
             if (!allowed) continue;

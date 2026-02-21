@@ -217,7 +217,14 @@ void ModifierScheduler::triggerIfDue()
         if (!suppressed.load())
         {
             auto targets = selectTargetBuffers(descriptor);
-            for (auto* l : listeners) l->modifierTriggered(descriptor, targets);
+            // If a buffer-targeting modifier has no eligible targets (all pad
+            // probabilities are 0), silently skip the trigger.
+            const bool needsTargets = (descriptor.category != ModifierCategory::MasterEffect
+                                    && descriptor.category != ModifierCategory::GlobalUtility);
+            if (!needsTargets || !targets.isEmpty())
+            {
+                for (auto* l : listeners) l->modifierTriggered(descriptor, targets);
+            }
             // After a successful trigger, if user had explicitly selected buffers, clear them so
             // next cycle requires fresh selection (pad UI will be updated by listener/owner).
             if (!userSelectedBuffers.isEmpty())
@@ -275,7 +282,12 @@ void ModifierScheduler::triggerIfDueHost(double currentPpq, double bpm)
         if (!suppressed.load())
         {
             auto targets = selectTargetBuffers(descriptor);
-            for (auto* l : listeners) l->modifierTriggered(descriptor, targets);
+            const bool needsTargets = (descriptor.category != ModifierCategory::MasterEffect
+                                    && descriptor.category != ModifierCategory::GlobalUtility);
+            if (!needsTargets || !targets.isEmpty())
+            {
+                for (auto* l : listeners) l->modifierTriggered(descriptor, targets);
+            }
             if (!userSelectedBuffers.isEmpty())
                 userSelectedBuffers.clearQuick();
         }

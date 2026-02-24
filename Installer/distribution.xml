@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<installer-gui-script minSpecVersion="2">
+    <title>Loop Breaker</title>
+    <organization>com.glowmachineaudio.LoopBreaker</organization>
+
+    <!-- Require macOS 11+ (Big Sur), Intel or Apple Silicon -->
+    <allowed-os-versions>
+        <os-version min="11.0"/>
+    </allowed-os-versions>
+    <options
+        customize="never"
+        require-scripts="false"
+        hostArchitectures="x86_64,arm64"
+    />
+
+    <!-- Install to system domain only (VST3 must go to /Library) -->
+    <domains
+        enable_anywhere="false"
+        enable_currentUserHome="false"
+        enable_localSystem="true"
+    />
+
+    <!-- Installer pages -->
+    <welcome    file="welcome.html"/>
+    <readme     file="readme.html"/>
+    <conclusion file="conclusion.html"/>
+
+    <!-- Single choice: install VST3 -->
+    <choices-outline>
+        <line choice="vst3"/>
+    </choices-outline>
+
+    <choice
+        id="vst3"
+        title="Loop Breaker VST3"
+        description="Installs Loop Breaker VST3 plug-in to /Library/Audio/Plug-Ins/VST3/"
+        visible="true"
+        enabled="true"
+        selected="true"
+    >
+        <pkg-ref id="com.glowmachineaudio.LoopBreaker"/>
+    </choice>
+
+    <pkg-ref
+        id="com.glowmachineaudio.LoopBreaker"
+        version="1.0.0"
+        onConclusion="none"
+    >LoopBreakerVST3.pkg</pkg-ref>
+</installer-gui-script>

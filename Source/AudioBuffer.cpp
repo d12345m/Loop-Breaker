@@ -220,15 +220,23 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
     {
         const int curSamples = outputBuffer.getNumSamples();
         const int prevSamples = previousBlockNumSamples;
-        // Scale crossfade duration based on how extreme the speed and pitch are.
-        // At speed=1.0 / pitch=0 the old 10ms is fine, but at speed=0.25 or 4.0
-        // the repitch->stretch transition is much more dramatic and SoundTouch needs
-        // more time to settle. Large pitch shifts (e.g. +12 semitones / octave)
-        // cause the overlap-add algorithm to reshape the waveform significantly,
-        // requiring a longer blend to avoid an audible click.
-        const double speedFactor = juce::jlimit(1.0, 4.0, 1.0 / juce::jmin(snap.speedMag(), 1.0));
-        const double pitchFactor = snap.usePitch() ? juce::jlimit(1.0, 3.0, 1.0 + std::abs(snap.pitchSemis) / 12.0) : 1.0;
-        const double crossfadeMs = juce::jlimit(10.0, 50.0, 10.0 * speedFactor * pitchFactor);
+        // The crossfade must be long enough to cover SoundTouch's settle time,
+        // which is the period during which its overlap-add algorithm may produce
+        // audible splice artifacts.  The settle time scales with the combined
+        // consumption ratio (rate × tempo × pitch-compensation).
+        //
+        // Use the same formula as the priming settle-time so the crossfade fully
+        // masks the transient.  We calculate it from the snapshot parameters
+        // directly since we don't have access to the smoothed values here.
+        const double speedDev = juce::jmax(snap.speedMag(), 1.0);
+        const double ratioVal = juce::jmax(snap.stretchRatio, 1.0);
+        const double pitchDev = snap.usePitch() ? std::pow(2.0, std::abs(snap.pitchSemis) / 12.0) : 1.0;
+        // Mirrors the priming settleMs formula but with wider headroom:
+        //   base 20ms × ratio-factor × speed-factor × pitch-factor
+        const double crossfadeMs = juce::jlimit(20.0, 80.0,
+                                                 20.0 * juce::jmax(1.0, ratioVal)
+                                                      * juce::jmax(1.0, speedDev)
+                                                      * juce::jmax(1.0, pitchDev));
         const int fadeSamples = juce::jmin(curSamples,
                                            juce::jmin(prevSamples,
                                                      juce::jmax(1, (int)(hostSampleRate * crossfadeMs / 1000.0))));
@@ -1470,23 +1478,21 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
     }
 
     // Apply fade-in if this is the first block after priming.
-    // When a crossfade is also going to run (mode transition or param-change),
-    // we still apply a BRIEF fade-in to suppress SoundTouch's startup transient
-    // (the overlap-add algorithm can produce a phase-discontinuity burst on its
-    // first output frames, especially at large pitch shifts like +12 semitones).
-    // The short fade-in covers the transient region while the longer crossfade
-    // in processBlock handles the overall level blending.
+    //
+    // When a crossfade will run (mode transition or param-change reset), the
+    // crossfade blends the clean previous-block audio over SoundTouch's startup
+    // transient, so we do NOT need a fade-from-silence here — that would fight
+    // the crossfade and cause a volume dip that can sound like a click.
+    //
+    // When NO crossfade will run (e.g. playback just started, or previous block
+    // was invalid), the full settle-time fade-in is needed to ramp up from
+    // silence and mask SoundTouch's startup artifacts.
     const bool modeTransitionCrossfadeWillRun = (lastBlockUsedStretch == false) && previousBlockValid;
     const bool paramChangeCrossfadeWillRun = didReset && previousBlockValid;
     if (modeTransitionCrossfadeWillRun || paramChangeCrossfadeWillRun)
     {
-        // Shorten the fade-in to a brief duration (~3-5 ms) to suppress
-        // SoundTouch's startup transient without fighting the crossfade too
-        // much. Scale with pitch magnitude since larger shifts (e.g. +12 st)
-        // produce bigger overlap-add startup artefacts.
-        const double briefMs = juce::jlimit (2.0, 5.0, 2.0 + std::abs (pitchSemis) / 12.0 * 3.0);
-        const int briefFade = juce::jmax (1, (int) (hostSampleRate * briefMs / 1000.0));
-        stretchFadeInRemaining = juce::jmin (stretchFadeInRemaining, briefFade);
+        // Skip the fade-in entirely; the crossfade handles the transition.
+        stretchFadeInRemaining = 0;
     }
     // Apply fade-in (either the full settle-time fade or the shortened brief
     // fade set above). This ramps SoundTouch's first output from silence,
@@ -1522,8 +1528,13 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
     {
         const int curSamples = framesWritten;
         const int prevSamples = previousBlockNumSamples;
-        const double maxRatio = juce::jmax(std::abs(clampedRatio), 1.0 / juce::jmax(0.25, clampedRate));
-        const double crossfadeMs = juce::jlimit(10.0, 30.0, 10.0 * maxRatio);
+        // Use the settle-time formula to size the crossfade so it fully covers
+        // SoundTouch's post-reset overlap-add warmup.
+        const double pitchDev = smoothedPitchActive ? std::pow(2.0, std::abs(smoothedPitchSemis) / 12.0) : 1.0;
+        const double crossfadeMs = juce::jlimit(20.0, 80.0,
+                                                 20.0 * juce::jmax(1.0, std::abs(clampedRatio))
+                                                      * juce::jmax(1.0, clampedRate)
+                                                      * juce::jmax(1.0, pitchDev));
         const int fadeSamples = juce::jmin (curSamples,
                                             juce::jmin (prevSamples,
                                                         juce::jmax (1, (int) (hostSampleRate * crossfadeMs / 1000.0))));

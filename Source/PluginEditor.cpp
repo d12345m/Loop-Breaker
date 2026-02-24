@@ -21,7 +21,7 @@ public:
     {
         setColour(juce::ResizableWindow::backgroundColourId, Theme::bg());
         setColour(juce::ComboBox::backgroundColourId, Theme::panel());
-        setColour(juce::ComboBox::outlineColourId, Theme::borderStrong());
+        setColour(juce::ComboBox::outlineColourId, Theme::border());
         setColour(juce::ComboBox::textColourId, Theme::text());
         setColour(juce::ComboBox::arrowColourId, Theme::textSubtle());
 
@@ -39,6 +39,35 @@ public:
         setColour(juce::PopupMenu::highlightedBackgroundColourId, Theme::accent().withAlpha(0.12f));
         setColour(juce::PopupMenu::textColourId, Theme::text());
         setColour(juce::PopupMenu::highlightedTextColourId, Theme::text());
+    }
+
+    void drawComboBox (juce::Graphics& g, int width, int height, bool /*isButtonDown*/,
+                       int /*buttonX*/, int /*buttonY*/, int /*buttonW*/, int /*buttonH*/,
+                       juce::ComboBox& box) override
+    {
+        const auto r = juce::Rectangle<float> (0, 0, (float) width, (float) height);
+        const float corner = 4.0f;
+
+        // Background
+        g.setColour (box.findColour (juce::ComboBox::backgroundColourId));
+        g.fillRoundedRectangle (r, corner);
+
+        // Border
+        g.setColour (box.findColour (juce::ComboBox::outlineColourId));
+        g.drawRoundedRectangle (r.reduced (0.5f), corner, 1.0f);
+
+        // Small chevron (▾) on the right
+        const float arrowSize = 6.0f;
+        const float arrowX = (float) width - 14.0f;
+        const float arrowY = (float) height * 0.5f;
+
+        juce::Path chevron;
+        chevron.addTriangle (arrowX - arrowSize * 0.5f, arrowY - arrowSize * 0.3f,
+                             arrowX + arrowSize * 0.5f, arrowY - arrowSize * 0.3f,
+                             arrowX,                    arrowY + arrowSize * 0.4f);
+
+        g.setColour (box.findColour (juce::ComboBox::arrowColourId));
+        g.fillPath (chevron);
     }
 };
 
@@ -74,6 +103,10 @@ public:
             partsCountBox.setSelectedId(initialParts, juce::dontSendNotification);
         }
         partsCountBox.onChange = [this]{ partsCountChanged(); };
+        partsCountBox.setColour(juce::ComboBox::backgroundColourId, Theme::panel());
+        partsCountBox.setColour(juce::ComboBox::outlineColourId, Theme::border());
+        partsCountBox.setColour(juce::ComboBox::textColourId, Theme::text());
+        partsCountBox.setColour(juce::ComboBox::arrowColourId, Theme::textSubtle());
 
         // Bars between modifiers slider
         addAndMakeVisible(barsBetweenModifiersSlider);
@@ -88,7 +121,7 @@ public:
         barsBetweenModifiersSlider.setColour(juce::Slider::thumbColourId, Theme::warn().brighter(0.2f));
         // Improve readability: blue textbox background with white text.
         barsBetweenModifiersSlider.setColour(juce::Slider::textBoxBackgroundColourId, Theme::accent());
-        barsBetweenModifiersSlider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
+        barsBetweenModifiersSlider.setColour(juce::Slider::textBoxTextColourId, Theme::text());
         barsBetweenModifiersSlider.setColour(juce::Slider::textBoxOutlineColourId, Theme::accent().darker(0.35f));
         // Some LookAndFeels/styles end up with a transparent child Label; force it opaque.
         for (int i = 0; i < barsBetweenModifiersSlider.getNumChildComponents(); ++i)
@@ -96,7 +129,7 @@ public:
             if (auto* label = dynamic_cast<juce::Label*>(barsBetweenModifiersSlider.getChildComponent(i)))
             {
                 label->setColour(juce::Label::backgroundColourId, Theme::accent());
-                label->setColour(juce::Label::textColourId, juce::Colours::white);
+                label->setColour(juce::Label::textColourId, Theme::text());
                 label->setColour(juce::Label::outlineColourId, Theme::accent().darker(0.35f));
                 label->setOpaque(true);
             }
@@ -120,7 +153,6 @@ public:
         masterVolumeLabel.setJustificationType(juce::Justification::centred);
         masterVolumeLabel.setColour(juce::Label::textColourId, Theme::textSubtle());
         masterVolumeLabel.setFont(juce::Font(juce::FontOptions().withHeight(11.0f)));
-        masterVolumeLabel.attachToComponent(&masterVolumeSlider, false);
 
         addAndMakeVisible(statusLabel);
         statusLabel.setJustificationType(juce::Justification::centredLeft);
@@ -232,7 +264,7 @@ public:
     void resized() override
     {
         auto area = getLocalBounds().reduced(8);
-        auto topBar = area.removeFromTop(60);
+        auto topBar = area.removeFromTop(80);
         modifierDisplay.setBounds(topBar.removeFromLeft(topBar.getWidth() * 0.5f).reduced(4));
 
         auto controlBar = topBar;
@@ -240,8 +272,11 @@ public:
         partsCountBox.setBounds(controlBar.removeFromLeft(120).reduced(2));
         barsBetweenModifiersSlider.setBounds(controlBar.removeFromLeft(220).reduced(2));
 
-        auto rightRegion = controlBar;
-        masterVolumeSlider.setBounds(rightRegion.removeFromRight(64).reduced(2));
+        // Volume knob: place label above the knob within the same region
+        auto volRegion = controlBar.removeFromRight(100).reduced(2);
+        auto volLabelArea = volRegion.removeFromTop(14);
+        masterVolumeLabel.setBounds(volLabelArea);
+        masterVolumeSlider.setBounds(volRegion);
 
         auto row2 = area.removeFromTop(28).reduced(2);
         hostTransportLabel.setBounds(row2.removeFromRight(240).reduced(2));

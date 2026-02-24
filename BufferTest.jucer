@@ -2,12 +2,12 @@
 
 <JUCERPROJECT id="vFjAY7" name="TestPlugin" projectType="audioplug" useAppConfig="0"
               addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1" companyName="GlowMachineAudio"
-              pluginName="TestPlugin"
-              pluginDesc="TestPlugin" pluginManufacturer="GlowMachineAudio"
+              pluginName="Loop Breaker"
+              pluginDesc="Loop Breaker" pluginManufacturer="GlowMachineAudio"
               pluginManufacturerCode="GloM" pluginCode="TsPl" pluginIsSynth="0"
               pluginWantsMidiIn="1" pluginProducesMidiOut="0" pluginIsMidiEffectPlugin="0"
               pluginEditorRequiresKeys="0" pluginAUExportPrefix="TestPluginAU"
-              pluginAAXIdentifier="com.glowmachineaudio.TestPlugin" pluginRTASCategory=""
+              pluginAAXIdentifier="com.glowmachineaudio.LoopBreaker" pluginRTASCategory=""
               pluginVSTCategory="kPlugCategEffect" pluginVST3Category="Fx"
               pluginFormats="buildVST3" pluginCharacteristicsValue="pluginWantsMidiIn">
   <MAINGROUP id="b0GUwa" name="BufferTest">

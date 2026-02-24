@@ -194,13 +194,15 @@ private:
             s.heading = "Pad Interactions";
             s.table = {
                 { "Click",                       "Toggle pad selection on / off" },
+                { "Right-click",                 "Open context menu (Load Sample, Remove Sample, "
+                                                 "MIDI Learn, Clear MIDI Note)" },
                 { "Drag & drop file onto pad",   "Load audio file into that pad" },
                 { "Shift + Click",               "Enter MIDI learn mode for this pad - "
                                                  "play a MIDI note to assign it; "
                                                  "click again to cancel" },
                 { "Cmd + Click  (macOS)",        "Clear the MIDI note assignment for this pad" },
                 { "Alt + Click",                 "Clear the MIDI note assignment for this pad (alias)" },
-                { "Ctrl + Click  (^+Click)",     "Remove the loaded sample from this pad" },
+                { "Shift + Cmd + Click  (macOS)","Remove the loaded sample from this pad" },
             };
             contentHolder.sections.push_back(s);
         }

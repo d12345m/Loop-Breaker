@@ -180,6 +180,23 @@ public:
             padGrid.setPadFilePath(padIndex, {});
         };
 
+        padGrid.onLoadSampleRequest = [this](int padIndex)
+        {
+            fileChooser = std::make_unique<juce::FileChooser>(
+                "Load sample for Pad " + juce::String(padIndex + 1),
+                juce::File::getSpecialLocation(juce::File::userHomeDirectory),
+                "*.wav;*.aif;*.aiff;*.flac;*.mp3");
+
+            fileChooser->launchAsync(
+                juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                [this, padIndex](const juce::FileChooser& fc)
+                {
+                    auto result = fc.getResult();
+                    if (result.existsAsFile())
+                        loadFileIntoPad(padIndex, result);
+                });
+        };
+
         // Initialize pad MIDI notes from settings
         for (int i = 0; i < 8; ++i)
             padGrid.setMidiNoteForPad(i, app.settings.midiNoteMap[i]);

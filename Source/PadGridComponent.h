@@ -31,9 +31,10 @@ public:
             btn->setClickingTogglesState(true);
             btn->onClick = [this, btn]
             { 
-                // Skip selection change if Shift (MIDI learn), Cmd (clear MIDI), or Ctrl (clear sample) was held
+                // Skip selection change if Shift (MIDI learn), Cmd (clear MIDI), or right-click was held
                 auto mods = juce::ModifierKeys::currentModifiers;
-                if (mods.isShiftDown() || mods.isCommandDown() || mods.isAltDown() || mods.isCtrlDown())
+                if (mods.isShiftDown() || mods.isCommandDown() || mods.isAltDown()
+                    || mods.isPopupMenu())
                 {
                     // Revert the toggle since we don't want to change selection
                     btn->setToggleState(!btn->getToggleState(), juce::dontSendNotification);
@@ -113,6 +114,7 @@ public:
     std::function<void(int padIndex)> onMidiLearnRequest;
     std::function<void(int padIndex)> onClearMidiNote;
     std::function<void(int padIndex)> onClearSample;
+    std::function<void(int padIndex)> onLoadSampleRequest;
 
     // Provide an AudioFormatManager to use for reading files (prepared by the app)
     void setAudioFormatManager(juce::AudioFormatManager* afm)
@@ -622,9 +624,16 @@ private:
         
         if (clickedPadIndex < 0)
             return;
+
+        // Right-click: show context menu
+        if (e.mods.isPopupMenu())
+        {
+            showPadContextMenu(clickedPadIndex);
+            return;
+        }
         
         // Shift+click to enter MIDI learn mode (replaces existing assignment)
-        if (e.mods.isShiftDown())
+        if (e.mods.isShiftDown() && !e.mods.isCommandDown())
         {
             if (onMidiLearnRequest)
             {
@@ -632,17 +641,88 @@ private:
                 e.eventComponent->setMouseCursor(juce::MouseCursor::WaitCursor);
             }
         }
+        // Shift+Cmd+click to clear sample from pad
+        else if (e.mods.isShiftDown() && e.mods.isCommandDown())
+        {
+            if (onClearSample)
+                onClearSample(clickedPadIndex);
+        }
         // Cmd+click (or Alt+click) to clear MIDI assignment
         else if (e.mods.isCommandDown() || e.mods.isAltDown())
         {
             if (onClearMidiNote)
                 onClearMidiNote(clickedPadIndex);
         }
-        // Ctrl+click to clear sample from pad
-        else if (e.mods.isCtrlDown())
+    }
+
+    void showPadContextMenu(int padIndex)
+    {
+        juce::PopupMenu menu;
+
+        const bool hasSample = padIndex < padFileNames.size()
+                               && padFileNames[padIndex].isNotEmpty();
+        const int  midiNote  = (padIndex < (int) midiNotes.size())
+                               ? midiNotes[(size_t) padIndex] : -1;
+
+        // 1. Load sample
+        menu.addItem(1, "Load Sample...");
+
+        // 2. Remove sample (only if one is loaded)
+       #if JUCE_MAC
+        menu.addItem(2, "Remove Sample    [Shift+Cmd+Click]", hasSample);
+       #else
+        menu.addItem(2, "Remove Sample    [Shift+Ctrl+Click]", hasSample);
+       #endif
+
+        menu.addSeparator();
+
+        // 3. MIDI learn
+        juce::String learnLabel = "MIDI Learn";
+        learnLabel += "    [Shift+Click]";
+        menu.addItem(3, learnLabel);
+
+        // 4. Clear MIDI note
+        juce::String clearMidiLabel = "Clear MIDI Note";
+       #if JUCE_MAC
+        clearMidiLabel += "    [Cmd+Click]";
+       #else
+        clearMidiLabel += "    [Alt+Click]";
+       #endif
+        const bool hasMidi = (midiNote >= 0);
+        menu.addItem(4, clearMidiLabel, hasMidi);
+
+        // Show current MIDI note info (disabled item)
+        if (hasMidi)
         {
-            if (onClearSample)
-                onClearSample(clickedPadIndex);
+            menu.addSeparator();
+            menu.addItem(0, "MIDI Note: " + juce::String(midiNote), false);
         }
+
+        menu.showMenuAsync(juce::PopupMenu::Options()
+                               .withTargetComponent(padButtons[padIndex]),
+            [this, padIndex](int result)
+            {
+                switch (result)
+                {
+                    case 1: // Load sample
+                        if (onLoadSampleRequest)
+                            onLoadSampleRequest(padIndex);
+                        break;
+                    case 2: // Remove sample
+                        if (onClearSample)
+                            onClearSample(padIndex);
+                        break;
+                    case 3: // MIDI learn
+                        if (onMidiLearnRequest)
+                            onMidiLearnRequest(padIndex);
+                        break;
+                    case 4: // Clear MIDI note
+                        if (onClearMidiNote)
+                            onClearMidiNote(padIndex);
+                        break;
+                    default:
+                        break;
+                }
+            });
     }
 };

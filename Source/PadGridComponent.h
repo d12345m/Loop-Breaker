@@ -699,7 +699,7 @@ private:
         }
 
         menu.showMenuAsync(juce::PopupMenu::Options()
-                               .withTargetComponent(padButtons[padIndex]),
+                               .withMousePosition(),
             [this, padIndex](int result)
             {
                 switch (result)

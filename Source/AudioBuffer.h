@@ -277,6 +277,10 @@ private:
     // T4: Smoother for speed magnitude when routed through SoundTouch rate/tempo.
     juce::SmoothedValue<double> speedMagSmoother;
 
+    // Smoother for pitch semitones so that adding/stacking pitch shift doesn't
+    // cause an abrupt jump in the tempo-compensation ratio sent to SoundTouch.
+    juce::SmoothedValue<double> pitchSemiSmoother;
+
     // T8: Track the last direction used so we can detect direction flips and crossfade.
     double lastStretchDirection = 1.0;
     

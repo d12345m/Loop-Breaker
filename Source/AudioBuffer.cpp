@@ -132,6 +132,8 @@ AudioBuffer::AudioBuffer(int bufferIndex)
     stretchSmoother.setCurrentAndTargetValue(1.0);
     speedMagSmoother.reset(128);
     speedMagSmoother.setCurrentAndTargetValue(1.0);
+    pitchSemiSmoother.reset(128);
+    pitchSemiSmoother.setCurrentAndTargetValue(0.0);
 }
 
 void AudioBuffer::prepare(double sampleRate, int samplesPerBlockExpected)
@@ -141,6 +143,7 @@ void AudioBuffer::prepare(double sampleRate, int samplesPerBlockExpected)
     speedSmoother.reset(sampleRate, 0.05); // 50ms smoothing time
     stretchSmoother.reset(sampleRate, 0.05);
     speedMagSmoother.reset(sampleRate, 0.05); // T4: 50ms smoothing for speed-mag through SoundTouch
+    pitchSemiSmoother.reset(sampleRate, 0.05); // 50ms smoothing for pitch changes
     
     // Calculate crossfade length in samples
     crossfadeLengthSamples = static_cast<int>(params.crossfadeLengthMs * sampleRate / 1000.0);
@@ -440,25 +443,25 @@ void AudioBuffer::setPitchSemiTones(double semiTones)
     const double oldPitch = pitchSemiTones.load();
     pitchSemiTones.store(semiTones);
 
-    const bool oldPitchActive = std::abs(oldPitch - 0.0) > 1.0e-6;
-    const bool newPitchActive = std::abs(semiTones - 0.0) > 1.0e-6;
-    const bool stretchActive = std::abs(stretchRatio.load() - 1.0) > 1.0e-6;
+    const bool oldPitchActive = std::abs(oldPitch) > 1.0e-6;
+    const bool newPitchActive = std::abs(semiTones) > 1.0e-6;
+    const bool stretchActive  = std::abs(stretchRatio.load() - 1.0) > 1.0e-6;
 
-    // Reset SoundTouch when toggling overall "stretcher usage" on/off.
+    // Only reset SoundTouch when OVERALL stretcher usage toggles on/off.
+    // When the stretcher is already running, SoundTouch picks up parameter
+    // changes (pitch, tempo, rate) on the next processing chunk via its
+    // overlap-add algorithm — no pipeline flush required.  Flushing while
+    // running destroys buffered audio continuity and causes audible clicks,
+    // especially when stacking pitch modifiers (e.g. multiple oct+).
     const bool oldUse = (stretchActive || oldPitchActive);
     const bool newUse = (stretchActive || newPitchActive);
     if (oldUse != newUse)
     {
         stretcherNeedsReset.store(true);
     }
-    // Also reset when the pitch changes significantly while the stretcher is
-    // already running. Without this, SoundTouch's internal pipeline contains
-    // audio processed with the old pitch/tempo parameters, producing a burst
-    // of discontinuities until the pipeline flushes naturally.
-    else if (oldUse && newUse && std::abs(semiTones - oldPitch) > 0.5)
-    {
-        stretcherNeedsReset.store(true);
-    }
+    // No else-if reset for pitch changes while already running.
+    // The pitchSemiSmoother in processWithTimeStretch ramps the value
+    // smoothly, and SoundTouch handles the transition natively.
 }
 
 AudioBuffer::LoadedAudioData::Ptr AudioBuffer::getAudioDataSnapshot() const
@@ -821,17 +824,19 @@ void AudioBuffer::setStretchRatio(double ratio)
     const bool nowStretching = std::abs(ratio  - 1.0) > 1.0e-6;
     const bool pitchActive = std::abs(pitchSemiTones.load()) > 1.0e-6;
 
-    if (wasStretching != nowStretching)
+    // Only reset when OVERALL stretcher usage toggles on/off.
+    // Account for pitch-active state: if pitch is keeping the stretcher alive,
+    // toggling stretch on/off doesn't change overall usage and shouldn't
+    // flush SoundTouch's pipeline.
+    const bool oldOverallUse = (wasStretching || pitchActive);
+    const bool newOverallUse = (nowStretching || pitchActive);
+    if (oldOverallUse != newOverallUse)
     {
         stretcherNeedsReset.store(true);
     }
-    // Also reset when the ratio changes significantly while the stretcher is
-    // already running (e.g. stretch active + pitch active, and stretch value
-    // changes). This avoids stale pipeline audio causing transient artifacts.
-    else if ((wasStretching || pitchActive) && std::abs(ratio - oldRatio) > 0.05)
-    {
-        stretcherNeedsReset.store(true);
-    }
+    // No else-if reset for ratio changes while already running.
+    // SoundTouch handles parameter changes natively via per-chunk processing.
+    // The stretchSmoother ramps the value smoothly.
 }
 
 void AudioBuffer::setLooping(bool shouldLoop)
@@ -863,6 +868,7 @@ void AudioBuffer::resetToDefaults()
     speedSmoother.setCurrentAndTargetValue(1.0);
     stretchSmoother.setCurrentAndTargetValue(1.0);
     speedMagSmoother.setCurrentAndTargetValue(1.0);
+    pitchSemiSmoother.setCurrentAndTargetValue(0.0);
     lastStretchDirection = 1.0;
     previousBlockValid = false;
     resetCrossfadePending = false;
@@ -957,13 +963,30 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
     if (numOutputSamples > 1)
         speedMagSmoother.skip (numOutputSamples - 1);
 
+    // Smooth pitch semitones to avoid abrupt tempo-compensation jumps when
+    // adding/stacking pitch modifiers (e.g. oct+ on top of stretch + speed).
+    // On reset (mode transition), snap to target so priming calculations match.
+    pitchSemiSmoother.setTargetValue (pitchSemis);
+    if (didReset)
+        pitchSemiSmoother.setCurrentAndTargetValue (pitchSemis);
+    const double smoothedPitchSemis = pitchSemiSmoother.getNextValue();
+    if (numOutputSamples > 1)
+        pitchSemiSmoother.skip (numOutputSamples - 1);
+    const bool smoothedPitchActive = std::abs (smoothedPitchSemis) > 1.0e-6;
+
     const double clampedRate = juce::jlimit (0.25, 4.0, smoothedSpeedMag);
     // SoundTouch internally divides virtualTempo by virtualPitch to get effective tempo:
     //   effective_tempo = virtualTempo / virtualPitch
     // So when pitch shifting is active we must pre-multiply the tempo we send by the pitch
     // ratio, otherwise the speed component gets cancelled by the pitch factor.
-    const double pitchRatio = pitchActive ? std::pow (2.0, pitchSemis / 12.0) : 1.0;
-    const double tempoRatioForSt = pitchActive ? (smoothedRatio * clampedRate * pitchRatio) : smoothedRatio;
+    //
+    // Use the SMOOTHED pitch value for the ratio computation so the tempo compensation
+    // ramps gradually when pitch is added/changed. The routing decision (useRate) is based
+    // on the TARGET pitch so we're in the correct mode, but the magnitude is smoothed.
+    const double smoothedPitchRatio = smoothedPitchActive ? std::pow (2.0, smoothedPitchSemis / 12.0) : 1.0;
+    // When the target says pitch-active, route speed through tempo (not rate) even while
+    // the smoother is still ramping. Use the smoothed pitch ratio for compensation.
+    const double tempoRatioForSt = pitchActive ? (smoothedRatio * clampedRate * smoothedPitchRatio) : smoothedRatio;
     const double totalTempoRatioForIO = tempoRatioForSt * (useRate ? clampedRate : 1.0);
     // Feed chunks proportional to the output block.  The margin scales with the effective
     // consumption ratio so we don't starve SoundTouch when rate/tempo/pitch are high.
@@ -1003,7 +1026,7 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         stretcher.setWindowsForReverse (direction < 0.0);
         stretcher.setTempoRatio ((float) tempoRatioForSt);
         stretcher.setRateRatio ((float) (useRate ? clampedRate : 1.0));
-        stretcher.setPitchSemiTones ((float) pitchSemis);
+        stretcher.setPitchSemiTones ((float) smoothedPitchSemis);
         stretcherPrepared = true;
         stretcherPreparedSampleRate = hostSampleRate;
         stretcherPreparedChannels = numChannels;
@@ -1016,7 +1039,7 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         // Ratio can change without channel/sr changing; keep tempo updated.
         stretcher.setTempoRatio ((float) tempoRatioForSt);
         stretcher.setRateRatio ((float) (useRate ? clampedRate : 1.0));
-        stretcher.setPitchSemiTones ((float) pitchSemis);
+        stretcher.setPitchSemiTones ((float) smoothedPitchSemis);
 
         // T9: When the direction changes, re-tune SoundTouch's overlap windows.
         if (direction != lastStretchDirection)

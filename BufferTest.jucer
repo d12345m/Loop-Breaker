@@ -4,12 +4,12 @@
               addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1" companyName="GlowMachineAudio"
               pluginName="Loop Breaker"
               pluginDesc="Loop Breaker" pluginManufacturer="GlowMachineAudio"
-              pluginManufacturerCode="GloM" pluginCode="TsPl" pluginIsSynth="0"
+              pluginManufacturerCode="GloM" pluginCode="TsPl" pluginIsSynth="1"
               pluginWantsMidiIn="1" pluginProducesMidiOut="0" pluginIsMidiEffectPlugin="0"
               pluginEditorRequiresKeys="0" pluginAUExportPrefix="TestPluginAU"
               pluginAAXIdentifier="com.glowmachineaudio.LoopBreaker" pluginRTASCategory=""
-              pluginVSTCategory="kPlugCategEffect" pluginVST3Category="Fx"
-              pluginFormats="buildVST3" pluginCharacteristicsValue="pluginWantsMidiIn">
+              pluginVSTCategory="kPlugCategSynth" pluginVST3Category="Instrument"
+              pluginFormats="buildVST3" pluginCharacteristicsValue="pluginIsSynth,pluginWantsMidiIn">
   <MAINGROUP id="b0GUwa" name="BufferTest">
     <GROUP id="{7BFC662E-934B-675C-15EB-563C5EAA4BD7}" name="Source">
       <FILE id="DUFUk8" name="Main.cpp" compile="0" resource="0" file="Source/Main.cpp"/>

@@ -8,6 +8,14 @@
       "group": "build",
       "problemMatcher": ["$gcc"],
       "isBackground": false
+    },
+    {
+      "label": "Build VST3 (Release)",
+      "type": "shell",
+      "command": "cd Builds/MacOSX && xcodebuild -project TestPlugin.xcodeproj -scheme \"TestPlugin - VST3\" -configuration Release build",
+      "group": "build",
+      "problemMatcher": ["$gcc"],
+      "isBackground": false
     }
   ]
 }

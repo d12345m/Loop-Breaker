@@ -3,6 +3,7 @@
 #include <JuceHeader.h>
 #include "AppState.h"
 #include "ModifierProbabilityManager.h"
+#include "RealtimeThreadPool.h"
 
 class BufferTestAudioProcessor : public juce::AudioProcessor
 {
@@ -145,6 +146,11 @@ private:
     juce::AudioFormatManager formatManager;
 
     juce::AudioBuffer<float> scratchBuffer;
+
+    // §9.1  Per-buffer scratch buffers for parallel processing.
+    // Each worker thread writes to its own scratch, avoiding data races.
+    std::array<juce::AudioBuffer<float>, AudioBufferManager::MAX_BUFFERS> perBufferScratch;
+    RealtimeThreadPool threadPool { 3 };  // 3 workers + audio thread = 4-way parallelism
 
     std::atomic<bool> transportPlaybackEnabled { true }; // user-facing enable/disable
     std::atomic<bool> startRequested { false };          // start on next audio block (or immediately if host already playing)

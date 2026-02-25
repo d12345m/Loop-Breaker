@@ -215,6 +215,10 @@ void BufferTestAudioProcessor::prepareToPlay (double sampleRate, int samplesPerB
     // heap allocation on the audio thread.  2 channels covers stereo output.
     scratchBuffer.setSize(2, samplesPerBlock, false, false, true);
 
+    // §9.1  Pre-allocate per-buffer scratch buffers for parallel processing.
+    for (auto& buf : perBufferScratch)
+        buf.setSize(2, samplesPerBlock, false, false, true);
+
     // Set a grace period to ignore transport-stop signals that may occur during bus reconfig.
     // Some hosts call prepareToPlay when enabling/disabling output buses, and may report
     // transport=stopped temporarily. 10 blocks (~5-10ms) should be enough.
@@ -760,24 +764,41 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
         scratchBuffer.setSize(mix.getNumChannels(), numSamples, false, false, true);
     }
 
+    // §9.1  Parallel buffer processing — each buffer is rendered into its own
+    // pre-allocated scratch buffer by a worker thread (or the audio thread).
+    // The merge into mix / per-pad buses is done sequentially afterwards.
+    const int mixChannels = mix.getNumChannels();
+
+    threadPool.processAll (AudioBufferManager::MAX_BUFFERS, [&] (int bufferIndex)
+    {
+        auto& scratch = perBufferScratch[(size_t) bufferIndex];
+
+        // Safety: ensure scratch is large enough (should be pre-allocated)
+        if (scratch.getNumChannels() < mixChannels || scratch.getNumSamples() < numSamples)
+            scratch.setSize (mixChannels, numSamples, false, false, true);
+
+        scratch.clear();
+        app.bufferManager.processSingleBuffer (bufferIndex, scratch);
+    });
+
+    // Sequential merge: add each buffer's result into the output buses.
     for (int bufferIndex = 0; bufferIndex < AudioBufferManager::MAX_BUFFERS; ++bufferIndex)
     {
-        scratchBuffer.clear();
-        app.bufferManager.processSingleBuffer(bufferIndex, scratchBuffer);
+        const auto& scratch = perBufferScratch[(size_t) bufferIndex];
 
-        // Always add to the main mix bus (what the track hosting the plugin hears)
-        for (int ch = 0; ch < mix.getNumChannels(); ++ch)
-            mix.addFrom(ch, 0, scratchBuffer, ch, 0, numSamples);
+        // Always add to the main mix bus
+        for (int ch = 0; ch < mixChannels; ++ch)
+            mix.addFrom (ch, 0, scratch, ch, 0, numSamples);
 
         // Also copy to the per-pad bus if enabled: bus 1..8 correspond to pads 0..7
         const int padBusIndex = bufferIndex + 1;
         if (padBusIndex < numOutBuses)
         {
-            auto padBus = getBusBuffer(buffer, false, padBusIndex);
+            auto padBus = getBusBuffer (buffer, false, padBusIndex);
             if (padBus.getNumChannels() > 0)
             {
                 for (int ch = 0; ch < padBus.getNumChannels(); ++ch)
-                    padBus.addFrom(ch, 0, scratchBuffer, ch, 0, numSamples);
+                    padBus.addFrom (ch, 0, scratch, ch, 0, numSamples);
             }
         }
     }

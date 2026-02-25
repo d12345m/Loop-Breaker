@@ -15,6 +15,8 @@
       <FILE id="DUFUk8" name="Main.cpp" compile="0" resource="0" file="Source/Main.cpp"/>
       <FILE id="pluginProcH" name="PluginProcessor.h" compile="0" resource="0"
             file="Source/PluginProcessor.h"/>
+      <FILE id="rtThreadPool" name="RealtimeThreadPool.h" compile="0" resource="0"
+            file="Source/RealtimeThreadPool.h"/>
       <FILE id="pluginProcCpp" name="PluginProcessor.cpp" compile="1" resource="0"
             file="Source/PluginProcessor.cpp"/>
       <FILE id="pluginEditH" name="PluginEditor.h" compile="0" resource="0"

@@ -604,6 +604,10 @@ private:
     void applyBufferDelayDubBurst(const ModifierDescriptor& desc, const juce::Array<int>& targets)
     {
         if (targets.isEmpty()) return;
+        // Scale the delay wet level down as more pads are targeted so the
+        // summed delay output doesn't compound into excessive volume.
+        // 1 pad  → 1.0×, 2 pads → 0.707×, 4 pads → 0.5×, 8 pads → 0.354×
+        const float padScaling = 1.0f / std::sqrt((float) targets.size());
         // Dub burst: ramp feedback up quickly, then down to zero, auto-disable after tail
         for (int idx : targets)
         {
@@ -645,7 +649,7 @@ private:
                 // - Darker repeats via lower high-cut
                 // - Ping-pong on for width
                 // - Add drive to feedback loop for saturation
-                strip.getMutableFxParams().delayWet = (float) juce::jlimit(0.0, 1.0, desc.plannedDelayWet.value_or(0.80));
+                strip.getMutableFxParams().delayWet = (float) juce::jlimit(0.0, 1.0, desc.plannedDelayWet.value_or(0.80) * padScaling);
                 strip.getMutableFxParams().delayFeedbackHighCutHz = 3500.0f;
                 strip.getMutableFxParams().delayPingPong = true;
                 strip.getMutableFxParams().delayFbDrive = 1.8f;

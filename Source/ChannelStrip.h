@@ -79,6 +79,7 @@ public:
             // §6.3  Pre-allocate ducking gains buffer so processDSP never
             // calls resize() on the audio thread.
             duckGains.resize((size_t) blockSize);
+            tremoloGainTable.resize((size_t) blockSize);
 
             // (Re)allocate chorus delay buffer
             const int maxChorusDelaySamples = (int) std::ceil((kMaxChorusDelayMs / 1000.0) * juce::jmax(1.0, lastSampleRate));
@@ -209,39 +210,61 @@ public:
         }
 
         // --- Insert filters and tremolo prior to reverb ---
-        // Update filter coefficients if cutoffs changed significantly
-        if (effects().lowPassEnabled)
-            updateLowPassCoeffs(params.lowPassCutoff);
-        if (effects().highPassEnabled)
-            updateHighPassCoeffs(params.highPassCutoff);
+        // §3.2A: Split into separate branch-free loops for vectorization.
 
-        if (effects().lowPassEnabled || effects().highPassEnabled || effects().tremoloEnabled)
+        // --- High-pass filter (IIR, separate loop per channel) ---
+        if (effects().highPassEnabled)
         {
+            updateHighPassCoeffs(params.highPassCutoff);
             for (int ch = 0; ch < numChannels; ++ch)
             {
                 auto* data = tempBuffer.getWritePointer(ch);
                 for (int i = 0; i < numSamples; ++i)
-                {
-                    float s = data[i];
-                    if (effects().highPassEnabled) s = highPass[ch].processSample(s);
-                    if (effects().lowPassEnabled)  s = lowPass[ch].processSample(s);
-                    if (effects().tremoloEnabled && params.tremoloDepth > 0.0f)
-                    {
-                        float trem = 0.5f * (1.0f + std::sin(tremoloPhase)); // 0..1
-                        float depth = juce::jlimit(0.0f, 1.0f, params.tremoloDepth);
-                        float gain = (1.0f - depth) + depth * trem; // crossfade to tremolo
-                        s *= gain;
-                        // advance phase once per sample (common to channels); update after ch loop first channel
-                    }
-                    data[i] = s;
-                    if (ch == 0 && effects().tremoloEnabled && params.tremoloDepth > 0.0f)
-                    {
-                        float inc = (float)(2.0 * juce::MathConstants<double>::pi * juce::jmax(0.01f, params.tremoloRateHz) / juce::jmax(1.0, lastSampleRate));
-                        tremoloPhase += inc;
-                        if (tremoloPhase > juce::MathConstants<float>::twoPi) tremoloPhase -= juce::MathConstants<float>::twoPi;
-                    }
-                }
+                    data[i] = highPass[ch].processSample(data[i]);
             }
+        }
+
+        // --- Low-pass filter (IIR, separate loop per channel) ---
+        if (effects().lowPassEnabled)
+        {
+            updateLowPassCoeffs(params.lowPassCutoff);
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                auto* data = tempBuffer.getWritePointer(ch);
+                for (int i = 0; i < numSamples; ++i)
+                    data[i] = lowPass[ch].processSample(data[i]);
+            }
+        }
+
+        // --- Tremolo (vectorizable gain modulation) ---
+        if (effects().tremoloEnabled && params.tremoloDepth > 0.0f && numSamples > 0)
+        {
+            const float depth = juce::jlimit(0.0f, 1.0f, params.tremoloDepth);
+            const float phaseInc = (float)(2.0 * juce::MathConstants<double>::pi
+                                           * juce::jmax(0.01f, params.tremoloRateHz)
+                                           / juce::jmax(1.0, lastSampleRate));
+            const float oneMinusDepth = 1.0f - depth;
+
+            // Pre-compute per-sample gain table (shared across channels)
+            if ((int)tremoloGainTable.size() < numSamples)
+                tremoloGainTable.resize((size_t)numSamples);
+
+            float phase = tremoloPhase;
+            for (int i = 0; i < numSamples; ++i)
+            {
+                const float trem = 0.5f * (1.0f + std::sin(phase));
+                tremoloGainTable[(size_t)i] = oneMinusDepth + depth * trem;
+                phase += phaseInc;
+                if (phase > juce::MathConstants<float>::twoPi)
+                    phase -= juce::MathConstants<float>::twoPi;
+            }
+            tremoloPhase = phase;
+
+            // Apply gain table to each channel (vectorizable multiply)
+            for (int ch = 0; ch < numChannels; ++ch)
+                juce::FloatVectorOperations::multiply(tempBuffer.getWritePointer(ch),
+                                                      tremoloGainTable.data(),
+                                                      numSamples);
         }
 
         // --- Reverb Processing ---
@@ -748,7 +771,8 @@ private:
     float duckEnv = 0.0f;
     float duckAttackCoeff = 0.0f;
     float duckReleaseCoeff = 0.0f;
-    std::vector<float> duckGains; // reused per-block to avoid allocations
+    std::vector<float> duckGains;          // reused per-block to avoid allocations
+    std::vector<float> tremoloGainTable;   // §3.2A: pre-computed tremolo gains per block
     void updateDuckingCoeffs(float releaseMs)
     {
         releaseMs = juce::jlimit(5.0f, 2000.0f, releaseMs);

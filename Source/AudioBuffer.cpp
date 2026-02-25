@@ -493,8 +493,10 @@ void AudioBuffer::setPitchSemiTones(double semiTones)
 
 AudioBuffer::LoadedAudioData::Ptr AudioBuffer::getAudioDataSnapshot() const
 {
-    const juce::SpinLock::ScopedLockType sl(audioDataLock);
-    return audioData;
+    // Lock-free: acquire-load the raw pointer, then wrap in a Ptr which
+    // atomically bumps the ref count.  Safe because audioDataRetainer /
+    // previousAudioDataRetainer guarantee the object is still alive.
+    return LoadedAudioData::Ptr (atomicAudioData.load (std::memory_order_acquire));
 }
 
 bool AudioBuffer::hasAudioLoaded() const
@@ -720,10 +722,12 @@ bool AudioBuffer::loadAudioFile(const juce::File& file, juce::AudioFormatManager
 
 void AudioBuffer::setLoadedAudioData(LoadedAudioData::Ptr newData)
 {
-    {
-        const juce::SpinLock::ScopedLockType sl(audioDataLock);
-        audioData = newData;
-    }
+    // Rotate retainers so the previous data stays alive long enough for any
+    // concurrent reader that loaded the raw pointer but hasn't yet bumped
+    // its ref count.
+    previousAudioDataRetainer = audioDataRetainer;
+    audioDataRetainer = newData;
+    atomicAudioData.store (newData.get(), std::memory_order_release);
 
     // Reset playback position and transient state for a clean start.
     playheadPosition.store(0.0);
@@ -755,10 +759,9 @@ void AudioBuffer::setLoadedAudioData(LoadedAudioData::Ptr newData)
 
 void AudioBuffer::clearAudioData()
 {
-    {
-        const juce::SpinLock::ScopedLockType sl(audioDataLock);
-        audioData = nullptr;
-    }
+    previousAudioDataRetainer = audioDataRetainer;
+    audioDataRetainer = nullptr;
+    atomicAudioData.store (nullptr, std::memory_order_release);
     playheadPosition.store(0.0);
     clearLoopWindow();
     resetToDefaults();

@@ -261,9 +261,15 @@ public:
     
 private:
     //==============================================================================
-    // Core audio data
-    LoadedAudioData::Ptr audioData;
-    mutable juce::SpinLock audioDataLock;
+    // Core audio data — lock-free access via atomic raw pointer.
+    // The retainer Ptrs prevent premature destruction: any reader that has
+    // atomically loaded the raw pointer but hasn't yet bumped the ref count
+    // is safe because the retainer keeps the object alive until the *next*
+    // write (which installs a new retainer and rotates the old one into
+    // previousAudioDataRetainer).
+    std::atomic<LoadedAudioData*> atomicAudioData { nullptr };
+    LoadedAudioData::Ptr audioDataRetainer;            // keeps current data alive
+    LoadedAudioData::Ptr previousAudioDataRetainer;    // keeps previous data alive until next swap
     std::atomic<double> playheadPosition { 0.0 };
     juce::SmoothedValue<double> speedSmoother;
     juce::SmoothedValue<double> stretchSmoother;

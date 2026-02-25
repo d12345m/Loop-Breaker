@@ -587,7 +587,7 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
     {
         static const juce::StringArray divs { "1/4", "1/8", "1/8D", "1/8T", "1/16" };
         static const double wets[] { 0.25, 0.5, 0.75, 1.0 };
-        static const double fbs[]  { 0.25, 0.5, 0.75 };
+        static const double fbs[]  { 0.25, 0.5 };
         static const double fades[] { 0.0, 1.0, 2.0 };
         const juce::SpinLock::ScopedLockType lock(rngLock);
         // Random division

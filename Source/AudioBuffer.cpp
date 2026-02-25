@@ -1658,9 +1658,10 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                                                    * juce::jmax (1.0, 1.0 / juce::jmax (0.25, clampedRate)));
         stretchFadeInRemaining = juce::jmax (1, (int) (hostSampleRate * settleMs / 1000.0));
 
-        // T2: Pre-prime SoundTouch with enough input to fill its internal latency
-        // pipeline.  Without this, the first 1–2 output blocks after a reset are
-        // partially empty (underruns), which sounds like crackles or brief silence.
+        // T2 + §10.2: Pre-prime SoundTouch with enough input to fill its internal
+        // latency pipeline.  Without this, the first 1–2 output blocks after a
+        // reset are partially empty (underruns), which sounds like crackles or
+        // brief silence.
         //
         // getLatencySamples() sums TDStretch + RateTransposer latencies, but
         // the units are mixed when rate != 1.0:
@@ -1671,12 +1672,13 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         //   corresponds to far fewer raw input samples.  rawLatency overestimates.
         // When rate > 1.0: RateTransposer COMPRESSES input, so TDStretch needs
         //   more raw input.  rawLatency underestimates.
-        // The totalTempoRatioForIO captures the net input:output ratio, so scaling
-        // by it handles rate > 1.0.  For rate < 1.0 we already have enough with
-        // just rawLatency, but add a moderate 50% extra to give TDStretch's overlap-
-        // add algorithm more context for finding good splice matches at startup.
+        //
+        // §10.2: Over-prime by 2× the estimated amount.  The extra CPU cost is
+        // one-time (per reset) and eliminates the audible crackle that occurred
+        // when the previous 1.5× scaling left SoundTouch's overlap-add algorithm
+        // without enough context to find good splice matches at startup.
         const int rawLatency = juce::jmax (0, stretcher.getLatencySamples());
-        const double primeScale = juce::jmax (totalTempoRatioForIO, 1.5);
+        const double primeScale = juce::jmax (totalTempoRatioForIO * 2.0, 2.0);
         const int primeSamples = juce::jmax (rawLatency,
                                              (int) std::ceil (rawLatency * primeScale));
         if (primeSamples > 0)

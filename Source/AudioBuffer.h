@@ -341,6 +341,14 @@ private:
     int stretchFadeInRemaining = 0; // samples of fade-in left to apply on first stretch block
     std::atomic<bool> stretcherNeedsReset { false }; // deferred reset flag for thread safety
     bool lastBlockUsedStretch = false; // track mode transitions between repitch/stretch
+
+    // §2.2A  Block-based resampling via LagrangeInterpolator for the
+    // fillInputScratch fast path.  One interpolator per channel (stereo max).
+    // These maintain internal filter state between consecutive calls so that
+    // the output is continuous across feed-loop iterations.
+    juce::LagrangeInterpolator blockResamplers[2];
+    double blockResamplerExpectedPos = 0.0;
+    bool   blockResamplersValid = false;
     
     // Parameters
     AudioBufferParams params;

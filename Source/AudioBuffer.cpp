@@ -169,6 +169,11 @@ void AudioBuffer::prepare(double sampleRate, int samplesPerBlockExpected)
 
     // Previous-block cache for mode-transition crossfades.
     previousBlockBuffer.setSize(2, samplesPerBlockExpected, false, false, true);
+
+    // §2.2A  Reset block-resampling interpolators.
+    for (auto& r : blockResamplers)
+        r.reset();
+    blockResamplersValid = false;
 }
 
 void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
@@ -1013,6 +1018,9 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         stretcherPrepared = false;
         stretcherPrimed = false;
         stretchFadeInRemaining = 0;
+        // §2.2A  Invalidate block-resampler state on pipeline resets so the
+        // interpolators don't carry stale filter history across a seek/jump.
+        blockResamplersValid = false;
     }
 
     // Ensure scratch buffers are appropriately sized without per-sample allocation.
@@ -1194,8 +1202,75 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                 }
 
                 playheadPosition.store ((double) (startSample + framesCopied));
+                // Bulk-copy bypasses the interpolator, so invalidate its state.
+                blockResamplersValid = false;
                 return framesCopied;
             }
+        }
+
+        // §2.2A  Extended fast path: block-based resampling via LagrangeInterpolator.
+        // Handles the common case where speed≠1.0 or fileSR≠hostSR but no special
+        // playback features (slicing, loop window, crossfade, ping-pong) are active.
+        // This replaces the expensive per-sample interpolation loop with JUCE's
+        // optimised block-processing interpolator.
+        {
+            const double blockStep = inputSpeed * (fileSampleRate / hostSampleRate);
+            const bool canBlockResample = (inputSpeed > 0.0
+                                           && blockStep > 0.0
+                                           && ! loopWindowEnabled.load()
+                                           && ! slicingModeActive.load()
+                                           && ! isInCrossfade
+                                           && ! pingPongEnabled.load());
+
+            if (canBlockResample)
+            {
+                const int startPos = (int) currentPos0;
+                if (startPos >= 0 && startPos < fileLengthSamples)
+                {
+                    // The Lagrange interpolator uses a 4-point kernel and needs
+                    // a few extra samples beyond the nominal consumption.
+                    const int inputNeeded = (int) std::ceil (framesToGenerate * blockStep) + 8;
+                    const int availableInput = fileLengthSamples - startPos;
+
+                    if (availableInput >= inputNeeded)
+                    {
+                        // Reset interpolators if internal filter state is stale
+                        // (playhead jumped, first call, or previous call used the
+                        // per-sample path).
+                        if (! blockResamplersValid
+                            || std::abs (currentPos0 - blockResamplerExpectedPos) > 1.0e-6)
+                        {
+                            for (int ch = 0; ch < numChannels; ++ch)
+                                blockResamplers[ch].reset();
+                        }
+
+                        int totalInputUsed = 0;
+                        for (int ch = 0; ch < numChannels; ++ch)
+                        {
+                            const int used = blockResamplers[ch].process (
+                                blockStep,
+                                sourceBuffer.getReadPointer (ch, startPos),
+                                stretchInScratch.getWritePointer (ch),
+                                framesToGenerate,
+                                availableInput,
+                                0 /* no wrap */
+                            );
+                            totalInputUsed = juce::jmax (totalInputUsed, used);
+                        }
+
+                        const double newPos = currentPos0 + (double) totalInputUsed;
+                        playheadPosition.store (newPos);
+                        blockResamplerExpectedPos = newPos;
+                        blockResamplersValid = true;
+                        return framesToGenerate;
+                    }
+                    // Not enough contiguous samples (near end of file).
+                    // Fall through to per-sample path for boundary handling.
+                }
+            }
+
+            // Falling through to per-sample path invalidates the interpolator.
+            blockResamplersValid = false;
         }
 
         // Zero the region we are going to fill.

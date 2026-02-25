@@ -170,6 +170,21 @@ void AudioBuffer::prepare(double sampleRate, int samplesPerBlockExpected)
     // Previous-block cache for mode-transition crossfades.
     previousBlockBuffer.setSize(2, samplesPerBlockExpected, false, false, true);
 
+    // §10.3  Output-side crossfade ring buffer.  Sized at the maximum crossfade
+    // length we'll use in SoundTouch mode (100ms gives headroom over the 50ms
+    // minimum set in processWithTimeStretch).
+    const int maxOutputCrossfadeSamples = (int)(sampleRate * 0.1) + 1;
+    stretchOutputRing.setSize(2, maxOutputCrossfadeSamples, false, false, true);
+    stretchOutputRingSize = maxOutputCrossfadeSamples;
+    stretchOutputRingWritePos = 0;
+    stretchOutputRingValidSamples = 0;
+    stretchCrossfadeSnapshot.setSize(2, maxOutputCrossfadeSamples, false, false, true);
+    stretchCrossfadeSnapshotLen = 0;
+    stretchOutputCrossfadePending = false;
+    stretchOutputCrossfadeActive = false;
+    stretchOutputCrossfadePos = 0;
+    stretchOutputCrossfadeLen = 0;
+
     // §2.2A  Reset block-resampling interpolators.
     for (auto& r : blockResamplers)
         r.reset();
@@ -1059,6 +1074,15 @@ void AudioBuffer::resetToDefaults()
     isInCrossfade = false;
     crossfadePosition = 0;
     previousSliceIndex = -1;
+
+    // §10.3  Reset output-side crossfade state.
+    stretchOutputRingWritePos = 0;
+    stretchOutputRingValidSamples = 0;
+    stretchCrossfadeSnapshotLen = 0;
+    stretchOutputCrossfadePending = false;
+    stretchOutputCrossfadeActive = false;
+    stretchOutputCrossfadePos = 0;
+    stretchOutputCrossfadeLen = 0;
     
     // Reset ping pong state
     pingPongEnabled.store(false);
@@ -1588,7 +1612,23 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
             }
 
             if (isInCrossfade)
-                applyCrossfadeToSliceTransition (sourceBuffer, fileLengthSamples, fileSampleRate, stretchInScratch, sample, 1);
+            {
+                // §10.3  When SoundTouch is active, do NOT apply the crossfade on
+                // the input side — SoundTouch's overlap-add algorithm smears input-
+                // side crossfades unpredictably.  Instead, flag for output-side
+                // crossfade.  We still advance crossfadePosition so the input-side
+                // state machine completes normally.
+                if (!stretchOutputCrossfadePending && !stretchOutputCrossfadeActive)
+                    stretchOutputCrossfadePending = true;
+
+                crossfadePosition++;
+                if (crossfadePosition >= crossfadeLengthSamples)
+                {
+                    isInCrossfade = false;
+                    crossfadePosition = 0;
+                    previousSliceIndex = -1;
+                }
+            }
 
             currentPos += step;
             ++framesFilled;
@@ -1730,6 +1770,30 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         if (produced > 0)
             framesWritten += produced;
     }
+
+    // §10.3  Output-side crossfade for slice/boundary transitions.
+    // When a transition was detected in fillInputScratch, we skipped the input-
+    // side crossfade and flagged stretchOutputCrossfadePending instead.  Now that
+    // SoundTouch has produced output, snapshot the ring buffer (old output) and
+    // start the output-side crossfade.
+    if (stretchOutputCrossfadePending)
+    {
+        snapshotStretchOutputRing();
+
+        stretchOutputCrossfadeLen = crossfadeLengthSamples;
+        stretchOutputCrossfadePos = 0;
+        stretchOutputCrossfadeActive = (stretchCrossfadeSnapshotLen > 0);
+        stretchOutputCrossfadePending = false;
+    }
+
+    // Apply any active output-side crossfade to the current block.
+    if (stretchOutputCrossfadeActive && framesWritten > 0)
+        applyStretchOutputCrossfade(outputBuffer, framesWritten);
+
+    // Update the ring buffer with the current (post-crossfade) output so future
+    // transitions have recent audio to crossfade from.
+    if (framesWritten > 0)
+        writeToStretchOutputRing(outputBuffer, framesWritten);
 
     // Apply fade-in if this is the first block after priming.
     //
@@ -2164,6 +2228,123 @@ void AudioBuffer::startBoundaryCrossfade(double newPlayheadPos)
     isInCrossfade = true;
     crossfadePosition = 0;
     playheadPosition.store(newPlayheadPos);
+}
+
+//==============================================================================
+// §10.3  Output-side crossfade helpers for SoundTouch mode.
+//==============================================================================
+
+void AudioBuffer::writeToStretchOutputRing(const juce::AudioBuffer<float>& src, int numSamples)
+{
+    if (stretchOutputRingSize <= 0 || numSamples <= 0)
+        return;
+
+    const int numCh = juce::jmin(src.getNumChannels(), stretchOutputRing.getNumChannels());
+
+    // If the write exceeds the ring capacity, only keep the last ringSize samples.
+    const int writeStart = (numSamples > stretchOutputRingSize)
+                           ? (numSamples - stretchOutputRingSize) : 0;
+    const int samplesToWrite = numSamples - writeStart;
+
+    for (int ch = 0; ch < numCh; ++ch)
+    {
+        const float* srcPtr = src.getReadPointer(ch) + writeStart;
+        float* ringPtr = stretchOutputRing.getWritePointer(ch);
+
+        const int firstChunk = juce::jmin(samplesToWrite, stretchOutputRingSize - stretchOutputRingWritePos);
+        juce::FloatVectorOperations::copy(ringPtr + stretchOutputRingWritePos, srcPtr, firstChunk);
+
+        if (firstChunk < samplesToWrite)
+            juce::FloatVectorOperations::copy(ringPtr, srcPtr + firstChunk, samplesToWrite - firstChunk);
+    }
+
+    stretchOutputRingWritePos = (stretchOutputRingWritePos + samplesToWrite) % stretchOutputRingSize;
+    stretchOutputRingValidSamples = juce::jmin(stretchOutputRingValidSamples + samplesToWrite, stretchOutputRingSize);
+}
+
+void AudioBuffer::snapshotStretchOutputRing()
+{
+    // Copy the valid portion of the ring buffer into the flat snapshot buffer.
+    // The snapshot represents the most recent stretchOutputRingValidSamples of
+    // SoundTouch output, arranged oldest→newest so that index 0 is the oldest.
+    const int len = stretchOutputRingValidSamples;
+    if (len <= 0 || stretchOutputRingSize <= 0)
+    {
+        stretchCrossfadeSnapshotLen = 0;
+        return;
+    }
+
+    const int numCh = stretchOutputRing.getNumChannels();
+    // Read position: writePos points to the next write, so the oldest sample is
+    // at (writePos - validSamples + ringSize) % ringSize.
+    const int readStart = (stretchOutputRingWritePos - len + stretchOutputRingSize) % stretchOutputRingSize;
+
+    for (int ch = 0; ch < numCh; ++ch)
+    {
+        const float* ringPtr = stretchOutputRing.getReadPointer(ch);
+        float* snapPtr = stretchCrossfadeSnapshot.getWritePointer(ch);
+
+        const int firstChunk = juce::jmin(len, stretchOutputRingSize - readStart);
+        juce::FloatVectorOperations::copy(snapPtr, ringPtr + readStart, firstChunk);
+
+        if (firstChunk < len)
+            juce::FloatVectorOperations::copy(snapPtr + firstChunk, ringPtr, len - firstChunk);
+    }
+
+    stretchCrossfadeSnapshotLen = len;
+}
+
+void AudioBuffer::applyStretchOutputCrossfade(juce::AudioBuffer<float>& outputBuffer, int numSamples)
+{
+    if (!stretchOutputCrossfadeActive || stretchOutputCrossfadeLen <= 0)
+        return;
+
+    const int numCh = juce::jmin(outputBuffer.getNumChannels(),
+                                  stretchCrossfadeSnapshot.getNumChannels());
+
+    // The snapshot is laid out oldest→newest.  We want the crossfade to use the
+    // TAIL of the snapshot (the most recent old output) as the fade-out signal.
+    // The snapshot was taken at transition time, so its tail is the last old
+    // audio before the transition.
+    //
+    // snapReadStart = where in the snapshot to start reading for this crossfade
+    // position.  As the crossfade progresses across blocks, we advance through
+    // the tail of the snapshot.
+    const int snapTailStart = juce::jmax(0, stretchCrossfadeSnapshotLen - stretchOutputCrossfadeLen);
+
+    const int remaining = stretchOutputCrossfadeLen - stretchOutputCrossfadePos;
+    const int samplesToProcess = juce::jmin(numSamples, remaining);
+
+    for (int i = 0; i < samplesToProcess; ++i)
+    {
+        const int fadeIdx = stretchOutputCrossfadePos + i;
+        const double fadeProgress = static_cast<double>(fadeIdx) / static_cast<double>(stretchOutputCrossfadeLen);
+
+        // Equal-power crossfade curve (same as the input-side crossfade).
+        const float fadeOut = static_cast<float>(std::cos(fadeProgress * juce::MathConstants<double>::halfPi));
+        const float fadeIn  = static_cast<float>(std::sin(fadeProgress * juce::MathConstants<double>::halfPi));
+
+        const int snapIdx = snapTailStart + fadeIdx;
+        if (snapIdx >= 0 && snapIdx < stretchCrossfadeSnapshotLen)
+        {
+            for (int ch = 0; ch < numCh; ++ch)
+            {
+                const float oldSample = stretchCrossfadeSnapshot.getReadPointer(ch)[snapIdx];
+                float* out = outputBuffer.getWritePointer(ch);
+                out[i] = out[i] * fadeIn + oldSample * fadeOut;
+            }
+        }
+        // If snapshot doesn't cover this position, just let the new signal through
+        // (fadeIn is approaching 1.0 anyway at this point).
+    }
+
+    stretchOutputCrossfadePos += samplesToProcess;
+    if (stretchOutputCrossfadePos >= stretchOutputCrossfadeLen)
+    {
+        stretchOutputCrossfadeActive = false;
+        stretchOutputCrossfadePos = 0;
+        stretchOutputCrossfadeLen = 0;
+    }
 }
 
 void AudioBuffer::handleSlicePlayback(double& currentPos, int fileLengthSamples)

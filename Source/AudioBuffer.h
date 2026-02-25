@@ -348,6 +348,21 @@ private:
     std::atomic<bool> stretcherNeedsReset { false }; // deferred reset flag for thread safety
     bool lastBlockUsedStretch = false; // track mode transitions between repitch/stretch
 
+    // §10.3  Output-side crossfade for slice/boundary transitions in SoundTouch
+    // mode.  Instead of applying crossfade on SoundTouch's INPUT (where the OLA
+    // algorithm smears it unpredictably), we maintain a ring buffer of recent
+    // SoundTouch output and crossfade on the OUTPUT side for clean transitions.
+    juce::AudioBuffer<float> stretchOutputRing;           // circular buffer of recent output
+    int stretchOutputRingSize = 0;                         // allocated ring capacity
+    int stretchOutputRingWritePos = 0;                     // next write position
+    int stretchOutputRingValidSamples = 0;                 // valid samples currently stored
+    bool stretchOutputCrossfadePending = false;            // transition detected, snapshot needed
+    bool stretchOutputCrossfadeActive = false;             // output crossfade in progress
+    int stretchOutputCrossfadePos = 0;                     // current position within crossfade
+    int stretchOutputCrossfadeLen = 0;                     // total crossfade length in samples
+    juce::AudioBuffer<float> stretchCrossfadeSnapshot;     // captured old output at transition
+    int stretchCrossfadeSnapshotLen = 0;                   // valid length in snapshot
+
 private:
     // §4.2  Deferred musical start flag.
     std::atomic<bool> awaitingMusicalStart { false };
@@ -413,6 +428,9 @@ private:
                                          int numSamples);
     void startSliceCrossfade(int newSliceIndex, double newPlayheadPos);
     void startBoundaryCrossfade(double newPlayheadPos);
+    void writeToStretchOutputRing(const juce::AudioBuffer<float>& src, int numSamples);
+    void snapshotStretchOutputRing();
+    void applyStretchOutputCrossfade(juce::AudioBuffer<float>& outputBuffer, int numSamples);
     double getSliceStartPosition(int sliceIndex, int fileLengthSamples) const;
     double getSliceEndPosition(int sliceIndex, int fileLengthSamples) const;
 

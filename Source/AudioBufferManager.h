@@ -57,9 +57,19 @@ public:
     // File loading
     bool loadAudioFile(int bufferIndex, const juce::File& file, juce::AudioFormatManager& formatManager);
     bool requestLoadAudioFile(int bufferIndex, const juce::File& file);
-    // Applies completed background decode jobs. Returns number of pending items applied.
-    int applyPendingLoads();
+    // Applies completed background decode jobs.  When transportPlaying is true,
+    // newly loaded buffers are flagged for musically-deferred start (they will
+    // not begin playing until the next bar boundary or modifier trigger).
+    // Returns the indices of buffers that received new audio data.
+    juce::Array<int> applyPendingLoads(bool transportPlaying = false);
     void clearBuffer(int bufferIndex);
+
+    /// Start any buffers that were loaded mid-transport and are waiting for a
+    /// musically relevant cue (bar crossing or modifier trigger) to begin.
+    void startBuffersAwaitingMusicalCue();
+
+    /// Returns true if any buffer is flagged for musically-deferred start.
+    bool hasBuffersAwaitingMusicalCue() const;
     void clearAllBuffers();
     
     //==============================================================================
@@ -115,6 +125,7 @@ private:
     juce::AudioBuffer<float> mixBuffer;
     juce::AudioBuffer<float> tempBuffer;
   double hostSampleRate = 44100.0;
+  std::atomic<double> resampleTargetRate { 0.0 }; // §4.2 target SR for load-time resampling
   int64_t globalStartOffsetSamples = 0; // applied at play() time
   int64_t globalEndOffsetSamples = 0;   // enforced during processing; 0 = disabled
 

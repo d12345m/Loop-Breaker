@@ -40,6 +40,7 @@ void AudioBufferManager::prepare(double sampleRate, int samplesPerBlockExpected)
     mixBuffer.setSize(2, headroom, false, false, true);
     tempBuffer.setSize(2, headroom, false, false, true);
     hostSampleRate = sampleRate;
+    resampleTargetRate.store (sampleRate);
 }
 
 void AudioBufferManager::processBlock(juce::AudioBuffer<float>& outputBuffer)
@@ -167,7 +168,7 @@ bool AudioBufferManager::loadAudioFile(int bufferIndex, const juce::File& file, 
 
 namespace
 {
-AudioBuffer::LoadedAudioData::Ptr decodeFileToLoadedData(const juce::File& file)
+AudioBuffer::LoadedAudioData::Ptr decodeFileToLoadedData(const juce::File& file, double targetSampleRate)
 {
     if (!file.existsAsFile())
         return nullptr;
@@ -185,10 +186,53 @@ AudioBuffer::LoadedAudioData::Ptr decodeFileToLoadedData(const juce::File& file)
         return nullptr;
 
     auto data = new AudioBuffer::LoadedAudioData();
-    data->sampleRate = reader->sampleRate;
     data->fileName = file.getFileNameWithoutExtension();
-    data->buffer.setSize(channels, lengthSamples);
-    reader->read(&data->buffer, 0, lengthSamples, 0, true, true);
+
+    const double fileSR = reader->sampleRate;
+
+    // §4.2  If the host sample rate is known and differs from the file's native
+    // rate, resample now (on the background thread) so the audio thread never
+    // needs per-sample SR compensation.
+    if (targetSampleRate > 0.0
+        && fileSR > 0.0
+        && std::abs (fileSR - targetSampleRate) > 0.5)
+    {
+        // Decode into a temporary buffer at the native rate.
+        juce::AudioBuffer<float> nativeBuf (channels, lengthSamples);
+        reader->read (&nativeBuf, 0, lengthSamples, 0, true, true);
+
+        const double ratio = fileSR / targetSampleRate; // >1 means file is higher SR
+        const int outLength = (int) std::ceil ((double) lengthSamples / ratio) + 4;
+
+        data->buffer.setSize (channels, outLength);
+
+        for (int ch = 0; ch < channels; ++ch)
+        {
+            juce::LagrangeInterpolator interp;
+            const int produced = interp.process (
+                ratio,
+                nativeBuf.getReadPointer (ch),
+                data->buffer.getWritePointer (ch),
+                outLength,
+                lengthSamples,
+                0 /* no wrap */
+            );
+            // Zero any tail beyond what the interpolator actually produced.
+            if (produced < outLength)
+                juce::FloatVectorOperations::clear (data->buffer.getWritePointer (ch, produced),
+                                                    outLength - produced);
+        }
+
+        data->sampleRate = targetSampleRate;
+    }
+    else
+    {
+        // No resampling needed — decode directly.
+        data->sampleRate = fileSR;
+        data->buffer.setSize (channels, lengthSamples);
+        reader->read (&data->buffer, 0, lengthSamples, 0, true, true);
+    }
+
     return data;
 }
 }
@@ -216,11 +260,12 @@ bool AudioBufferManager::requestLoadAudioFile(int bufferIndex, const juce::File&
 
     struct LoadJob final : public juce::ThreadPoolJob
     {
-        LoadJob(AudioBufferManager& mgr, int idx, juce::File f)
+        LoadJob(AudioBufferManager& mgr, int idx, juce::File f, double targetSR)
             : juce::ThreadPoolJob("Load sample")
             , manager(mgr)
             , bufferIndex(idx)
             , file(std::move(f))
+            , targetSampleRate(targetSR)
         {
         }
 
@@ -229,7 +274,7 @@ bool AudioBufferManager::requestLoadAudioFile(int bufferIndex, const juce::File&
             PendingLoadedBuffer p;
             p.bufferIndex = bufferIndex;
             p.sourcePath = file.getFullPathName();
-            p.data = decodeFileToLoadedData(file);
+            p.data = decodeFileToLoadedData(file, targetSampleRate);
             p.ok = (p.data != nullptr);
             manager.enqueuePendingLoad(std::move(p));
             return jobHasFinished;
@@ -238,24 +283,25 @@ bool AudioBufferManager::requestLoadAudioFile(int bufferIndex, const juce::File&
         AudioBufferManager& manager;
         int bufferIndex;
         juce::File file;
+        double targetSampleRate;
     };
 
-    loaderPool.addJob(new LoadJob(*this, bufferIndex, file), true);
+    loaderPool.addJob(new LoadJob(*this, bufferIndex, file, resampleTargetRate.load()), true);
     return true;
 }
 
-int AudioBufferManager::applyPendingLoads()
+juce::Array<int> AudioBufferManager::applyPendingLoads(bool transportPlaying)
 {
+    juce::Array<int> loadedIndices;
+
     int start1 = 0, size1 = 0, start2 = 0, size2 = 0;
     const int ready = pendingFifo.getNumReady();
     if (ready <= 0)
-        return 0;
+        return loadedIndices;
 
     pendingFifo.prepareToRead(ready, start1, size1, start2, size2);
 
-    int appliedCount = 0;
-
-    auto applyRange = [this, &appliedCount](int start, int size)
+    auto applyRange = [this, &loadedIndices, transportPlaying](int start, int size)
     {
         for (int i = 0; i < size; ++i)
         {
@@ -264,8 +310,6 @@ int AudioBufferManager::applyPendingLoads()
 
             if (!isValidBufferIndex(p.bufferIndex))
                 continue;
-
-            ++appliedCount;
 
             if (!p.ok || p.data == nullptr)
             {
@@ -276,7 +320,17 @@ int AudioBufferManager::applyPendingLoads()
             }
 
             if (auto* buffer = getBuffer(p.bufferIndex))
+            {
                 buffer->setLoadedAudioData(p.data);
+
+                // §4.2  If the transport is already running, defer playback
+                // start until a musically relevant cue (bar boundary or
+                // modifier trigger) so the loop doesn't begin mid-measure.
+                if (transportPlaying)
+                    buffer->setAwaitingMusicalStart (true);
+            }
+
+            loadedIndices.add (p.bufferIndex);
         }
     };
 
@@ -285,7 +339,7 @@ int AudioBufferManager::applyPendingLoads()
 
     pendingFifo.finishedRead(size1 + size2);
 
-    return appliedCount;
+    return loadedIndices;
 }
 
 void AudioBufferManager::clearBuffer(int bufferIndex)
@@ -314,6 +368,10 @@ void AudioBufferManager::playAll()
     {
         if (buffer->hasAudioLoaded())
         {
+            // §4.2  Skip buffers awaiting a musical cue to start.
+            if (buffer->isAwaitingMusicalStart())
+                continue;
+
             // Apply global start offset (if any) before starting playback
             if (globalStartOffsetSamples > 0)
             {
@@ -333,6 +391,33 @@ void AudioBufferManager::stopAll()
     {
         buffer->stop();
     }
+}
+
+//==============================================================================
+// §4.2  Musically-deferred start helpers
+//==============================================================================
+
+void AudioBufferManager::startBuffersAwaitingMusicalCue()
+{
+    for (auto& buffer : buffers)
+    {
+        if (buffer->isAwaitingMusicalStart())
+        {
+            buffer->setAwaitingMusicalStart (false);
+            if (buffer->hasAudioLoaded())
+                buffer->play();
+        }
+    }
+}
+
+bool AudioBufferManager::hasBuffersAwaitingMusicalCue() const
+{
+    for (const auto& buffer : buffers)
+    {
+        if (buffer->isAwaitingMusicalStart())
+            return true;
+    }
+    return false;
 }
 
 void AudioBufferManager::resetAllBuffers()

@@ -756,15 +756,49 @@ bool AudioBuffer::loadAudioFile(const juce::File& file, juce::AudioFormatManager
         return false;
 
     auto newData = new LoadedAudioData();
-    newData->sampleRate = reader->sampleRate;
     newData->fileName = file.getFileNameWithoutExtension();
 
     const int fileLengthSamples = static_cast<int>(reader->lengthInSamples);
     const int numChannels = static_cast<int>(reader->numChannels);
+    const double fileSR = reader->sampleRate;
 
-    // Load entire file into memory (on the calling thread).
-    newData->buffer.setSize(numChannels, fileLengthSamples);
-    reader->read(&newData->buffer, 0, fileLengthSamples, 0, true, true);
+    // §4.2  Resample to host SR at load time if the rates differ, eliminating
+    // continuous per-sample ratio math during playback.
+    if (hostSampleRate > 0.0
+        && fileSR > 0.0
+        && std::abs (fileSR - hostSampleRate) > 0.5)
+    {
+        juce::AudioBuffer<float> nativeBuf (numChannels, fileLengthSamples);
+        reader->read (&nativeBuf, 0, fileLengthSamples, 0, true, true);
+
+        const double ratio = fileSR / hostSampleRate;
+        const int outLength = (int) std::ceil ((double) fileLengthSamples / ratio) + 4;
+        newData->buffer.setSize (numChannels, outLength);
+
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            juce::LagrangeInterpolator interp;
+            const int produced = interp.process (
+                ratio,
+                nativeBuf.getReadPointer (ch),
+                newData->buffer.getWritePointer (ch),
+                outLength,
+                fileLengthSamples,
+                0
+            );
+            if (produced < outLength)
+                juce::FloatVectorOperations::clear (newData->buffer.getWritePointer (ch, produced),
+                                                    outLength - produced);
+        }
+
+        newData->sampleRate = hostSampleRate;
+    }
+    else
+    {
+        newData->sampleRate = fileSR;
+        newData->buffer.setSize (numChannels, fileLengthSamples);
+        reader->read (&newData->buffer, 0, fileLengthSamples, 0, true, true);
+    }
 
     setLoadedAudioData(newData);
     return true;

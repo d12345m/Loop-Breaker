@@ -108,6 +108,23 @@ struct AppState : public ModifierSchedulerListener
     int getPartLengthBars() const { return settings.parts.partLengthBars; }
     int getPartStartBar(int partIndex) const { return settings.parts.getPartStartBar(partIndex); }
 
+    /// Apply the active part's loop window to a single buffer (e.g. after a new load).
+    /// Unlike setActivePart(), this does NOT touch other buffers' playheads.
+    void applyPartToBuffer(int bufferIndex)
+    {
+        auto* b = bufferManager.getBuffer(bufferIndex);
+        if (b == nullptr) return;
+        const int numParts = juce::jmax(1, settings.parts.getNumParts());
+        const int64_t dur = (int64_t) b->getDurationInSamples();
+        if (dur <= 0) return;
+        const int64_t startS = (int64_t) ((settings.parts.activePart       * dur) / numParts);
+        const int64_t endS   = (int64_t) (((settings.parts.activePart + 1) * dur) / numParts);
+        const int64_t startClamped = juce::jlimit<int64_t>(0, dur - 1, startS);
+        const int64_t endClamped   = juce::jlimit<int64_t>(startClamped + 1, dur, endS);
+        b->setLoopWindow(startClamped, endClamped);
+        b->setPlayheadSamples(startClamped);
+    }
+
 
     ~AppState() override
     {
@@ -123,6 +140,10 @@ struct AppState : public ModifierSchedulerListener
 
     void modifierTriggered(const ModifierDescriptor& desc, const juce::Array<int>& targets) override
     {
+        // §4.2  A modifier trigger is a musically relevant cue — start any
+        // buffers that were loaded mid-transport and deferred until now.
+        bufferManager.startBuffersAwaitingMusicalCue();
+
         switch (desc.type)
         {
             case ModifierType::Reverse:

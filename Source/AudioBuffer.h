@@ -246,6 +246,12 @@ public:
     int getBufferIndex() const { return bufferIndex; }
     juce::String getLoadedFileName() const;
     void setPlayheadSamples(int64_t samples) { playheadPosition.store((double) juce::jmax<int64_t>(0, samples)); }
+
+    // §4.2  Musically-deferred start: when true, this buffer has freshly loaded
+    // data but should not begin playing until the next bar boundary or modifier
+    // trigger.
+    bool isAwaitingMusicalStart() const { return awaitingMusicalStart.load(); }
+    void setAwaitingMusicalStart(bool v)  { awaitingMusicalStart.store(v); }
     // Loop window controls
     void setLoopWindow(int64_t startSamples, int64_t endSamples);
     void clearLoopWindow();
@@ -342,7 +348,10 @@ private:
     std::atomic<bool> stretcherNeedsReset { false }; // deferred reset flag for thread safety
     bool lastBlockUsedStretch = false; // track mode transitions between repitch/stretch
 
-    // §2.2A  Block-based resampling via LagrangeInterpolator for the
+private:
+    // §4.2  Deferred musical start flag.
+    std::atomic<bool> awaitingMusicalStart { false };
+
     // fillInputScratch fast path.  One interpolator per channel (stereo max).
     // These maintain internal filter state between consecutive calls so that
     // the output is continuous across feed-loop iterations.

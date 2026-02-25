@@ -599,13 +599,21 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     const bool inGracePeriod = graceRemaining > 0;
 
     // Apply any completed background loads (fast pointer swap; no disk I/O).
-    // If new audio arrived, immediately apply the active part division (loop window) so
-    // the buffer is segmented without waiting for a SwitchPart modifier.
-    if (app.bufferManager.applyPendingLoads() > 0)
+    // If new audio arrived, apply the active part division (loop window) to
+    // only the newly loaded buffers — not all buffers — so existing playback
+    // is not disrupted.
+    // §4.2  Pass transport state so newly loaded buffers are flagged for
+    // musically-deferred start when the DAW is already playing.
     {
-        app.setActivePart(app.getActivePart());
-        if (! hostPlaying && !inGracePeriod)
-            app.bufferManager.stopAll();
+        auto loadedIndices = app.bufferManager.applyPendingLoads(hostPlaying);
+        if (! loadedIndices.isEmpty())
+        {
+            for (int idx : loadedIndices)
+                app.applyPartToBuffer(idx);
+
+            if (! hostPlaying && !inGracePeriod)
+                app.bufferManager.stopAll();
+        }
     }
 
     // Self-healing: if pad file paths exist in settings but the corresponding
@@ -642,7 +650,12 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
         // On transport stop transition, stop buffers so the next play starts cleanly.
         // BUT: don't stop during grace period (bus reconfig may falsely report transport stopped).
         if (wasHostPlaying && !inGracePeriod)
+        {
+            // §4.2  Clear deferred-start flags so buffers start immediately
+            // when the transport resumes (they'll begin at the top of playback).
+            app.bufferManager.startBuffersAwaitingMusicalCue();
             app.bufferManager.stopAll();
+        }
 
         // Clear any pending start request (so we don't "surprise start" when transport resumes unless user pressed Play again).
         startRequested.store(false);
@@ -713,6 +726,7 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             app.resyncTempoLFOs();
             lastAppliedHostBpm = bpm;
         }
+
     }
     else
     {

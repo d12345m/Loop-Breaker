@@ -107,8 +107,12 @@ public:
         if (numInputSamples > 0)
         {
             const int totalIn = numInputSamples * channels;
+            // Pre-allocated in AudioBuffer::prepare(); guard kept as safety net.
             if (interleavedIn.getNumChannels() != 1 || interleavedIn.getNumSamples() < totalIn)
+            {
+                jassertfalse; // interleavedIn should have been pre-allocated
                 interleavedIn.setSize (1, totalIn, false, false, true);
+            }
 
             auto* inInter = interleavedIn.getWritePointer (0);
 
@@ -143,8 +147,12 @@ public:
             return 0;
 
         const int totalOut = maxOutputSamples * channels;
+        // Pre-allocated in AudioBuffer::prepare(); guard kept as safety net.
         if (interleavedOut.getNumChannels() != 1 || interleavedOut.getNumSamples() < totalOut)
+        {
+            jassertfalse; // interleavedOut should have been pre-allocated
             interleavedOut.setSize (1, totalOut, false, false, true);
+        }
 
         auto* outInter = interleavedOut.getWritePointer (0);
         const auto receivedFrames = (int) st.receiveSamples (outInter, (uint) maxOutputSamples);

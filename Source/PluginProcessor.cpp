@@ -211,6 +211,10 @@ void BufferTestAudioProcessor::prepareToPlay (double sampleRate, int samplesPerB
 
     app.bufferManager.prepare(sampleRate, samplesPerBlock);
 
+    // §6.1  Pre-allocate per-block scratch buffer used in processBlock to avoid
+    // heap allocation on the audio thread.  2 channels covers stereo output.
+    scratchBuffer.setSize(2, samplesPerBlock, false, false, true);
+
     // Set a grace period to ignore transport-stop signals that may occur during bus reconfig.
     // Some hosts call prepareToPlay when enabling/disabling output buses, and may report
     // transport=stopped temporarily. 10 blocks (~5-10ms) should be enough.
@@ -735,8 +739,12 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     if (mix.getNumChannels() == 0)
         return;
 
+    // Pre-allocated in prepareToPlay(); guard kept as safety net.
     if (scratchBuffer.getNumChannels() != mix.getNumChannels() || scratchBuffer.getNumSamples() < numSamples)
+    {
+        jassertfalse; // scratchBuffer should have been pre-allocated in prepareToPlay()
         scratchBuffer.setSize(mix.getNumChannels(), numSamples, false, false, true);
+    }
 
     for (int bufferIndex = 0; bufferIndex < AudioBufferManager::MAX_BUFFERS; ++bufferIndex)
     {

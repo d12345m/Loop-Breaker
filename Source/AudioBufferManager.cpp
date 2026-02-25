@@ -34,9 +34,11 @@ void AudioBufferManager::prepare(double sampleRate, int samplesPerBlockExpected)
         buffer->prepare(sampleRate, samplesPerBlockExpected);
     }
     
-    // Prepare mixing buffers
-    mixBuffer.setSize(2, samplesPerBlockExpected, false, false, true);
-    tempBuffer.setSize(2, samplesPerBlockExpected, false, false, true);
+    // Prepare mixing buffers with extra headroom so processBlock never re-allocates.
+    // Some hosts may occasionally deliver slightly larger blocks than advertised.
+    const int headroom = samplesPerBlockExpected + 64;
+    mixBuffer.setSize(2, headroom, false, false, true);
+    tempBuffer.setSize(2, headroom, false, false, true);
     hostSampleRate = sampleRate;
 }
 
@@ -55,9 +57,10 @@ void AudioBufferManager::processBlock(juce::AudioBuffer<float>& outputBuffer)
         if (buffer->hasAudioLoaded())
         {
             // Process the buffer into temp buffer without per-block allocation
+            // Pre-allocated in prepare(); guard kept as safety net.
             if (tempBuffer.getNumChannels() != numChannels || tempBuffer.getNumSamples() < numSamples)
             {
-                // Grow capacity when needed; avoid shrinking to keep allocations off the audio thread
+                jassertfalse; // tempBuffer should have been pre-allocated in prepare()
                 tempBuffer.setSize(numChannels, numSamples, false, false, true);
             }
             tempBuffer.clear();

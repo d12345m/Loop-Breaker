@@ -76,6 +76,10 @@ public:
             updateHighPassCoeffs(params.highPassCutoff);
             updateDelayHighCutCoeffs(params.delayFeedbackHighCutHz);
 
+            // §6.3  Pre-allocate ducking gains buffer so processDSP never
+            // calls resize() on the audio thread.
+            duckGains.resize((size_t) blockSize);
+
             // (Re)allocate chorus delay buffer
             const int maxChorusDelaySamples = (int) std::ceil((kMaxChorusDelayMs / 1000.0) * juce::jmax(1.0, lastSampleRate));
             chorusDelayBufferSize = maxChorusDelaySamples + blockSize + 1;
@@ -92,7 +96,8 @@ public:
         // Precompute per-sample ducking gains from incoming signal (before FX)
         if (params.duckingEnabled && numSamples > 0)
         {
-            if ((int)duckGains.size() != numSamples)
+            // Pre-allocated in prepareDSP(); guard kept as safety net.
+            if ((int)duckGains.size() < numSamples)
                 duckGains.resize((size_t) numSamples);
             // compute attack/release coeffs from sample rate and release param
             updateDuckingCoeffs(params.duckReleaseMs);

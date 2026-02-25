@@ -9,6 +9,7 @@
 */
 
 #include "AudioBuffer.h"
+#include <array>
 #include <vector>
 #include <algorithm>
 #include <cmath>
@@ -152,6 +153,22 @@ void AudioBuffer::prepare(double sampleRate, int samplesPerBlockExpected)
     repitchBuffer.setSize(2, samplesPerBlockExpected * 4); // Extra headroom for repitching
     tempProcessingBuffer.setSize(2, samplesPerBlockExpected * 4);
     crossfadeBuffer.setSize(2, crossfadeLengthSamples * 2); // Buffer for crossfading
+
+    // §6.1  Pre-allocate SoundTouch scratch buffers at worst-case sizes so that
+    // processWithTimeStretch never calls setSize (which may malloc) on the
+    // audio thread.  Worst case: speed=4×, stretch=4×, pitch=±24 semitones
+    // gives a totalTempoRatioForIO around 16×.  With the margin formula
+    // (numOutput * ratio + 64 * ratio) a 4× safety multiplier is used.
+    const int worstCaseInputFrames = samplesPerBlockExpected * 16 + 64 * 16;
+    stretchInScratch.setSize(2, worstCaseInputFrames, false, false, true);
+
+    // Interleaved buffers used inside TimeStretchSoundTouch::processNonInterleaved.
+    // Input: worstCaseInputFrames * numChannels;  Output: samplesPerBlock * numChannels.
+    stretchInterleavedIn.setSize(1, worstCaseInputFrames * 2, false, false, true);
+    stretchInterleavedOut.setSize(1, samplesPerBlockExpected * 2, false, false, true);
+
+    // Previous-block cache for mode-transition crossfades.
+    previousBlockBuffer.setSize(2, samplesPerBlockExpected, false, false, true);
 }
 
 void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
@@ -261,9 +278,11 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
     lastBlockUsedStretch = useStretcher;
 
     // Cache this block for potential transition crossfade next time.
+    // Pre-allocated in prepare(); guard kept as safety net.
     if (previousBlockBuffer.getNumChannels() != outputBuffer.getNumChannels()
         || previousBlockBuffer.getNumSamples() < outputBuffer.getNumSamples())
     {
+        jassertfalse; // previousBlockBuffer should have been pre-allocated in prepare()
         previousBlockBuffer.setSize(outputBuffer.getNumChannels(),
                                     outputBuffer.getNumSamples(),
                                     false, false, true);
@@ -1065,9 +1084,14 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
     }
 
     // Ensure scratch buffers are appropriately sized.
+    // These are pre-allocated in prepare() at worst-case sizes.  The guard is
+    // kept as a safety net but should never trigger in normal operation.
     const int stretcherLatency = juce::jmax (0, stretcher.getLatencySamples());
     if (stretchInScratch.getNumChannels() != numChannels || stretchInScratch.getNumSamples() < maxInputChunkFrames)
+    {
+        jassertfalse; // scratch buffer should have been pre-allocated in prepare()
         stretchInScratch.setSize (numChannels, maxInputChunkFrames, false, false, true);
+    }
 
     // Fill / pull in a loop so we always output a full block.
     // Key idea: try to drain existing SoundTouch output first; if insufficient, feed more input and retry.
@@ -1394,16 +1418,20 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         if (primeSamples > 0)
         {
             // Ensure scratch is large enough for the priming chunk.
+            // Pre-allocated in prepare(); guard kept as safety net.
             if (stretchInScratch.getNumChannels() != numChannels
                 || stretchInScratch.getNumSamples() < primeSamples)
             {
+                jassertfalse; // scratch buffer should have been pre-allocated in prepare()
                 stretchInScratch.setSize (numChannels, primeSamples, false, false, true);
             }
 
             const int primed = fillInputScratch (primeSamples);
             if (primed > 0)
             {
-                std::vector<const float*> primePtrs ((size_t) numChannels, nullptr);
+                // §6.2  Use stack-allocated array instead of std::vector to avoid
+                // heap allocation on the audio thread (stereo is the max channel count).
+                std::array<const float*, 2> primePtrs {};
                 for (int ch = 0; ch < numChannels; ++ch)
                     primePtrs[(size_t) ch] = stretchInScratch.getReadPointer (ch);
 
@@ -1418,8 +1446,10 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
 
     int framesWritten = 0;
     int safetyIters = 0;
-    std::vector<float*> outPtrs (numChannels, nullptr);
-    std::vector<const float*> inPtrs (numChannels, nullptr);
+    // §6.2  Stack-allocated arrays instead of std::vector — avoids heap
+    // allocation on every audio block (stereo is the max channel count).
+    std::array<float*, 2> outPtrs {};
+    std::array<const float*, 2> inPtrs {};
 
     // Cap iterations: with proportional feed sizes we should fill the block in 2-4 iterations
     // in steady state.  During initial warmup or at high effective ratios (e.g. speed=2 + oct+)

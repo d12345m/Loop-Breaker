@@ -321,13 +321,20 @@ juce::Array<int> AudioBufferManager::applyPendingLoads(bool transportPlaying)
 
             if (auto* buffer = getBuffer(p.bufferIndex))
             {
+                // §4.2  If the transport is already running, stop the buffer
+                // before swapping in the new data so it doesn't continue
+                // playing immediately.  The awaitingMusicalStart flag will
+                // keep it silent until the next modifier trigger.
+                const bool wasPlaying = transportPlaying && buffer->isPlaying();
+
                 buffer->setLoadedAudioData(p.data);
 
-                // §4.2  If the transport is already running, defer playback
-                // start until a musically relevant cue (bar boundary or
-                // modifier trigger) so the loop doesn't begin mid-measure.
                 if (transportPlaying)
+                {
+                    if (wasPlaying)
+                        buffer->stop();
                     buffer->setAwaitingMusicalStart (true);
+                }
             }
 
             loadedIndices.add (p.bufferIndex);

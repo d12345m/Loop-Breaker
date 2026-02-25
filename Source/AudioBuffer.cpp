@@ -522,127 +522,163 @@ void AudioBuffer::processWithRepitching(juce::AudioBuffer<float>& outputBuffer)
     const int numChannels = juce::jmin(outputBuffer.getNumChannels(), sourceBuffer.getNumChannels());
     
     outputBuffer.clear();
-    
+
+    // §5.2  Snapshot ALL atomic state into locals once before the per-sample
+    // loop.  Only write back playheadPosition (and ping-pong state) once after
+    // the loop completes.
+    double currentPos               = playheadPosition.load();
+    const bool slicingOn            = slicingModeActive.load();
+    bool sliceTrig                  = sliceTriggered.load();
+    const int tgtSlice              = targetSlice.load();
+    int activeSlice                 = currentActiveSlice.load();
+    const bool loopWinOn            = loopWindowEnabled.load();
+    const int64_t loopStart         = loopWinOn ? loopStartSamples.load() : 0;
+    const int64_t loopEnd           = loopWinOn ? loopEndSamples.load()   : 0;
+    const bool ppEnabled            = pingPongEnabled.load();
+    const double ppPeriod           = ppEnabled ? pingPongPeriodSamples.load() : 0.0;
+    double ppPhase                  = ppEnabled ? pingPongPhasePosition.load() : 0.0;
+    bool ppGoingForward             = ppEnabled ? pingPongGoingForward.load() : true;
+
     for (int sample = 0; sample < numOutputSamples; ++sample)
     {
         const double speed = speedSmoother.getNextValue();
-        double currentPos = playheadPosition.load();
-        
-        // Handle slice-based playback first
-        handleSlicePlayback(currentPos, fileLengthSamples);
-        currentPos = playheadPosition.load(); // Get updated position after slice handling
+
+        // --- Inline slice handling using locals ---
+        if (slicingOn)
+        {
+            if (sliceTrig)
+            {
+                const double spd = getEffectiveSpeed();
+                double newPos = (spd >= 0.0)
+                    ? getSliceStartPosition(tgtSlice, fileLengthSamples)
+                    : getSliceEndPosition(tgtSlice, fileLengthSamples) - 1.0;
+
+                // Inline startSliceCrossfade using locals
+                previousSliceIndex = activeSlice;
+                previousSlicePlayheadPos = currentPos;
+                isInCrossfade = true;
+                crossfadePosition = 0;
+                activeSlice = tgtSlice;
+                currentPos = newPos;
+                sliceTrig = false;
+            }
+            else if (params.continuousRandomSlicing)
+            {
+                const double sliceStart = getSliceStartPosition(activeSlice, fileLengthSamples);
+                const double sliceEnd   = getSliceEndPosition(activeSlice, fileLengthSamples);
+                const double spd = getEffectiveSpeed();
+                bool shouldTriggerNext = (spd > 0.0) ? (currentPos >= sliceEnd - 1.0)
+                                       : (spd < 0.0) ? (currentPos <= sliceStart)
+                                       : false;
+                if (shouldTriggerNext)
+                {
+                    const int nextSlice = random.nextInt(params.numSlices);
+                    double newPos = (spd > 0.0)
+                        ? getSliceStartPosition(nextSlice, fileLengthSamples)
+                        : getSliceEndPosition(nextSlice, fileLengthSamples) - 1.0;
+
+                    previousSliceIndex = activeSlice;
+                    previousSlicePlayheadPos = currentPos;
+                    isInCrossfade = true;
+                    crossfadePosition = 0;
+                    activeSlice = nextSlice;
+                    currentPos = newPos;
+                }
+            }
+            else
+            {
+                const double sliceStart = getSliceStartPosition(activeSlice, fileLengthSamples);
+                const double sliceEnd   = getSliceEndPosition(activeSlice, fileLengthSamples);
+                const double spd = getEffectiveSpeed();
+
+                if (spd > 0.0 && currentPos >= sliceEnd - 1.0)
+                {
+                    if (params.isLooping) currentPos = sliceStart;
+                    else params.isPlaying = false;
+                }
+                else if (spd < 0.0 && currentPos <= sliceStart)
+                {
+                    if (params.isLooping) currentPos = sliceEnd - 1.0;
+                    else params.isPlaying = false;
+                }
+            }
+        }
         
         // Only handle normal boundary conditions if not in slicing mode
-        if (!slicingModeActive.load())
+        if (!slicingOn)
         {
-            // Handle looping and boundaries for normal playback
-            if (speed > 0.0) // Forward playback
+            if (speed > 0.0)
             {
                 if (currentPos >= fileLengthSamples - 1)
                 {
-                    if (params.isLooping)
-                    {
-                        currentPos = 0.0;
-                    }
-                    else
-                    {
-                        params.isPlaying = false;
-                        break;
-                    }
+                    if (params.isLooping) currentPos = 0.0;
+                    else { params.isPlaying = false; break; }
                 }
             }
-            else if (speed < 0.0) // Reverse playback
+            else if (speed < 0.0)
             {
                 if (currentPos <= 0.0)
                 {
-                    if (params.isLooping)
-                    {
-                        currentPos = static_cast<double>(fileLengthSamples - 1);
-                    }
-                    else
-                    {
-                        params.isPlaying = false;
-                        break;
-                    }
+                    if (params.isLooping) currentPos = static_cast<double>(fileLengthSamples - 1);
+                    else { params.isPlaying = false; break; }
                 }
             }
-            else // Speed == 0, paused
+            else
             {
                 break;
             }
         }
-        else if (speed == 0.0) // Paused in slicing mode
+        else if (speed == 0.0)
         {
             break;
         }
         
-        // Ensure position is within bounds (and loop within custom window if enabled)
-        if (loopWindowEnabled.load())
+        // Enforce loop window boundaries using locals
+        if (loopWinOn)
         {
-            const int64_t start = loopStartSamples.load();
-            const int64_t end   = loopEndSamples.load();
             if (speed >= 0.0)
             {
-                if (currentPos >= (double) end)
+                if (currentPos >= (double) loopEnd)
                 {
-                    // Smooth wrap: start a short boundary crossfade
-                    startBoundaryCrossfade((double) start);
-                    currentPos = (double) start;
+                    startBoundaryCrossfade((double) loopStart);
+                    currentPos = (double) loopStart;
                 }
-                else if (currentPos < (double) start)
-                    currentPos = (double) start;
+                else if (currentPos < (double) loopStart)
+                    currentPos = (double) loopStart;
             }
-            else // reverse
+            else
             {
-                if (currentPos < (double) start)
+                if (currentPos < (double) loopStart)
                 {
-                    startBoundaryCrossfade((double) end);
-                    currentPos = (double) end;
+                    startBoundaryCrossfade((double) loopEnd);
+                    currentPos = (double) loopEnd;
                 }
-                else if (currentPos > (double) end)
-                    currentPos = (double) end;
+                else if (currentPos > (double) loopEnd)
+                    currentPos = (double) loopEnd;
             }
         }
         
-        // Ping pong mode: oscillate forward and backward at musical note divisions
-        const bool pingPongOn = pingPongEnabled.load();
-        if (pingPongOn)
+        // Ping pong mode using locals
+        if (ppEnabled && ppPeriod > 0.0)
         {
-            const double periodSamples = pingPongPeriodSamples.load();
-            if (periodSamples > 0.0)
+            const double stepSize = std::abs(speed) * (fileSampleRate / hostSampleRate);
+            ppPhase += stepSize;
+            
+            if (ppPhase >= ppPeriod)
             {
-                double phase = pingPongPhasePosition.load();
-                const bool goingForward = pingPongGoingForward.load();
+                ppPhase = std::fmod(ppPhase, ppPeriod);
                 
-                // Increment phase by the step taken (in file samples)
-                const double stepSize = std::abs(speed) * (fileSampleRate / hostSampleRate);
-                phase += stepSize;
-                
-                // Check if we've completed one direction and need to reverse
-                if (phase >= periodSamples)
+                if (ppGoingForward)
                 {
-                    // Reset phase and flip direction
-                    phase = std::fmod(phase, periodSamples);
-                    pingPongPhasePosition.store(phase);
-                    
-                    if (goingForward)
-                    {
-                        // Switch to backward
-                        pingPongGoingForward.store(false);
-                        params.speed = -std::abs(params.speed);
-                        speedSmoother.setCurrentAndTargetValue(params.speed);
-                    }
-                    else
-                    {
-                        // Switch to forward
-                        pingPongGoingForward.store(true);
-                        params.speed = std::abs(params.speed);
-                        speedSmoother.setCurrentAndTargetValue(params.speed);
-                    }
+                    ppGoingForward = false;
+                    params.speed = -std::abs(params.speed);
+                    speedSmoother.setCurrentAndTargetValue(params.speed);
                 }
                 else
                 {
-                    pingPongPhasePosition.store(phase);
+                    ppGoingForward = true;
+                    params.speed = std::abs(params.speed);
+                    speedSmoother.setCurrentAndTargetValue(params.speed);
                 }
             }
         }
@@ -672,7 +708,16 @@ void AudioBuffer::processWithRepitching(juce::AudioBuffer<float>& outputBuffer)
         
         // Advance playhead
         currentPos += speed * (fileSampleRate / hostSampleRate);
-        playheadPosition.store(currentPos);
+    }
+
+    // §5.2  Write back all state atomics once after the loop.
+    playheadPosition.store(currentPos);
+    currentActiveSlice.store(activeSlice);
+    sliceTriggered.store(sliceTrig);
+    if (ppEnabled)
+    {
+        pingPongPhasePosition.store(ppPhase);
+        pingPongGoingForward.store(ppGoingForward);
     }
 }
 
@@ -1160,18 +1205,6 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         double currentPos = playheadPosition.load();
         const double step = inputSpeed * (fileSampleRate / hostSampleRate);
 
-        // Local crossfade helpers (avoid touching playhead atomics).
-        auto startSliceCrossfadeLocal = [&] (int newSliceIndex, double newPlayheadPos)
-        {
-            previousSliceIndex = currentActiveSlice.load();
-            previousSlicePlayheadPos = currentPos;
-            isInCrossfade = true;
-            crossfadePosition = 0;
-
-            currentActiveSlice.store (newSliceIndex);
-            currentPos = newPlayheadPos;
-        };
-
         auto startBoundaryCrossfadeLocal = [&] (double newPlayheadPos)
         {
             previousSlicePlayheadPos = currentPos;
@@ -1182,15 +1215,23 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         };
 
         // Inline slice handling using the local playhead.
+        // §5.2  All slice/ping-pong atomic state is snapshotted into locals
+        // below (before the per-sample loop) so the inner loop is free of
+        // atomic traffic.
+        bool localSliceTrig = sliceTriggered.load();
+        const int  localTargetSlice = targetSlice.load();
+        int  localActiveSlice = currentActiveSlice.load();
+        const bool slicingOn = slicingModeActive.load();
+
         auto handleSlicePlaybackLocal = [&] ()
         {
-            if (! slicingModeActive.load())
+            if (! slicingOn)
                 return;
 
             // Check if we need to jump to a new slice
-            if (sliceTriggered.load())
+            if (localSliceTrig)
             {
-                const int slice = targetSlice.load();
+                const int slice = localTargetSlice;
                 const double speed = getEffectiveSpeed();
 
                 double newPos = 0.0;
@@ -1199,17 +1240,22 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                 else
                     newPos = getSliceEndPosition (slice, fileLengthSamples) - 1.0;
 
-                startSliceCrossfadeLocal (slice, newPos);
-                sliceTriggered.store (false);
+                // Inline startSliceCrossfade using locals
+                previousSliceIndex = localActiveSlice;
+                previousSlicePlayheadPos = currentPos;
+                isInCrossfade = true;
+                crossfadePosition = 0;
+                localActiveSlice = slice;
+                currentPos = newPos;
+                localSliceTrig = false;
                 return;
             }
 
             // Handle continuous random mode
             if (params.continuousRandomSlicing)
             {
-                const int activeSlice = currentActiveSlice.load();
-                const double sliceStart = getSliceStartPosition (activeSlice, fileLengthSamples);
-                const double sliceEnd   = getSliceEndPosition (activeSlice, fileLengthSamples);
+                const double sliceStart = getSliceStartPosition (localActiveSlice, fileLengthSamples);
+                const double sliceEnd   = getSliceEndPosition (localActiveSlice, fileLengthSamples);
 
                 bool shouldTriggerNext = false;
                 const double speed = getEffectiveSpeed();
@@ -1229,14 +1275,18 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                     else
                         newPos = getSliceEndPosition (nextSlice, fileLengthSamples) - 1.0;
 
-                    startSliceCrossfadeLocal (nextSlice, newPos);
+                    previousSliceIndex = localActiveSlice;
+                    previousSlicePlayheadPos = currentPos;
+                    isInCrossfade = true;
+                    crossfadePosition = 0;
+                    localActiveSlice = nextSlice;
+                    currentPos = newPos;
                 }
             }
             else
             {
-                const int activeSlice = currentActiveSlice.load();
-                const double sliceStart = getSliceStartPosition (activeSlice, fileLengthSamples);
-                const double sliceEnd   = getSliceEndPosition (activeSlice, fileLengthSamples);
+                const double sliceStart = getSliceStartPosition (localActiveSlice, fileLengthSamples);
+                const double sliceEnd   = getSliceEndPosition (localActiveSlice, fileLengthSamples);
                 const double speed = getEffectiveSpeed();
 
                 if (speed > 0.0 && currentPos >= sliceEnd - 1.0)
@@ -1263,13 +1313,17 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         const int64_t loopStart = loopWindowOn ? loopStartSamples.load() : 0;
         const int64_t loopEnd   = loopWindowOn ? loopEndSamples.load()   : 0;
 
-        const bool slicingOn = slicingModeActive.load();
+        // §5.2  Snapshot ping-pong state into locals before the per-sample loop.
+        const bool ppEnabled   = pingPongEnabled.load();
+        const double ppPeriod  = ppEnabled ? pingPongPeriodSamples.load() : 0.0;
+        double ppPhase         = ppEnabled ? pingPongPhasePosition.load() : 0.0;
+        bool ppGoingForward    = ppEnabled ? pingPongGoingForward.load()  : true;
 
         int framesFilled = 0;
         for (int sample = 0; sample < framesToGenerate; ++sample)
         {
-            // Keep slice behavior responsive (checks atomics, but avoids playhead atomics).
-            if (slicingOn || sliceTriggered.load())
+            // Keep slice behavior responsive using local snapshot.
+            if (slicingOn || localSliceTrig)
                 handleSlicePlaybackLocal();
 
             // If no custom loop window is active, respect file boundaries + looping.
@@ -1322,42 +1376,24 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                 }
             }
             
-            // Ping pong mode: oscillate forward and backward at musical note divisions
-            const bool pingPongOn = pingPongEnabled.load();
-            if (pingPongOn)
+            // Ping pong mode using locals (no per-sample atomic traffic)
+            if (ppEnabled && ppPeriod > 0.0)
             {
-                const double periodSamples = pingPongPeriodSamples.load();
-                if (periodSamples > 0.0)
+                ppPhase += std::abs(step);
+                
+                if (ppPhase >= ppPeriod)
                 {
-                    double phase = pingPongPhasePosition.load();
-                    const bool goingForward = pingPongGoingForward.load();
+                    ppPhase = std::fmod(ppPhase, ppPeriod);
                     
-                    // Increment phase by the step taken (in file samples)
-                    phase += std::abs(step);
-                    
-                    // Check if we've completed one direction and need to reverse
-                    if (phase >= periodSamples)
+                    if (ppGoingForward)
                     {
-                        // Reset phase and flip direction
-                        phase = std::fmod(phase, periodSamples);
-                        pingPongPhasePosition.store(phase);
-                        
-                        if (goingForward)
-                        {
-                            // Switch to backward
-                            pingPongGoingForward.store(false);
-                            params.speed = -std::abs(params.speed);
-                        }
-                        else
-                        {
-                            // Switch to forward
-                            pingPongGoingForward.store(true);
-                            params.speed = std::abs(params.speed);
-                        }
+                        ppGoingForward = false;
+                        params.speed = -std::abs(params.speed);
                     }
                     else
                     {
-                        pingPongPhasePosition.store(phase);
+                        ppGoingForward = true;
+                        params.speed = std::abs(params.speed);
                     }
                 }
             }
@@ -1381,7 +1417,15 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
             ++framesFilled;
         }
 
+        // §5.2  Write back all snapshotted state once after the loop.
         playheadPosition.store (currentPos);
+        currentActiveSlice.store (localActiveSlice);
+        sliceTriggered.store (localSliceTrig);
+        if (ppEnabled)
+        {
+            pingPongPhasePosition.store (ppPhase);
+            pingPongGoingForward.store (ppGoingForward);
+        }
         return framesFilled;
     };
 

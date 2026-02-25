@@ -525,10 +525,11 @@ void AudioBuffer::processWithRepitching(juce::AudioBuffer<float>& outputBuffer)
     const int fileLengthSamples = sourceBuffer.getNumSamples();
     const double fileSampleRate = data->sampleRate;
     const int numChannels = juce::jmin(outputBuffer.getNumChannels(), sourceBuffer.getNumChannels());
-    
+    const double srRatio = fileSampleRate / hostSampleRate;
+
     outputBuffer.clear();
 
-    // §5.2  Snapshot ALL atomic state into locals once before the per-sample
+    // §5.2  Snapshot ALL atomic state into locals once before the processing
     // loop.  Only write back playheadPosition (and ping-pong state) once after
     // the loop completes.
     double currentPos               = playheadPosition.load();
@@ -544,44 +545,79 @@ void AudioBuffer::processWithRepitching(juce::AudioBuffer<float>& outputBuffer)
     double ppPhase                  = ppEnabled ? pingPongPhasePosition.load() : 0.0;
     bool ppGoingForward             = ppEnabled ? pingPongGoingForward.load() : true;
 
-    for (int sample = 0; sample < numOutputSamples; ++sample)
-    {
-        const double speed = speedSmoother.getNextValue();
+    // §7: Block-based repitch processing — process in chunks between boundary
+    // events.  Between boundaries the playhead advances linearly and the inner
+    // interpolation loop is branch-free and auto-vectorizable.
 
-        // --- Inline slice handling using locals ---
+    int outputPos = 0;
+
+    while (outputPos < numOutputSamples)
+    {
+        // --- Read current speed ---
+        const bool smoothing = speedSmoother.isSmoothing();
+        const double speed = smoothing ? speedSmoother.getNextValue()
+                                       : speedSmoother.getCurrentValue();
+
+        if (speed == 0.0)
+            break;
+
+        const double step = speed * srRatio;
+
+        // ==================================================================
+        // Event handling at current position
+        // ==================================================================
+
+        // Ping-pong direction flip (check phase accumulated from previous chunk)
+        if (ppEnabled && ppPeriod > 0.0 && ppPhase >= ppPeriod)
+        {
+            ppPhase = std::fmod(ppPhase, ppPeriod);
+            ppGoingForward = !ppGoingForward;
+            if (ppGoingForward)
+            {
+                params.speed = std::abs(params.speed);
+                speedSmoother.setCurrentAndTargetValue(params.speed);
+            }
+            else
+            {
+                params.speed = -std::abs(params.speed);
+                speedSmoother.setCurrentAndTargetValue(params.speed);
+            }
+            continue; // re-evaluate with new direction
+        }
+
+        // Slice trigger
+        if (slicingOn && sliceTrig)
+        {
+            const double spd = getEffectiveSpeed();
+            double newPos = (spd >= 0.0)
+                ? getSliceStartPosition(tgtSlice, fileLengthSamples)
+                : getSliceEndPosition(tgtSlice, fileLengthSamples) - 1.0;
+            previousSliceIndex = activeSlice;
+            previousSlicePlayheadPos = currentPos;
+            isInCrossfade = true;
+            crossfadePosition = 0;
+            activeSlice = tgtSlice;
+            currentPos = newPos;
+            sliceTrig = false;
+        }
+
+        // Slice boundary (continuous random or looping within slice)
         if (slicingOn)
         {
-            if (sliceTrig)
-            {
-                const double spd = getEffectiveSpeed();
-                double newPos = (spd >= 0.0)
-                    ? getSliceStartPosition(tgtSlice, fileLengthSamples)
-                    : getSliceEndPosition(tgtSlice, fileLengthSamples) - 1.0;
+            const double sliceStart = getSliceStartPosition(activeSlice, fileLengthSamples);
+            const double sliceEnd   = getSliceEndPosition(activeSlice, fileLengthSamples);
+            const double spd = getEffectiveSpeed();
 
-                // Inline startSliceCrossfade using locals
-                previousSliceIndex = activeSlice;
-                previousSlicePlayheadPos = currentPos;
-                isInCrossfade = true;
-                crossfadePosition = 0;
-                activeSlice = tgtSlice;
-                currentPos = newPos;
-                sliceTrig = false;
-            }
-            else if (params.continuousRandomSlicing)
+            if (params.continuousRandomSlicing)
             {
-                const double sliceStart = getSliceStartPosition(activeSlice, fileLengthSamples);
-                const double sliceEnd   = getSliceEndPosition(activeSlice, fileLengthSamples);
-                const double spd = getEffectiveSpeed();
-                bool shouldTriggerNext = (spd > 0.0) ? (currentPos >= sliceEnd - 1.0)
-                                       : (spd < 0.0) ? (currentPos <= sliceStart)
-                                       : false;
-                if (shouldTriggerNext)
+                bool atBoundary = (spd > 0.0 && currentPos >= sliceEnd - 1.0)
+                               || (spd < 0.0 && currentPos <= sliceStart);
+                if (atBoundary)
                 {
                     const int nextSlice = random.nextInt(params.numSlices);
                     double newPos = (spd > 0.0)
                         ? getSliceStartPosition(nextSlice, fileLengthSamples)
                         : getSliceEndPosition(nextSlice, fileLengthSamples) - 1.0;
-
                     previousSliceIndex = activeSlice;
                     previousSlicePlayheadPos = currentPos;
                     isInCrossfade = true;
@@ -592,24 +628,20 @@ void AudioBuffer::processWithRepitching(juce::AudioBuffer<float>& outputBuffer)
             }
             else
             {
-                const double sliceStart = getSliceStartPosition(activeSlice, fileLengthSamples);
-                const double sliceEnd   = getSliceEndPosition(activeSlice, fileLengthSamples);
-                const double spd = getEffectiveSpeed();
-
                 if (spd > 0.0 && currentPos >= sliceEnd - 1.0)
                 {
                     if (params.isLooping) currentPos = sliceStart;
-                    else params.isPlaying = false;
+                    else { params.isPlaying = false; break; }
                 }
                 else if (spd < 0.0 && currentPos <= sliceStart)
                 {
                     if (params.isLooping) currentPos = sliceEnd - 1.0;
-                    else params.isPlaying = false;
+                    else { params.isPlaying = false; break; }
                 }
             }
         }
-        
-        // Only handle normal boundary conditions if not in slicing mode
+
+        // File boundary (only when NOT in slicing mode)
         if (!slicingOn)
         {
             if (speed > 0.0)
@@ -628,24 +660,19 @@ void AudioBuffer::processWithRepitching(juce::AudioBuffer<float>& outputBuffer)
                     else { params.isPlaying = false; break; }
                 }
             }
-            else
-            {
-                break;
-            }
         }
-        else if (speed == 0.0)
-        {
-            break;
-        }
-        
-        // Enforce loop window boundaries using locals
+
+        // Loop window enforcement (inline startBoundaryCrossfade to use local currentPos)
         if (loopWinOn)
         {
             if (speed >= 0.0)
             {
                 if (currentPos >= (double) loopEnd)
                 {
-                    startBoundaryCrossfade((double) loopStart);
+                    previousSlicePlayheadPos = currentPos;
+                    previousSliceIndex = -1;
+                    isInCrossfade = true;
+                    crossfadePosition = 0;
                     currentPos = (double) loopStart;
                 }
                 else if (currentPos < (double) loopStart)
@@ -655,64 +682,105 @@ void AudioBuffer::processWithRepitching(juce::AudioBuffer<float>& outputBuffer)
             {
                 if (currentPos < (double) loopStart)
                 {
-                    startBoundaryCrossfade((double) loopEnd);
+                    previousSlicePlayheadPos = currentPos;
+                    previousSliceIndex = -1;
+                    isInCrossfade = true;
+                    crossfadePosition = 0;
                     currentPos = (double) loopEnd;
                 }
                 else if (currentPos > (double) loopEnd)
                     currentPos = (double) loopEnd;
             }
         }
-        
-        // Ping pong mode using locals
-        if (ppEnabled && ppPeriod > 0.0)
+
+        // Clamp to file bounds
+        currentPos = juce::jlimit(0.0, static_cast<double>(fileLengthSamples - 1), currentPos);
+
+        // ==================================================================
+        // Compute safe chunk size until the next boundary event
+        // ==================================================================
+        int remaining = numOutputSamples - outputPos;
+        int chunkSize = remaining;
+
+        // When speed smoother is active, fall back to per-sample processing
+        if (smoothing)
         {
-            const double stepSize = std::abs(speed) * (fileSampleRate / hostSampleRate);
-            ppPhase += stepSize;
-            
-            if (ppPhase >= ppPeriod)
+            chunkSize = 1;
+        }
+        else if (chunkSize > 1)
+        {
+            // Determine the valid playback range for the current position
+            double rangeStart, rangeEnd;
+            if (slicingOn)
             {
-                ppPhase = std::fmod(ppPhase, ppPeriod);
-                
-                if (ppGoingForward)
-                {
-                    ppGoingForward = false;
-                    params.speed = -std::abs(params.speed);
-                    speedSmoother.setCurrentAndTargetValue(params.speed);
-                }
-                else
-                {
-                    ppGoingForward = true;
-                    params.speed = std::abs(params.speed);
-                    speedSmoother.setCurrentAndTargetValue(params.speed);
-                }
+                rangeStart = getSliceStartPosition(activeSlice, fileLengthSamples);
+                rangeEnd   = getSliceEndPosition(activeSlice, fileLengthSamples) - 1.0;
+            }
+            else
+            {
+                rangeStart = 0.0;
+                rangeEnd   = static_cast<double>(fileLengthSamples - 1);
+            }
+
+            // Narrow by loop window
+            if (loopWinOn)
+            {
+                rangeStart = std::max(rangeStart, (double) loopStart);
+                rangeEnd   = std::min(rangeEnd,   (double) loopEnd);
+            }
+
+            // Distance to spatial boundary (in output samples)
+            if (step > 0.0)
+            {
+                double dist = (rangeEnd - currentPos) / step;
+                chunkSize = juce::jmin(chunkSize, juce::jmax(1, static_cast<int>(dist)));
+            }
+            else if (step < 0.0)
+            {
+                double dist = (currentPos - rangeStart) / (-step);
+                chunkSize = juce::jmin(chunkSize, juce::jmax(1, static_cast<int>(dist)));
+            }
+
+            // Distance to ping-pong flip
+            if (ppEnabled && ppPeriod > 0.0)
+            {
+                double ppDist = (ppPeriod - ppPhase) / std::abs(step);
+                chunkSize = juce::jmin(chunkSize, juce::jmax(1, static_cast<int>(ppDist)));
             }
         }
-        
-        // Clamp to file bounds as a safety
-        currentPos = juce::jlimit(0.0, static_cast<double>(fileLengthSamples - 1), currentPos);
-        
-        // High-quality interpolation
-        const int pos1 = static_cast<int>(currentPos);
-        const int pos2 = juce::jmin(pos1 + 1, fileLengthSamples - 1);
-        const double fraction = currentPos - pos1;
-        
-        for (int channel = 0; channel < numChannels; ++channel)
+
+        // ==================================================================
+        // §7: Tight, branch-free interpolation loop for this chunk
+        // ==================================================================
+        for (int ch = 0; ch < numChannels; ++ch)
         {
-            const float sample1 = sourceBuffer.getSample(channel, pos1);
-            const float sample2 = sourceBuffer.getSample(channel, pos2);
-            const float interpolatedSample = sample1 + static_cast<float>(fraction) * (sample2 - sample1);
-            
-            outputBuffer.setSample(channel, sample, interpolatedSample);
+            const float* src = sourceBuffer.getReadPointer(ch);
+            float* dst = outputBuffer.getWritePointer(ch) + outputPos;
+            double pos = currentPos;
+
+            for (int i = 0; i < chunkSize; ++i)
+            {
+                const int p1 = static_cast<int>(pos);
+                const int p2 = juce::jmin(p1 + 1, fileLengthSamples - 1);
+                const float frac = static_cast<float>(pos - static_cast<double>(p1));
+                dst[i] = src[p1] + frac * (src[p2] - src[p1]);
+                pos += step;
+            }
         }
-        
-        // Apply crossfading for slice transitions (if active)
+
+        // Apply crossfade overlay if active
         if (isInCrossfade)
-        {
-            applyCrossfadeToSliceTransition(sourceBuffer, fileLengthSamples, fileSampleRate, outputBuffer, sample, 1);
-        }
-        
-        // Advance playhead
-        currentPos += speed * (fileSampleRate / hostSampleRate);
+            applyCrossfadeToSliceTransition(sourceBuffer, fileLengthSamples,
+                                           fileSampleRate, outputBuffer,
+                                           outputPos, chunkSize);
+
+        // Advance playhead and ping-pong phase
+        currentPos += step * chunkSize;
+
+        if (ppEnabled && ppPeriod > 0.0)
+            ppPhase += std::abs(step) * chunkSize;
+
+        outputPos += chunkSize;
     }
 
     // §5.2  Write back all state atomics once after the loop.

@@ -12,6 +12,7 @@
 #include <JuceHeader.h>
 #include "Modifier.h"
 #include "ThemeEngine.h"
+#include "ThemeFonts.h"
 
 class ModifierHistoryPanel : public juce::Component, public juce::ListBoxModel
 {
@@ -29,7 +30,7 @@ public:
     {
         addAndMakeVisible(titleLabel);
         titleLabel.setText("Modifier History", juce::dontSendNotification);
-        auto f = juce::Font(juce::FontOptions().withHeight(14.0f)); f.setBold(true); titleLabel.setFont(f);
+        auto f = ThemeFonts::getInstance().headingFont(14.0f); titleLabel.setFont(f);
         titleLabel.setJustificationType(juce::Justification::centredLeft);
 
         addAndMakeVisible(clearButton);
@@ -111,7 +112,7 @@ public:
     juce::String extra = e.details.isNotEmpty() ? ("  |  " + e.details) : juce::String();
     auto text = e.timeString + "  |  " + e.modifier + "  ->  " + e.targets + extra;
         g.setColour(typeColour);
-        g.setFont(juce::Font(juce::FontOptions().withHeight(12.0f)));
+        g.setFont(ThemeFonts::getInstance().monoFont(12.0f));
         g.drawFittedText(text, { 6, 0, width - 12, height }, juce::Justification::centredLeft, 1);
     }
 

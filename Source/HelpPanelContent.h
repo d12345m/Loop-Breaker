@@ -10,6 +10,7 @@
 
 #include <JuceHeader.h>
 #include "ThemeEngine.h"
+#include "ThemeFonts.h"
 
 class HelpPanelContent : public juce::Component
 {
@@ -64,9 +65,7 @@ private:
             for (const auto& sec : sections)
             {
                 // ----- Heading -----
-                g.setFont(juce::Font(juce::FontOptions()
-                              .withHeight(17.0f)
-                              .withStyle("Bold")));
+                g.setFont(ThemeFonts::getInstance().headingFont(17.0f));
                 g.setColour(Theme::accent());
                 g.drawText(sec.heading, padX, y, w, 22, juce::Justification::left, false);
                 y += 26;
@@ -82,7 +81,7 @@ private:
                     const int keyColW = 220;
                     const int rowH    = 22;
 
-                    g.setFont(juce::Font(juce::FontOptions().withHeight(13.0f)));
+                    g.setFont(ThemeFonts::getInstance().monoFont(13.0f));
 
                     bool alt = false;
                     for (const auto& row : sec.table)
@@ -118,14 +117,15 @@ private:
                 // ----- Body text (if present) -----
                 if (sec.body.isNotEmpty())
                 {
-                    g.setFont(juce::Font(juce::FontOptions().withHeight(13.5f)));
+                    auto helpBodyFont = ThemeFonts::getInstance().bodyFont(13.5f);
+                    g.setFont(helpBodyFont);
                     g.setColour(Theme::text().withAlpha(0.75f));
 
                     juce::AttributedString as;
                     as.setWordWrap(juce::AttributedString::byWord);
                     as.setJustification(juce::Justification::topLeft);
                     as.setColour(Theme::text().withAlpha(0.75f));
-                    as.setFont(juce::Font(juce::FontOptions().withHeight(13.5f)));
+                    as.setFont(helpBodyFont);
                     as.append(sec.body);
 
                     juce::TextLayout tl;

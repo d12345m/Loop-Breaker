@@ -11,6 +11,7 @@
 
 #include <JuceHeader.h>
 #include "ThemeEngine.h"
+#include "ThemeFonts.h"
 #include "Animator.h"
 
 // Simple 2x4 pad grid showing selectable pads and (new) filename indicators.
@@ -51,7 +52,7 @@ public:
 
             auto* label = padFileLabels.add(new juce::Label());
             label->setJustificationType(juce::Justification::centred);
-            label->setFont(juce::Font(juce::FontOptions().withHeight(12.0f)));
+            label->setFont(ThemeFonts::getInstance().controlLabelFont(12.0f));
             label->setInterceptsMouseClicks(false, false);
             label->setColour(juce::Label::textColourId, Theme::textSubtle());
             addAndMakeVisible(label);
@@ -586,7 +587,7 @@ private:
                     g.setColour(palette.accent1.withAlpha(0.30f));
                     g.fillRoundedRectangle(badgeRect, 3.0f);
                     g.setColour(palette.textPrimary);
-                    g.setFont(juce::Font(juce::FontOptions().withHeight(10.0f)).boldened());
+                    g.setFont(ThemeFonts::getInstance().monoBoldFont(10.0f));
                     g.drawText(juce::String(i + 1), badgeRect, juce::Justification::centred);
                 }
 
@@ -597,7 +598,7 @@ private:
                     g.setColour(palette.panelAlt);
                     g.fillRoundedRectangle(noteRect, 3.0f);
                     g.setColour(palette.textSecondary);
-                    g.setFont(juce::Font(juce::FontOptions().withHeight(10.0f)));
+                    g.setFont(ThemeFonts::getInstance().monoFont(10.0f));
                     g.drawText(juce::String(midiNotes[(size_t)i]), noteRect, juce::Justification::centred);
                 }
 
@@ -633,7 +634,7 @@ private:
                     g.setColour(palette.warn);
                     g.fillRoundedRectangle(learnRect, 3.0f);
                     g.setColour(palette.bg);
-                    g.setFont(juce::Font(juce::FontOptions().withHeight(11.0f)).boldened());
+                    g.setFont(ThemeFonts::getInstance().monoBoldFont(11.0f));
                     g.drawText("LEARN", learnRect, juce::Justification::centred);
                 }
 
@@ -696,7 +697,7 @@ private:
                             auto hintArea = r.reduced(10.f).toNearestInt();
                             hintArea.removeFromBottom(18);
                             g.setColour(palette.textPrimary.withAlpha(0.9f));
-                            g.setFont(juce::Font(juce::FontOptions().withHeight(13.0f)));
+                            g.setFont(ThemeFonts::getInstance().bodyFont(13.0f));
                             const auto hint = (count > 1) ? ("Drop to load " + juce::String(count))
                                                          : juce::String("Drop to load");
                             g.drawFittedText(hint, hintArea, juce::Justification::centred, 1);

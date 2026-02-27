@@ -74,10 +74,20 @@
             resource="0" file="Source/BackgroundAnimator.h"/>
       <FILE id="settingsPanelH" name="SettingsPanelContent.h" compile="0"
             resource="0" file="Source/SettingsPanelContent.h"/>
+      <FILE id="themeFontsH" name="ThemeFonts.h" compile="0"
+            resource="0" file="Source/ThemeFonts.h"/>
     </GROUP>
     <GROUP id="{MOONBASE_RES}" name="Resources">
       <FILE id="moonbaseConfig" name="moonbase_api_config.json" compile="0"
             resource="1" file="Resources/moonbase_api_config.json"/>
+      <FILE id="fontRajdhaniBold" name="Rajdhani-Bold.ttf" compile="0"
+            resource="1" file="Resources/Fonts/Rajdhani-Bold.ttf"/>
+      <FILE id="fontRajdhaniRegular" name="Rajdhani-Regular.ttf" compile="0"
+            resource="1" file="Resources/Fonts/Rajdhani-Regular.ttf"/>
+      <FILE id="fontJetBrainsMono" name="JetBrainsMono-Regular.ttf" compile="0"
+            resource="1" file="Resources/Fonts/JetBrainsMono-Regular.ttf"/>
+      <FILE id="fontPressStart2P" name="PressStart2P-Regular.ttf" compile="0"
+            resource="1" file="Resources/Fonts/PressStart2P-Regular.ttf"/>
     </GROUP>
   </MAINGROUP>
   <MODULES>

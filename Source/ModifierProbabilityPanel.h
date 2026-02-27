@@ -15,6 +15,7 @@
 #include <JuceHeader.h>
 #include "ModifierProbabilityManager.h"
 #include "ThemeEngine.h"
+#include "ThemeFonts.h"
 #include <vector>
 
 class ModifierProbabilityPanel : public juce::Component,
@@ -118,7 +119,7 @@ private:
             // -- Category header --
             row.categoryLabel = std::make_unique<juce::Label>();
             row.categoryLabel->setText (row.category, juce::dontSendNotification);
-            row.categoryLabel->setFont (juce::FontOptions (15.0f, juce::Font::bold));
+            row.categoryLabel->setFont (ThemeFonts::getInstance().headingFont (15.0f));
             row.categoryLabel->setColour (juce::Label::textColourId, Theme::text());
             content.addAndMakeVisible (row.categoryLabel.get());
 
@@ -126,7 +127,7 @@ private:
             row.nameLabel = std::make_unique<juce::Label>();
             row.nameLabel->setText (ModifierProbabilityManager::getDisplayName (type),
                                     juce::dontSendNotification);
-            row.nameLabel->setFont (juce::FontOptions (14.0f));
+            row.nameLabel->setFont (ThemeFonts::getInstance().bodyFont (14.0f));
             row.nameLabel->setColour (juce::Label::textColourId, Theme::textSubtle());
             content.addAndMakeVisible (row.nameLabel.get());
 
@@ -147,7 +148,7 @@ private:
 
             // -- Numeric value label (updated by timer) --
             row.valueLabel = std::make_unique<juce::Label>();
-            row.valueLabel->setFont (juce::FontOptions (13.0f));
+            row.valueLabel->setFont (ThemeFonts::getInstance().monoFont (13.0f));
             row.valueLabel->setColour (juce::Label::textColourId, Theme::textSubtle());
             row.valueLabel->setJustificationType (juce::Justification::centredLeft);
             content.addAndMakeVisible (row.valueLabel.get());
@@ -160,7 +161,7 @@ private:
     void buildPadRows()
     {
         padSectionLabel.setText ("Pad Target Probability", juce::dontSendNotification);
-        padSectionLabel.setFont (juce::FontOptions (15.0f, juce::Font::bold));
+        padSectionLabel.setFont (ThemeFonts::getInstance().headingFont (15.0f));
         padSectionLabel.setColour (juce::Label::textColourId, Theme::text());
         content.addAndMakeVisible (padSectionLabel);
 
@@ -171,7 +172,7 @@ private:
 
             pr.nameLabel = std::make_unique<juce::Label>();
             pr.nameLabel->setText ("Pad " + juce::String (i + 1), juce::dontSendNotification);
-            pr.nameLabel->setFont (juce::FontOptions (14.0f));
+            pr.nameLabel->setFont (ThemeFonts::getInstance().bodyFont (14.0f));
             pr.nameLabel->setColour (juce::Label::textColourId, Theme::textSubtle());
             content.addAndMakeVisible (pr.nameLabel.get());
 
@@ -188,7 +189,7 @@ private:
                     apvts, paramId, *pr.slider);
 
             pr.valueLabel = std::make_unique<juce::Label>();
-            pr.valueLabel->setFont (juce::FontOptions (13.0f));
+            pr.valueLabel->setFont (ThemeFonts::getInstance().monoFont (13.0f));
             pr.valueLabel->setColour (juce::Label::textColourId, Theme::textSubtle());
             pr.valueLabel->setJustificationType (juce::Justification::centredLeft);
             content.addAndMakeVisible (pr.valueLabel.get());

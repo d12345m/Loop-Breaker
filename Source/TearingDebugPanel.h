@@ -2,6 +2,7 @@
 #include <JuceHeader.h>
 #include "AppState.h"
 #include "ThemeEngine.h"
+#include "ThemeFonts.h"
 
 /**
  * Debug panel that displays tearing detection statistics for all audio buffers.
@@ -37,11 +38,11 @@ public:
         const int lineH = 15;
         
         // Title
-        g.setFont(juce::FontOptions(14.0f).withStyle("Bold"));
+        g.setFont(ThemeFonts::getInstance().headingFont(14.0f));
         g.drawText("Audio Tearing Debug", area.removeFromTop(lineH + 2), juce::Justification::centredLeft);
         area.removeFromTop(2); // Small gap
         
-        g.setFont(juce::FontOptions(10.0f));
+        g.setFont(ThemeFonts::getInstance().monoFont(10.0f));
         
 #if JUCE_DEBUG
         // Single row header - compact columns
@@ -145,7 +146,7 @@ public:
                 }
             }
             
-            g.setFont(juce::FontOptions(12.0f).withStyle("Bold"));
+            g.setFont(ThemeFonts::getInstance().monoBoldFont(12.0f));
             
             // Color-coded summary by severity
             auto summaryRow = area.removeFromTop(lineH);

@@ -10,6 +10,12 @@
      Static    — solid bg colour, zero overhead.
      SlowCycle — hue rotates continuously (~1° per second by default).
      Reactive  — brief hue shift toward modifier accent on trigger, then relax.
+
+   Overlay effects (Phase 5 additions):
+     - Noise/grain texture: a pre-generated static noise image composited at
+       low opacity (3–5%) for analog warmth. Available in all themes.
+     - Scanline effect: thin horizontal lines at 2px intervals, 5% opacity.
+       Active only in the "Pixel Grid" theme.
  ==============================================================================
 */
 
@@ -28,6 +34,7 @@ public:
     {
         setInterceptsMouseClicks (false, false);  // click-through
         ThemeEngine::getInstance().addListener (this);
+        generateNoiseTexture (256, 256);  // pre-generate a tileable noise image
         startTimerHz (15);   // 15 FPS background refresh — decoupled from 20 Hz UI
     }
 
@@ -65,6 +72,7 @@ public:
         auto bounds = getLocalBounds();
         const auto& palette = ThemeEngine::getInstance().getCurrentPalette();
         const auto& anim    = ThemeEngine::getInstance().getAnimationConfig();
+        const bool isPixelGrid = (palette.name == "Pixel Grid");
 
         auto mode = anim.backgroundMode;
         if (! anim.enabled || ! anim.backgroundColorCycle)
@@ -74,6 +82,7 @@ public:
         {
             g.setColour (palette.bg);
             g.fillRect (bounds);
+            paintOverlayEffects (g, bounds, palette, anim, isPixelGrid);
             return;
         }
 
@@ -121,31 +130,131 @@ public:
         }
 
         g.drawImageAt (cachedBg, 0, 0);
+
+        // Overlay effects (noise, scanlines) on top of the background
+        paintOverlayEffects (g, bounds, palette, anim, isPixelGrid);
     }
 
 private:
+    // ── Overlay Effects ─────────────────────────────────────────────────
+
+    /** Paint noise grain texture and scanlines on top of the background. */
+    void paintOverlayEffects (juce::Graphics& g, const juce::Rectangle<int>& bounds,
+                              const ThemePalette& palette, const AnimationConfig& anim,
+                              bool isPixelGrid)
+    {
+        // ── Noise / grain texture overlay ──
+        // Available in all themes when glowIntensity > 0 (Studio Clean has 0, so no grain).
+        // Composited at 3–5% opacity for a subtle analog warmth.
+        if (palette.glowIntensity > 0.01f && ! noiseTexture.isNull())
+        {
+            const float noiseAlpha = 0.03f + 0.02f * palette.glowIntensity;  // 3–5%
+            g.setOpacity (noiseAlpha);
+
+            // Tile the noise texture across the full bounds
+            const int tw = noiseTexture.getWidth();
+            const int th = noiseTexture.getHeight();
+            for (int y = bounds.getY(); y < bounds.getBottom(); y += th)
+                for (int x = bounds.getX(); x < bounds.getRight(); x += tw)
+                    g.drawImageAt (noiseTexture, x, y);
+
+            g.setOpacity (1.0f);
+        }
+
+        // ── Scanline effect (Pixel Grid theme only) ──
+        // Thin horizontal lines at 2px intervals, 5% opacity — like a CRT refresh.
+        if (isPixelGrid && anim.enabled)
+        {
+            const float scanlineAlpha = 0.05f;
+            g.setColour (juce::Colours::white.withAlpha (scanlineAlpha));
+
+            // Offset scanlines by the sweep position for a slow sweep animation
+            const int lineSpacing = 2;
+            const int startY = bounds.getY() + scanlineSweepOffset;
+
+            for (int y = startY; y < bounds.getBottom(); y += lineSpacing)
+            {
+                if (y >= bounds.getY())
+                    g.fillRect (bounds.getX(), y, bounds.getWidth(), 1);
+            }
+
+            // Draw one brighter "sweep" line that moves down the screen (CRT refresh)
+            if (anim.enabled)
+            {
+                const int sweepY = bounds.getY() + static_cast<int> (scanlineSweepPhase * (float) bounds.getHeight());
+                const float sweepAlpha = 0.08f;
+                g.setColour (juce::Colours::white.withAlpha (sweepAlpha));
+                g.fillRect (bounds.getX(), sweepY, bounds.getWidth(), 2);
+                // Soft glow above/below the sweep
+                g.setColour (juce::Colours::white.withAlpha (sweepAlpha * 0.4f));
+                g.fillRect (bounds.getX(), sweepY - 2, bounds.getWidth(), 2);
+                g.fillRect (bounds.getX(), sweepY + 2, bounds.getWidth(), 2);
+            }
+        }
+    }
+
+    // ── Noise Texture Generation ────────────────────────────────────────
+
+    /** Generate a tileable monochrome noise image for analog-feel overlay. */
+    void generateNoiseTexture (int w, int h)
+    {
+        noiseTexture = juce::Image (juce::Image::ARGB, w, h, true);
+
+        juce::Image::BitmapData bitmapData (noiseTexture, juce::Image::BitmapData::writeOnly);
+
+        // Simple LCG-based noise for deterministic, fast generation
+        juce::uint32 seed = 0xDEADBEEF;
+        for (int y = 0; y < h; ++y)
+        {
+            for (int x = 0; x < w; ++x)
+            {
+                seed = seed * 1664525u + 1013904223u;
+                const juce::uint8 v = static_cast<juce::uint8> ((seed >> 16) & 0xFF);
+                // White noise pixel at full alpha — opacity is controlled at composite time
+                bitmapData.setPixelColour (x, y, juce::Colour (v, v, v, (juce::uint8) 255));
+            }
+        }
+    }
+
+    // ── Timer ───────────────────────────────────────────────────────────
+
     void timerCallback() override
     {
         const auto& anim = ThemeEngine::getInstance().getAnimationConfig();
+        const bool isPixelGrid = (ThemeEngine::getInstance().getCurrentPalette().name == "Pixel Grid");
 
         auto mode = anim.backgroundMode;
         if (! anim.enabled || ! anim.backgroundColorCycle)
             mode = BackgroundMode::Static;
 
-        if (mode == BackgroundMode::Static)
-            return;   // nothing to animate
+        bool needsRepaint = false;
 
-        // Advance hue offset
-        const double dt = 1.0 / 15.0;   // ~66.7 ms per tick
-        hueOffset += (float) (anim.backgroundCycleRate * anim.animationSpeed * dt);
-        if (hueOffset >= 1.0f)
-            hueOffset -= 1.0f;
+        if (mode != BackgroundMode::Static)
+        {
+            // Advance hue offset
+            const double dt = 1.0 / 15.0;   // ~66.7 ms per tick
+            hueOffset += (float) (anim.backgroundCycleRate * anim.animationSpeed * dt);
+            if (hueOffset >= 1.0f)
+                hueOffset -= 1.0f;
 
-        // Tick reactive decay
-        reactiveDecay.tick (dt);
+            // Tick reactive decay
+            reactiveDecay.tick (dt);
 
-        cachedBg = {};   // invalidate — colour changed
-        repaint();
+            cachedBg = {};   // invalidate — colour changed
+            needsRepaint = true;
+        }
+
+        // Advance scanline sweep for Pixel Grid theme
+        if (isPixelGrid && anim.enabled)
+        {
+            scanlineSweepPhase += (1.0f / 15.0f) * anim.animationSpeed * 0.15f; // ~1 sweep per 6-7 seconds
+            if (scanlineSweepPhase >= 1.0f)
+                scanlineSweepPhase -= 1.0f;
+            needsRepaint = true;
+        }
+
+        if (needsRepaint)
+            repaint();
     }
 
     bool isReactive() const
@@ -164,6 +273,13 @@ private:
     // Cached background image
     juce::Image  cachedBg;
     juce::Colour cachedBgColour;
+
+    // Noise / grain texture (pre-generated, tileable)
+    juce::Image  noiseTexture;
+
+    // Scanline effect state (Pixel Grid theme)
+    float scanlineSweepPhase  = 0.0f;   // 0→1 sweep position
+    int   scanlineSweepOffset = 0;       // static offset for the grid pattern
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BackgroundAnimator)
 };

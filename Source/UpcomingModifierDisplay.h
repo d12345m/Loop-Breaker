@@ -11,6 +11,7 @@
 #include <JuceHeader.h>
 #include "Modifier.h"
 #include "ThemeEngine.h"
+#include "ThemeFonts.h"
 #include "Animator.h"
 
 class UpcomingModifierDisplay : public juce::Component,
@@ -140,7 +141,7 @@ public:
             g.setColour(palette.accent1.withAlpha(0.18f));
             g.fillRoundedRectangle(badgeRect, 3.0f);
             g.setColour(palette.accent1);
-            g.setFont(juce::Font(juce::FontOptions().withHeight(9.0f)).boldened());
+            g.setFont(ThemeFonts::getInstance().monoBoldFont(9.0f));
             g.drawText("NEXT", badgeRect, juce::Justification::centred);
         }
 
@@ -148,8 +149,7 @@ public:
         {
             auto nameArea = topRow.withTrimmedLeft(44.0f).withTrimmedRight(170.0f);
             g.setColour(palette.accent1);
-            auto nameFont = juce::Font(juce::FontOptions().withHeight(18.0f));
-            nameFont.setBold(true);
+            auto nameFont = ThemeFonts::getInstance().modifierNameFont(18.0f);
             g.setFont(nameFont);
             g.drawText(upcomingName, nameArea, juce::Justification::centredLeft, true);
         }
@@ -164,7 +164,7 @@ public:
             float nameWidth = nameGlyphs.getBoundingBox(0, -1, false).getWidth();
             variantArea.removeFromLeft(nameWidth + 10.0f);
             g.setColour(palette.textSecondary);
-            g.setFont(juce::Font(juce::FontOptions().withHeight(12.0f)));
+            g.setFont(ThemeFonts::getInstance().monoFont(12.0f));
             g.drawText(upcomingVariant, variantArea, juce::Justification::centredLeft, true);
         }
 
@@ -224,8 +224,7 @@ public:
             if (suppressed)
             {
                 g.setColour(palette.warn);
-                auto pausedFont = juce::Font(juce::FontOptions().withHeight(11.0f));
-                pausedFont.setBold(true);
+                auto pausedFont = ThemeFonts::getInstance().monoBoldFont(11.0f);
                 g.setFont(pausedFont);
                 g.drawFittedText("PAUSED", barArea.toNearestInt(), juce::Justification::centred, 1);
             }
@@ -236,7 +235,7 @@ public:
 
         // Description
         g.setColour(palette.textSecondary);
-        g.setFont(juce::Font(juce::FontOptions().withHeight(12.0f)));
+        g.setFont(ThemeFonts::getInstance().bodyFont(12.0f));
         auto descArea = bottomRow.withTrimmedRight(140.0f);
         g.drawFittedText(upcomingDescription, descArea.toNearestInt(), juce::Justification::centredLeft, 1);
 
@@ -244,7 +243,7 @@ public:
         {
             auto countArea = bottomRow.removeFromRight(136.0f);
             g.setColour(palette.textSecondary);
-            g.setFont(juce::Font(juce::FontOptions().withHeight(12.0f)));
+            g.setFont(ThemeFonts::getInstance().monoFont(12.0f));
             juce::String timeStr = juce::String(secondsRemaining, 1) + "s  |  "
                                  + juce::String(barsRemaining, 2) + " bars";
             juce::String suffix = suppressed ? "  [OFF]" : "";

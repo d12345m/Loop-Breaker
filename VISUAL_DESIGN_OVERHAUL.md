@@ -1,6 +1,6 @@
 # Visual Design Overhaul — BufferTest Plugin
 
-> **Status:** In Progress — Phase 1 Complete, Phase 2 Complete, Phase 3 Complete, Phase 4 Complete, Phase 6.26 Complete  
+> **Status:** In Progress — Phase 1 Complete, Phase 2 Complete, Phase 3 Complete, Phase 4 Complete, Phase 5 Complete, Phase 6.26 Complete  
 > **Date:** 2025-02-27  
 > **Updated:** 2026-02-27  
 > **Goal:** Transform the UI from a utilitarian developer tool into a visually immersive instrument that feels at home in an experimental electronic music workflow.
@@ -560,11 +560,11 @@ int backgroundMode = 1; // 0=Static, 1=SlowCycle, 2=Reactive
 
 ### Phase 5: Typography & Polish
 
-21. Bundle display font + monospaced font as binary resources.
-22. Apply font assignments across all components.
-23. Implement pixel-font variant for Pixel Grid theme.
-24. Add subtle noise/grain texture overlay option.
-25. Add scanline effect for Pixel Grid theme.
+21. ~~Bundle display font + monospaced font as binary resources.~~ ✅ (Rajdhani Bold/Regular for display/headings, JetBrains Mono Regular for monospaced values/timestamps, Press Start 2P for pixel theme — all OFL-licensed, embedded via BinaryData)
+22. ~~Apply font assignments across all components.~~ ✅ (ThemeFonts.h singleton provides role-based font accessors; all components migrated: ThemeLookAndFeel, PadGridComponent, UpcomingModifierDisplay, HelpPanelContent, ModifierHistoryPanel, ModifierProbabilityPanel, SettingsPanelContent, TearingDebugPanel, PluginEditor)
+23. ~~Implement pixel-font variant for Pixel Grid theme.~~ ✅ (ThemeFonts auto-detects "Pixel Grid" theme and swaps to Press Start 2P for display, heading, mono, tab, modifier name, and control label roles; body font remains system sans-serif for readability)
+24. ~~Add subtle noise/grain texture overlay option.~~ ✅ (BackgroundAnimator generates 256×256 tileable noise image at startup, composited at 3–5% opacity scaled by glowIntensity; Studio Clean excluded via glowIntensity=0)
+25. ~~Add scanline effect for Pixel Grid theme.~~ ✅ (BackgroundAnimator draws 2px-interval horizontal scanlines at 5% opacity + animated bright sweep line at ~6-7s cycle period; active only when Pixel Grid theme is selected and animations are enabled)
 
 ### Phase 6: Settings & QA
 

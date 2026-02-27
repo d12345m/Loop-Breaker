@@ -14,6 +14,7 @@
 
 #include <JuceHeader.h>
 #include "ThemeEngine.h"
+#include "ThemeFonts.h"
 #include "SessionSettings.h"
 
 class SettingsPanelContent : public juce::Component,
@@ -127,7 +128,7 @@ public:
 
         // Section header
         g.setColour (palette.accent1);
-        g.setFont (juce::Font (juce::FontOptions().withHeight (17.0f)).boldened());
+        g.setFont (ThemeFonts::getInstance().headingFont (17.0f));
         g.drawText ("Appearance", bounds.removeFromTop (28), juce::Justification::centredLeft);
 
         // Divider

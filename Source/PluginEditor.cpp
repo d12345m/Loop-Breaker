@@ -11,6 +11,7 @@
 #include "ModifierProbabilityPanel.h"
 #include "DebugPanelContent.h"
 #include "ThemeEngine.h"
+#include "ThemeFonts.h"
 #include "ThemeLookAndFeel.h"
 #include "SettingsPanelContent.h"
 #include "BackgroundAnimator.h"
@@ -99,7 +100,7 @@ public:
         addAndMakeVisible(masterVolumeLabel);
         masterVolumeLabel.setJustificationType(juce::Justification::centred);
         masterVolumeLabel.setColour(juce::Label::textColourId, Theme::textSubtle());
-        masterVolumeLabel.setFont(juce::Font(juce::FontOptions().withHeight(11.0f)));
+        masterVolumeLabel.setFont(ThemeFonts::getInstance().controlLabelFont(11.0f));
 
         addAndMakeVisible(statusLabel);
         statusLabel.setJustificationType(juce::Justification::centredLeft);

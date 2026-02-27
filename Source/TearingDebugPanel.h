@@ -1,7 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 #include "AppState.h"
-#include "Theme.h"
+#include "ThemeEngine.h"
 
 /**
  * Debug panel that displays tearing detection statistics for all audio buffers.

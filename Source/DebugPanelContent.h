@@ -15,7 +15,7 @@
 #include "ModifierSelectionPanel.h"
 #include "FxStatusPanel.h"
 #include "TearingDebugPanel.h"
-#include "Theme.h"
+#include "ThemeEngine.h"
 #include "AppState.h"
 
 class DebugPanelContent : public juce::Component

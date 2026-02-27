@@ -1,7 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 #include "AppState.h"
-#include "Theme.h"
+#include "ThemeEngine.h"
 
 // Simple read-only panel to display FX enabled flags and current params per pad.
 class FxStatusPanel : public juce::Component, private juce::Timer

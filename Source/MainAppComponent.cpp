@@ -8,7 +8,7 @@
 */
 
 #include "MainAppComponent.h"
-#include "Theme.h"
+#include "ThemeEngine.h"
 
 MainAppComponent::MainAppComponent()
 {

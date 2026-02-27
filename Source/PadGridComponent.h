@@ -10,7 +10,7 @@
 #pragma once
 
 #include <JuceHeader.h>
-#include "Theme.h"
+#include "ThemeEngine.h"
 
 // Simple 2x4 pad grid showing selectable pads and (new) filename indicators.
 class PadGridComponent : public juce::Component,

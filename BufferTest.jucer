@@ -62,6 +62,12 @@
             file="Source/MainAppComponent.cpp"/>
       <FILE id="modifierSchedulerTests" name="ModifierSchedulerTests.cpp"
             compile="1" resource="0" file="Source/ModifierSchedulerTests.cpp"/>
+      <FILE id="themeEngineH" name="ThemeEngine.h" compile="0" resource="0"
+            file="Source/ThemeEngine.h"/>
+      <FILE id="themeEngineCpp" name="ThemeEngine.cpp" compile="1" resource="0"
+            file="Source/ThemeEngine.cpp"/>
+      <FILE id="themeLookAndFeelH" name="ThemeLookAndFeel.h" compile="0"
+            resource="0" file="Source/ThemeLookAndFeel.h"/>
     </GROUP>
     <GROUP id="{MOONBASE_RES}" name="Resources">
       <FILE id="moonbaseConfig" name="moonbase_api_config.json" compile="0"

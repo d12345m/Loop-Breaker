@@ -909,6 +909,16 @@ void BufferTestAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     // Playback enabled state
     obj->setProperty("playbackEnabled", transportPlaybackEnabled.load());
 
+    // Theme & animation settings
+    obj->setProperty("themeName", app.settings.themeName);
+    obj->setProperty("animationsEnabled", app.settings.animationsEnabled);
+    obj->setProperty("bgCycleEnabled", app.settings.bgCycleEnabled);
+    obj->setProperty("padPulseEnabled", app.settings.padPulseEnabled);
+    obj->setProperty("progressShimmerEnabled", app.settings.progressShimmerEnabled);
+    obj->setProperty("knobGlowEnabled", app.settings.knobGlowEnabled);
+    obj->setProperty("animationSpeed", (double) app.settings.animationSpeed);
+    obj->setProperty("backgroundMode", app.settings.backgroundMode);
+
     const juce::String json = juce::JSON::toString(juce::var(obj.get()), false);
     destData.replaceWith(json.toRawUTF8(), (size_t) json.getNumBytesAsUTF8());
 }
@@ -1044,6 +1054,24 @@ void BufferTestAudioProcessor::setStateInformation (const void* data, int sizeIn
                 app.settings.midiNoteMap[i] = (int) midiArr->getReference(i);
         }
     }
+
+    // Restore theme & animation settings
+    if (obj->hasProperty("themeName"))
+        app.settings.themeName = obj->getProperty("themeName").toString();
+    if (obj->hasProperty("animationsEnabled"))
+        app.settings.animationsEnabled = (bool) obj->getProperty("animationsEnabled");
+    if (obj->hasProperty("bgCycleEnabled"))
+        app.settings.bgCycleEnabled = (bool) obj->getProperty("bgCycleEnabled");
+    if (obj->hasProperty("padPulseEnabled"))
+        app.settings.padPulseEnabled = (bool) obj->getProperty("padPulseEnabled");
+    if (obj->hasProperty("progressShimmerEnabled"))
+        app.settings.progressShimmerEnabled = (bool) obj->getProperty("progressShimmerEnabled");
+    if (obj->hasProperty("knobGlowEnabled"))
+        app.settings.knobGlowEnabled = (bool) obj->getProperty("knobGlowEnabled");
+    if (obj->hasProperty("animationSpeed"))
+        app.settings.animationSpeed = (float) (double) obj->getProperty("animationSpeed");
+    if (obj->hasProperty("backgroundMode"))
+        app.settings.backgroundMode = (int) obj->getProperty("backgroundMode");
 
     // Defer reloading buffers until we are on the audio thread (prepareToPlay/processBlock).
     pendingRestoreReload.store(true);

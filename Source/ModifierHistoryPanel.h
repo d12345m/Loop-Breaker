@@ -11,7 +11,7 @@
 
 #include <JuceHeader.h>
 #include "Modifier.h"
-#include "Theme.h"
+#include "ThemeEngine.h"
 
 class ModifierHistoryPanel : public juce::Component, public juce::ListBoxModel
 {

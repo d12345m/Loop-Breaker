@@ -1,6 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 #include "Modifier.h"
+#include "ThemeEngine.h"
 
 // Simple developer panel listing modifiers with checkboxes; checking one forces it as upcoming.
 class ModifierSelectionPanel : public juce::Component
@@ -14,9 +15,9 @@ public:
         auto addToggle = [&](ModifierType type, const juce::String& label)
         {
             auto* t = new juce::ToggleButton(label);
-            t->setColour(juce::ToggleButton::textColourId, juce::Colours::black);
-            t->setColour(juce::ToggleButton::tickColourId, juce::Colours::black);
-            t->setColour(juce::ToggleButton::tickDisabledColourId, juce::Colours::black);
+            t->setColour(juce::ToggleButton::textColourId, Theme::text());
+            t->setColour(juce::ToggleButton::tickColourId, Theme::accent());
+            t->setColour(juce::ToggleButton::tickDisabledColourId, Theme::borderStrong());
             toggles.add(t);
             t->onClick = [this, type, t]
             {

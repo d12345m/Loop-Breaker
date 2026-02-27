@@ -10,66 +10,11 @@
 #include "TearingDebugPanel.h"
 #include "ModifierProbabilityPanel.h"
 #include "DebugPanelContent.h"
-#include "Theme.h"
+#include "ThemeEngine.h"
+#include "ThemeLookAndFeel.h"
 
 namespace
 {
-class HipLookAndFeel final : public juce::LookAndFeel_V4
-{
-public:
-    HipLookAndFeel()
-    {
-        setColour(juce::ResizableWindow::backgroundColourId, Theme::bg());
-        setColour(juce::ComboBox::backgroundColourId, Theme::panel());
-        setColour(juce::ComboBox::outlineColourId, Theme::border());
-        setColour(juce::ComboBox::textColourId, Theme::text());
-        setColour(juce::ComboBox::arrowColourId, Theme::textSubtle());
-
-        setColour(juce::TextButton::buttonColourId, Theme::panelAlt());
-        setColour(juce::TextButton::buttonOnColourId, Theme::panelAlt());
-        setColour(juce::TextButton::textColourOffId, Theme::text());
-        setColour(juce::TextButton::textColourOnId, Theme::text());
-
-        setColour(juce::ToggleButton::textColourId, Theme::text());
-        setColour(juce::ToggleButton::tickColourId, Theme::accent());
-        setColour(juce::ToggleButton::tickDisabledColourId, Theme::borderStrong());
-
-        setColour(juce::ScrollBar::thumbColourId, Theme::borderStrong());
-        setColour(juce::PopupMenu::backgroundColourId, Theme::panel());
-        setColour(juce::PopupMenu::highlightedBackgroundColourId, Theme::accent().withAlpha(0.12f));
-        setColour(juce::PopupMenu::textColourId, Theme::text());
-        setColour(juce::PopupMenu::highlightedTextColourId, Theme::text());
-    }
-
-    void drawComboBox (juce::Graphics& g, int width, int height, bool /*isButtonDown*/,
-                       int /*buttonX*/, int /*buttonY*/, int /*buttonW*/, int /*buttonH*/,
-                       juce::ComboBox& box) override
-    {
-        const auto r = juce::Rectangle<float> (0, 0, (float) width, (float) height);
-        const float corner = 4.0f;
-
-        // Background
-        g.setColour (box.findColour (juce::ComboBox::backgroundColourId));
-        g.fillRoundedRectangle (r, corner);
-
-        // Border
-        g.setColour (box.findColour (juce::ComboBox::outlineColourId));
-        g.drawRoundedRectangle (r.reduced (0.5f), corner, 1.0f);
-
-        // Small chevron (▾) on the right
-        const float arrowSize = 6.0f;
-        const float arrowX = (float) width - 14.0f;
-        const float arrowY = (float) height * 0.5f;
-
-        juce::Path chevron;
-        chevron.addTriangle (arrowX - arrowSize * 0.5f, arrowY - arrowSize * 0.3f,
-                             arrowX + arrowSize * 0.5f, arrowY - arrowSize * 0.3f,
-                             arrowX,                    arrowY + arrowSize * 0.4f);
-
-        g.setColour (box.findColour (juce::ComboBox::arrowColourId));
-        g.fillPath (chevron);
-    }
-};
 
 class PluginEditorContent final : public juce::Component,
                                  public ModifierSchedulerListener,
@@ -320,7 +265,7 @@ private:
     BufferTestAudioProcessor& processor;
     AppState& app;
 
-    HipLookAndFeel hipLnf;
+    ThemeLookAndFeel hipLnf;
 
     UpcomingModifierDisplay modifierDisplay;
     PadGridComponent padGrid;

@@ -9,7 +9,7 @@
 #pragma once
 
 #include <JuceHeader.h>
-#include "Theme.h"
+#include "ThemeEngine.h"
 
 class HelpPanelContent : public juce::Component
 {

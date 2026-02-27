@@ -10,7 +10,7 @@
 
 #include <JuceHeader.h>
 #include "Modifier.h"
-#include "Theme.h"
+#include "ThemeEngine.h"
 
 class UpcomingModifierDisplay : public juce::Component
 {

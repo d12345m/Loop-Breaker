@@ -14,7 +14,7 @@
 
 #include <JuceHeader.h>
 #include "ModifierProbabilityManager.h"
-#include "Theme.h"
+#include "ThemeEngine.h"
 #include <vector>
 
 class ModifierProbabilityPanel : public juce::Component,

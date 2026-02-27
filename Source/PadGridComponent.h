@@ -433,6 +433,9 @@ private:
 
     void paintOverChildren(juce::Graphics& g) override
     {
+        const auto& palette = ThemeEngine::getInstance().getCurrentPalette();
+        const float cr = palette.borderRadius;
+
         // Draw waveform, overlays, then state/flash
         for (int i = 0; i < numPads; ++i)
         {
@@ -440,103 +443,195 @@ private:
             {
                 auto r = btn->getBounds().toFloat();
 
-                // Background
-                g.setColour(Theme::panelAlt());
-                g.fillRoundedRectangle(r, 3.f);
-                g.setColour(Theme::border());
-                g.drawRoundedRectangle(r, 3.f, 1.0f);
+                // ── Pad background ──
+                const bool hasWave = (thumbnails[i] != nullptr && thumbnails[i]->getTotalLength() > 0.0);
+                g.setColour(hasWave ? palette.padLoaded : palette.padEmpty);
+                g.fillRoundedRectangle(r, cr);
+
+                // ── Inner shadow (dark vignette around edges) ──
+                {
+                    auto insetRect = r.reduced(1.0f);
+                    juce::ColourGradient vignette(juce::Colours::transparentBlack, insetRect.getCentreX(), insetRect.getCentreY(),
+                                                   juce::Colours::black.withAlpha(0.25f), insetRect.getX(), insetRect.getY(), true);
+                    g.setGradientFill(vignette);
+                    g.fillRoundedRectangle(insetRect, cr);
+                }
+
+                // ── Border ──
+                g.setColour(palette.border);
+                g.drawRoundedRectangle(r, cr, 1.0f);
 
                 // Waveform rendering region
                 auto inner = r.reduced(6.f, 6.f);
-                if (auto* thumb = thumbnails[i])
+
+                if (hasWave)
                 {
-                    const bool hasWave = thumb->getTotalLength() > 0.0;
-                    g.setColour(hasWave ? Theme::borderStrong() : Theme::border());
-                    g.drawRoundedRectangle(r, 3.f, 1.0f);
+                    auto* thumb = thumbnails[i];
 
-                    if (hasWave)
+                    // Oscilloscope grid lines (4 horizontal divisions)
+                    g.setColour(palette.border.withAlpha(0.3f));
+                    for (int line = 1; line <= 3; ++line)
                     {
-                        g.setColour(Theme::textSubtle().withAlpha(0.75f));
-                        thumb->drawChannels(g, inner.toNearestInt(), 0.0, thumb->getTotalLength(), 1.0f);
+                        float ly = inner.getY() + inner.getHeight() * ((float)line / 4.0f);
+                        g.drawHorizontalLine((int)ly, inner.getX(), inner.getRight());
+                    }
 
-                        // Loop overlay (proportional across full file waveform)
-                        if (loopEnabled[(size_t)i])
+                    // Waveform with vertical gradient
+                    {
+                        juce::ColourGradient waveGrad(palette.waveformFill.withAlpha(0.6f), inner.getX(), inner.getY(),
+                                                       palette.waveformFill.darker(0.3f).withAlpha(0.6f), inner.getX(), inner.getBottom(), false);
+                        g.setGradientFill(waveGrad);
+                        thumb->drawChannels(g, inner.toNearestInt(), 0.0, thumb->getTotalLength(), 1.0f);
+                    }
+
+                    // Loop overlay with diagonal hatching
+                    if (loopEnabled[(size_t)i])
+                    {
+                        const double denom = juce::jmax(1.0, totalFileSamples[(size_t)i]);
+                        const double startProp = juce::jlimit(0.0, 1.0, loopStartSamples[(size_t)i] / denom);
+                        const double endProp   = juce::jlimit(0.0, 1.0, loopEndSamples[(size_t)i]   / denom);
+                        const float x1 = inner.getX() + (float)(inner.getWidth() * startProp);
+                        const float x2 = inner.getX() + (float)(inner.getWidth() * endProp);
+                        juce::Rectangle<float> loopRect(x1, inner.getY(), juce::jmax(1.0f, x2 - x1), inner.getHeight());
+
+                        // Semi-transparent fill
+                        g.setColour(palette.warn.withAlpha(0.12f));
+                        g.fillRect(loopRect);
+
+                        // Diagonal hatching (45° lines, 4px apart)
                         {
-                            const double denom = juce::jmax(1.0, totalFileSamples[(size_t)i]);
-                            const double startProp = juce::jlimit(0.0, 1.0, loopStartSamples[(size_t)i] / denom);
-                            const double endProp   = juce::jlimit(0.0, 1.0, loopEndSamples[(size_t)i]   / denom);
-                            const float x1 = inner.getX() + (float)(inner.getWidth() * startProp);
-                            const float x2 = inner.getX() + (float)(inner.getWidth() * endProp);
-                            juce::Rectangle<float> loopRect(x1, inner.getY(), juce::jmax(1.0f, x2 - x1), inner.getHeight());
-                            g.setColour(Theme::warn().withAlpha(0.14f));
-                            g.fillRect(loopRect);
-                            g.setColour(Theme::warn().withAlpha(0.85f));
-                            g.drawLine(x1, inner.getY(), x1, inner.getBottom(), 1.5f);
-                            g.drawLine(x2, inner.getY(), x2, inner.getBottom(), 1.5f);
+                            g.saveState();
+                            g.reduceClipRegion(loopRect.toNearestInt());
+                            g.setColour(palette.warn.withAlpha(0.10f));
+                            const float step = 4.0f;
+                            for (float d = -loopRect.getHeight(); d < loopRect.getWidth() + loopRect.getHeight(); d += step)
+                                g.drawLine(loopRect.getX() + d, loopRect.getBottom(),
+                                           loopRect.getX() + d + loopRect.getHeight(), loopRect.getY(), 0.5f);
+                            g.restoreState();
                         }
 
-                        // Playhead line (proportional across full file waveform)
+                        // Loop boundary lines
+                        g.setColour(palette.warn.withAlpha(0.85f));
+                        g.drawLine(x1, inner.getY(), x1, inner.getBottom(), 1.5f);
+                        g.drawLine(x2, inner.getY(), x2, inner.getBottom(), 1.5f);
+                    }
+
+                    // Playhead with triangle head and glow
+                    {
                         const double phDenom = juce::jmax(1.0, totalFileSamples[(size_t)i]);
                         const double phProp  = juce::jlimit(0.0, 1.0, playheadSamples[(size_t)i] / phDenom);
                         const float phx = inner.getX() + (float)(inner.getWidth() * phProp);
-                        g.setColour(Theme::accent());
-                        g.drawLine(phx, inner.getY(), phx, inner.getBottom(), 2.0f);
+
+                        // Faint vertical glow behind playhead
+                        g.setColour(palette.playhead.withAlpha(0.12f));
+                        g.fillRect(phx - 2.0f, inner.getY(), 4.0f, inner.getHeight());
+
+                        // Playhead line
+                        g.setColour(palette.playhead);
+                        g.drawLine(phx, inner.getY() + 4.0f, phx, inner.getBottom(), 2.0f);
+
+                        // Triangle head at top
+                        juce::Path tri;
+                        tri.addTriangle(phx - 3.0f, inner.getY(),
+                                        phx + 3.0f, inner.getY(),
+                                        phx, inner.getY() + 5.0f);
+                        g.fillPath(tri);
                     }
-                    else
+                }
+                else
+                {
+                    // ── Empty pad: dashed border + "+" icon ──
                     {
-                        // Empty pad visual
-                        g.setColour(Theme::border().withAlpha(0.35f));
-                        g.fillRoundedRectangle(inner, 6.0f);
-                        g.setColour(Theme::textSubtle());
-                        g.drawText("(empty)", inner.toNearestInt(), juce::Justification::centred);
+                        juce::Path dashRect;
+                        dashRect.addRoundedRectangle(inner, cr * 0.5f);
+                        const float dashLengths[] = { 4.0f, 4.0f };
+                        juce::PathStrokeType stroke(1.0f);
+                        stroke.createDashedStroke(dashRect, dashRect, dashLengths, 2);
+                        g.setColour(palette.border.withAlpha(0.5f));
+                        g.strokePath(dashRect, stroke);
                     }
+
+                    // "+" icon centered
+                    g.setColour(palette.textSecondary.withAlpha(0.5f));
+                    const float plusSize = 14.0f;
+                    const float cx = inner.getCentreX();
+                    const float cy = inner.getCentreY();
+                    g.drawLine(cx - plusSize * 0.5f, cy, cx + plusSize * 0.5f, cy, 1.5f);
+                    g.drawLine(cx, cy - plusSize * 0.5f, cx, cy + plusSize * 0.5f, 1.5f);
                 }
 
-                // Selection overlay (tinted) to replace checkbox visuals
-                if (padButtons[i]->getToggleState())
+                // ── Pad number badge (top-left) ──
                 {
-                    g.setColour(Theme::accent().withAlpha(0.10f));
-                    g.fillRoundedRectangle(r, 3.f);
-                    g.setColour(Theme::accent().withAlpha(0.85f));
-                    g.drawRoundedRectangle(r.expanded(1.5f), 3.f, 1.8f);
+                    auto badgeRect = juce::Rectangle<float>(r.getX() + 4.0f, r.getY() + 4.0f, 18.0f, 16.0f);
+                    g.setColour(palette.accent1.withAlpha(0.30f));
+                    g.fillRoundedRectangle(badgeRect, 3.0f);
+                    g.setColour(palette.textPrimary);
+                    g.setFont(juce::Font(juce::FontOptions().withHeight(10.0f)).boldened());
+                    g.drawText(juce::String(i + 1), badgeRect, juce::Justification::centred);
                 }
 
-                // MIDI learn indicator
-                if (midiLearnActive[(size_t)i])
+                // ── MIDI note badge (top-right) ──
+                if (!midiLearnActive[(size_t)i] && midiNotes[(size_t)i] >= 0)
                 {
-                    g.setColour(Theme::warn());
-                    g.drawRoundedRectangle(r.expanded(2.0f), 3.f, 2.5f);
-                    auto learnRect = r.removeFromTop(20).reduced(4);
-                    g.fillRoundedRectangle(learnRect, 2.0f);
-                    g.setColour(Theme::bg());
-                    g.drawText("LEARN", learnRect, juce::Justification::centred);
-                }
-                // MIDI note display (top-right corner)
-                else if (midiNotes[(size_t)i] >= 0)
-                {
-                    auto noteRect = r.removeFromTop(18).removeFromRight(40).reduced(2);
-                    g.setColour(Theme::panel());
-                    g.fillRoundedRectangle(noteRect.toFloat(), 2.0f);
-                    g.setColour(Theme::textSubtle());
+                    auto noteRect = juce::Rectangle<float>(r.getRight() - 38.0f, r.getY() + 4.0f, 34.0f, 16.0f);
+                    g.setColour(palette.panelAlt);
+                    g.fillRoundedRectangle(noteRect, 3.0f);
+                    g.setColour(palette.textSecondary);
                     g.setFont(juce::Font(juce::FontOptions().withHeight(10.0f)));
                     g.drawText(juce::String(midiNotes[(size_t)i]), noteRect, juce::Justification::centred);
                 }
 
-                // Playing state outline
+                // ── Selection overlay ──
+                if (padButtons[i]->getToggleState())
+                {
+                    g.setColour(palette.padSelected);
+                    g.fillRoundedRectangle(r, cr);
+                    // Glow border
+                    g.setColour(palette.accent1.withAlpha(palette.glowIntensity));
+                    g.drawRoundedRectangle(r.expanded(1.5f), cr, 2.0f);
+                    // Outer glow (concentric transparent rects)
+                    g.setColour(palette.accent1.withAlpha(0.08f));
+                    g.drawRoundedRectangle(r.expanded(3.5f), cr + 1.0f, 1.5f);
+                }
+
+                // ── MIDI learn indicator ──
+                if (midiLearnActive[(size_t)i])
+                {
+                    // Dashed border
+                    {
+                        juce::Path learnPath;
+                        learnPath.addRoundedRectangle(r.expanded(2.0f), cr);
+                        const float dashLengths[] = { 6.0f, 4.0f };
+                        juce::PathStrokeType stroke(2.5f);
+                        stroke.createDashedStroke(learnPath, learnPath, dashLengths, 2);
+                        g.setColour(palette.warn);
+                        g.strokePath(learnPath, stroke);
+                    }
+                    // "LEARN" badge
+                    auto learnRect = juce::Rectangle<float>(r.getCentreX() - 28.0f, r.getCentreY() - 10.0f, 56.0f, 20.0f);
+                    g.setColour(palette.warn);
+                    g.fillRoundedRectangle(learnRect, 3.0f);
+                    g.setColour(palette.bg);
+                    g.setFont(juce::Font(juce::FontOptions().withHeight(11.0f)).boldened());
+                    g.drawText("LEARN", learnRect, juce::Justification::centred);
+                }
+
+                // ── Playing state glow outline ──
                 if (playingStates[(size_t)i])
                 {
-                    g.setColour(Theme::good().withAlpha(0.85f));
-                    g.drawRoundedRectangle(r.expanded(2.f), 3.f, 2.0f);
+                    g.setColour(palette.padPlaying.withAlpha(0.85f));
+                    g.drawRoundedRectangle(r.expanded(2.f), cr, 2.0f);
                 }
 
-                // Flash overlay
+                // ── Flash overlay (modifier triggered) ──
                 if (flashCounters[(size_t)i] > 0)
                 {
-                    g.setColour(Theme::warn().withAlpha(0.18f));
-                    g.fillRoundedRectangle(r.expanded(2.f), 3.f);
+                    float flashAlpha = (float)flashCounters[(size_t)i] / (float)flashDurationTicks * 0.25f;
+                    g.setColour(palette.accent2.withAlpha(flashAlpha));
+                    g.fillRoundedRectangle(r.expanded(2.f), cr);
                 }
 
-                // File-drag hover overlay + hint
+                // ── File drag hover ──
                 if (isFileDragActive && hoveredPadIndex >= 0)
                 {
                     const int count = juce::jmax(1, dragAudioFileCount);
@@ -546,16 +641,25 @@ private:
                     if (inPreviewRange)
                     {
                         const bool isHovered = (hoveredPadIndex == i);
-                        g.setColour(Theme::accent().withAlpha(isHovered ? 0.10f : 0.06f));
-                        g.fillRoundedRectangle(r.expanded(2.f), 3.f);
-                        g.setColour(Theme::accent().withAlpha(isHovered ? 0.85f : 0.45f));
-                        g.drawRoundedRectangle(r.expanded(2.f), 3.f, isHovered ? 2.0f : 1.2f);
+                        g.setColour(palette.accent1.withAlpha(isHovered ? 0.10f : 0.06f));
+                        g.fillRoundedRectangle(r.expanded(2.f), cr);
+
+                        // Dashed accent border for hover
+                        {
+                            juce::Path hoverPath;
+                            hoverPath.addRoundedRectangle(r.expanded(2.f), cr);
+                            const float dashLens[] = { 5.0f, 3.0f };
+                            juce::PathStrokeType stroke(isHovered ? 2.0f : 1.2f);
+                            stroke.createDashedStroke(hoverPath, hoverPath, dashLens, 2);
+                            g.setColour(palette.accent1.withAlpha(isHovered ? 0.85f : 0.45f));
+                            g.strokePath(hoverPath, stroke);
+                        }
 
                         if (isHovered)
                         {
                             auto hintArea = r.reduced(10.f).toNearestInt();
-                            hintArea.removeFromBottom(18); // keep clear of filename label region
-                            g.setColour(Theme::text().withAlpha(0.9f));
+                            hintArea.removeFromBottom(18);
+                            g.setColour(palette.textPrimary.withAlpha(0.9f));
                             g.setFont(juce::Font(juce::FontOptions().withHeight(13.0f)));
                             const auto hint = (count > 1) ? ("Drop to load " + juce::String(count))
                                                          : juce::String("Drop to load");

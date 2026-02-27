@@ -84,7 +84,7 @@ MainAppComponent::MainAppComponent()
     barsBetweenModifiersSlider.setColour(juce::Slider::thumbColourId, Theme::warn().brighter(0.2f));
     // Improve readability: blue textbox background with white text.
     barsBetweenModifiersSlider.setColour(juce::Slider::textBoxBackgroundColourId, Theme::accent());
-    barsBetweenModifiersSlider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
+    barsBetweenModifiersSlider.setColour(juce::Slider::textBoxTextColourId, Theme::text());
     barsBetweenModifiersSlider.setColour(juce::Slider::textBoxOutlineColourId, Theme::accent().darker(0.35f));
     // Some LookAndFeels/styles end up with a transparent child Label; force it opaque.
     for (int i = 0; i < barsBetweenModifiersSlider.getNumChildComponents(); ++i)
@@ -92,7 +92,7 @@ MainAppComponent::MainAppComponent()
         if (auto* label = dynamic_cast<juce::Label*>(barsBetweenModifiersSlider.getChildComponent(i)))
         {
             label->setColour(juce::Label::backgroundColourId, Theme::accent());
-            label->setColour(juce::Label::textColourId, juce::Colours::white);
+            label->setColour(juce::Label::textColourId, Theme::text());
             label->setColour(juce::Label::outlineColourId, Theme::accent().darker(0.35f));
             label->setOpaque(true);
         }

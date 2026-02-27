@@ -157,7 +157,7 @@ public:
             const float highlightAngle = juce::MathConstants<float>::pi * 1.25f; // ~225°
             const float hx = centreX + (innerRadius * 0.55f) * std::cos (highlightAngle);
             const float hy = centreY + (innerRadius * 0.55f) * std::sin (highlightAngle);
-            g.setColour (juce::Colours::white.withAlpha (0.08f));
+            g.setColour (palette.textPrimary.withAlpha (0.08f));
             g.fillEllipse (hx - 2.0f, hy - 2.0f, 4.0f, 4.0f);
         }
 
@@ -339,6 +339,80 @@ public:
         }
 
         (void) bar;
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    //  Tab bar — dark bg, underline active indicator, all-caps labels
+    // ──────────────────────────────────────────────────────────────────────
+
+    void drawTabbedButtonBarBackground (juce::TabbedButtonBar& bar, juce::Graphics& g) override
+    {
+        const auto& palette = ThemeEngine::getInstance().getCurrentPalette();
+        g.setColour (palette.bgAlt);
+        g.fillRect (bar.getLocalBounds());
+
+        // Thin bottom divider
+        g.setColour (palette.border.withAlpha (0.5f));
+        g.fillRect (0, bar.getHeight() - 1, bar.getWidth(), 1);
+    }
+
+    void drawTabButton (juce::TabBarButton& button, juce::Graphics& g,
+                        bool isMouseOver, bool isMouseDown) override
+    {
+        const auto& palette = ThemeEngine::getInstance().getCurrentPalette();
+        auto bounds = button.getLocalBounds().toFloat();
+        const bool isFront = button.isFrontTab();
+
+        // Background — transparent for all tabs (the bar BG shows through)
+        if (isMouseDown)
+        {
+            g.setColour (palette.panel.withAlpha (0.3f));
+            g.fillRect (bounds);
+        }
+        else if (isMouseOver && !isFront)
+        {
+            g.setColour (palette.panel.withAlpha (0.15f));
+            g.fillRect (bounds);
+        }
+
+        // Active underline (2px accent bar at bottom)
+        if (isFront)
+        {
+            g.setColour (palette.accent1);
+            g.fillRect (bounds.getX() + 4.0f, bounds.getBottom() - 2.5f,
+                        bounds.getWidth() - 8.0f, 2.5f);
+        }
+
+        // Text — all-caps, 11px
+        juce::Colour textCol;
+        if (isFront)
+            textCol = palette.accent1;
+        else if (isMouseOver)
+            textCol = palette.textPrimary;
+        else
+            textCol = palette.textSecondary;
+
+        g.setColour (textCol);
+        g.setFont (juce::Font (juce::FontOptions().withHeight (11.0f)).boldened());
+
+        auto textArea = bounds.reduced (4.0f, 0.0f).withTrimmedBottom (3.0f);
+        g.drawText (button.getButtonText().toUpperCase(), textArea,
+                    juce::Justification::centred, false);
+    }
+
+    void drawTabAreaBehindFrontButton (juce::TabbedButtonBar& bar,
+                                       juce::Graphics& g, int w, int h) override
+    {
+        // No extra painting needed — handled by drawTabbedButtonBarBackground
+        juce::ignoreUnused (bar, g, w, h);
+    }
+
+    int getTabButtonBestWidth (juce::TabBarButton& button, int tabDepth) override
+    {
+        auto textWidth = juce::Font (juce::FontOptions().withHeight (11.0f))
+                             .boldened()
+                             .getStringWidth (button.getButtonText().toUpperCase());
+        return textWidth + 28; // padding
     }
 
 private:

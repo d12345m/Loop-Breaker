@@ -1,6 +1,6 @@
 # Visual Design Overhaul — BufferTest Plugin
 
-> **Status:** In Progress — Phase 1 Complete  
+> **Status:** In Progress — Phase 1 Complete, Phase 2 Complete, Phase 3 Complete  
 > **Date:** 2025-02-27  
 > **Updated:** 2026-02-27  
 > **Goal:** Transform the UI from a utilitarian developer tool into a visually immersive instrument that feels at home in an experimental electronic music workflow.
@@ -537,17 +537,17 @@ int backgroundMode = 1; // 0=Static, 1=SlowCycle, 2=Reactive
 ### Phase 2: Dark Mode Conversion
 
 6. ~~Invert the entire UI from the current light palette to dark (using "Neon Rave" as the new default).~~ ✅ (Neon Rave is now default; all Theme:: calls route through dark palette)
-7. Audit all hard-coded colors in `PadGridComponent`, `UpcomingModifierDisplay`, `ModifierHistoryPanel`, `FxStatusPanel`, `TearingDebugPanel`, `HelpPanelContent`, `ModifierProbabilityPanel`, and `ModifierSelectionPanel`.
+7. ~~Audit all hard-coded colors in `PadGridComponent`, `UpcomingModifierDisplay`, `ModifierHistoryPanel`, `FxStatusPanel`, `TearingDebugPanel`, `HelpPanelContent`, `ModifierProbabilityPanel`, and `ModifierSelectionPanel`.~~ ✅ (full audit complete; core plugin UI clean, standalone MainComponent.cpp / IOSAppComponent.h deferred)
 8. ~~Replace all `juce::Colours::black` / `juce::Colours::white` literals with theme roles.~~ ✅ (`ModifierSelectionPanel` migrated; `HelpPanelContent` badge border & body text contrast fixed)
-9. Test all 5 themes for readability and contrast.
+9. Test all 5 themes for readability and contrast. _(ongoing — visual testing during development)_
 
 ### Phase 3: Component Visual Refinements
 
-10. Redesign `PadGridComponent::paintOverChildren()` — implement new pad states (inner shadow, glow borders, waveform gradient, oscilloscope grid lines, pad number badges, "+" empty icon).
-11. Redesign rotary knob rendering (`drawRotarySlider()` override) — arc, dot, center gradient, specular highlight.
-12. Redesign linear sliders and toggle buttons.
-13. Redesign tab bar (underline style, all-caps labels).
-14. Redesign `UpcomingModifierDisplay` — HUD style, gradient progress bar, domain-tinted modifier name.
+10. ~~Redesign `PadGridComponent::paintOverChildren()` — implement new pad states (inner shadow, glow borders, waveform gradient, oscilloscope grid lines, pad number badges, "+" empty icon).~~ ✅ (themed borderRadius, inner shadow/vignette, padEmpty/padLoaded fills, dashed empty border with "+" icon, oscilloscope grid lines, waveform gradient, playhead with triangle head + glow, pad number badges, MIDI note badge, accent1 glow selection, diagonal-hatch loop overlay, padPlaying glow outline, accent2 flash overlay, dashed file-drag hover)
+11. ~~Redesign rotary knob rendering (`drawRotarySlider()` override) — arc, dot, center gradient, specular highlight.~~ ✅
+12. ~~Redesign linear sliders and toggle buttons.~~ ✅
+13. ~~Redesign tab bar (underline style, all-caps labels).~~ ✅ (drawTabbedButtonBarBackground, drawTabButton with accent1 underline, all-caps 11px bold, getTabButtonBestWidth)
+14. ~~Redesign `UpcomingModifierDisplay` — HUD style, gradient progress bar, domain-tinted modifier name.~~ ✅ (NEXT badge, accent1-tinted name, variant text, gradient accent2→accent1 progress bar, warn zone at 75%, PAUSED overlay, rounded panel with top-edge divider)
 
 ### Phase 4: Animation
 

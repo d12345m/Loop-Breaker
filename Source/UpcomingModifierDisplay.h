@@ -105,47 +105,121 @@ public:
 
     void paint(juce::Graphics& g) override
     {
-        auto bounds = getLocalBounds();
-        g.setColour(Theme::panel());
-        g.fillRect(bounds);
-        g.setColour(Theme::border());
-        g.drawRect(bounds, 1);
+        const auto& palette = ThemeEngine::getInstance().getCurrentPalette();
+        auto bounds = getLocalBounds().toFloat();
+        const float cr = palette.borderRadius;
 
-        g.setColour(Theme::text());
-        {
-            auto f = juce::Font(juce::FontOptions().withHeight(18.0f));
-            f.setBold(true);
-            g.setFont(f);
-        }
-        auto topHalf = getLocalBounds().removeFromTop(getHeight()/2);
-    juce::String nextLine = "Next: " + upcomingName;
-    if (upcomingVariant.isNotEmpty()) nextLine += "  ->  " + upcomingVariant;
-        g.drawText(nextLine, topHalf, juce::Justification::centredLeft);
+        // ── Panel background ──
+        g.setColour(palette.panel);
+        g.fillRoundedRectangle(bounds, cr);
 
-        // Simple horizontal progress bar at the right side of top half
-        auto barArea = topHalf.removeFromRight(160).reduced(4);
-        g.setColour(Theme::panelAlt());
-        g.fillRect(barArea);
-        auto fill = barArea.withWidth(int(barArea.getWidth() * progress));
-        g.setColour((suppressed ? Theme::warn() : Theme::accent2()).withAlpha(0.70f));
-        g.fillRect(fill);
-        g.setColour(Theme::borderStrong());
-        g.drawRect(barArea, 1);
-        if (suppressed)
+        // Top-edge divider (thin accent line)
+        g.setColour(palette.accent1.withAlpha(0.35f));
+        g.fillRect(bounds.getX() + 4.0f, bounds.getY(), bounds.getWidth() - 8.0f, 1.0f);
+
+        // Border
+        g.setColour(palette.border);
+        g.drawRoundedRectangle(bounds, cr, 1.0f);
+
+        const float pad = 8.0f;
+        auto content = bounds.reduced(pad, 4.0f);
+
+        // ── Top row: "NEXT" badge + modifier name + variant ──
+        auto topRow = content.removeFromTop(content.getHeight() * 0.50f);
+
+        // "NEXT" badge
         {
-            g.setColour(Theme::warn());
-            auto pausedFont = juce::Font(juce::FontOptions().withHeight(11.0f));
-            pausedFont.setBold(true);
-            g.setFont(pausedFont);
-            g.drawFittedText("PAUSED", barArea, juce::Justification::centred, 1);
+            auto badgeRect = juce::Rectangle<float>(topRow.getX(), topRow.getY() + 2.0f, 38.0f, 16.0f);
+            g.setColour(palette.accent1.withAlpha(0.18f));
+            g.fillRoundedRectangle(badgeRect, 3.0f);
+            g.setColour(palette.accent1);
+            g.setFont(juce::Font(juce::FontOptions().withHeight(9.0f)).boldened());
+            g.drawText("NEXT", badgeRect, juce::Justification::centred);
         }
 
+        // Modifier name (accent1-tinted, bold)
+        {
+            auto nameArea = topRow.withTrimmedLeft(44.0f).withTrimmedRight(170.0f);
+            g.setColour(palette.accent1);
+            auto nameFont = juce::Font(juce::FontOptions().withHeight(18.0f));
+            nameFont.setBold(true);
+            g.setFont(nameFont);
+            g.drawText(upcomingName, nameArea, juce::Justification::centredLeft, true);
+        }
+
+        // Variant (secondary text)
+        if (upcomingVariant.isNotEmpty())
+        {
+            auto variantArea = topRow.withTrimmedLeft(44.0f).withTrimmedRight(170.0f);
+            variantArea.removeFromLeft(g.getCurrentFont().getStringWidthFloat(upcomingName) + 10.0f);
+            g.setColour(palette.textSecondary);
+            g.setFont(juce::Font(juce::FontOptions().withHeight(12.0f)));
+            g.drawText(upcomingVariant, variantArea, juce::Justification::centredLeft, true);
+        }
+
+        // ── Progress bar (right side of top row) ──
+        {
+            auto barArea = topRow.removeFromRight(160.0f).reduced(4.0f, 4.0f);
+            const float barCr = 3.0f;
+
+            // Track background
+            g.setColour(palette.panelAlt);
+            g.fillRoundedRectangle(barArea, barCr);
+
+            // Gradient fill: accent2 → accent1 (or warn in last 25%)
+            if (progress > 0.001)
+            {
+                auto fillRect = barArea.withWidth(barArea.getWidth() * (float)progress);
+                if (suppressed)
+                {
+                    g.setColour(palette.warn.withAlpha(0.70f));
+                }
+                else
+                {
+                    const bool warnZone = (progress >= 0.75);
+                    juce::Colour left  = warnZone ? palette.warn : palette.accent2;
+                    juce::Colour right = warnZone ? palette.warn.brighter(0.2f) : palette.accent1;
+                    juce::ColourGradient grad(left, fillRect.getX(), fillRect.getCentreY(),
+                                              right, fillRect.getRight(), fillRect.getCentreY(), false);
+                    g.setGradientFill(grad);
+                }
+                g.fillRoundedRectangle(fillRect, barCr);
+            }
+
+            // Bar border
+            g.setColour(palette.border.withAlpha(0.5f));
+            g.drawRoundedRectangle(barArea, barCr, 0.5f);
+
+            // PAUSED overlay
+            if (suppressed)
+            {
+                g.setColour(palette.warn);
+                auto pausedFont = juce::Font(juce::FontOptions().withHeight(11.0f));
+                pausedFont.setBold(true);
+                g.setFont(pausedFont);
+                g.drawFittedText("PAUSED", barArea.toNearestInt(), juce::Justification::centred, 1);
+            }
+        }
+
+        // ── Bottom row: description + countdown ──
+        auto bottomRow = content;
+
+        // Description
+        g.setColour(palette.textSecondary);
         g.setFont(juce::Font(juce::FontOptions().withHeight(12.0f)));
-        g.setColour(Theme::textSubtle());
-        auto bottom = getLocalBounds();
-        juce::String timeStr = juce::String(secondsRemaining, 1) + "s | " + juce::String(barsRemaining, 2) + " bars";
-        juce::String suffix = suppressed ? " [modifiers off]" : "";
-        g.drawFittedText(upcomingDescription + "  (" + timeStr + ")" + suffix, bottom, juce::Justification::centredLeft, 1);
+        auto descArea = bottomRow.withTrimmedRight(140.0f);
+        g.drawFittedText(upcomingDescription, descArea.toNearestInt(), juce::Justification::centredLeft, 1);
+
+        // Countdown (monospaced look)
+        {
+            auto countArea = bottomRow.removeFromRight(136.0f);
+            g.setColour(palette.textSecondary);
+            g.setFont(juce::Font(juce::FontOptions().withHeight(12.0f)));
+            juce::String timeStr = juce::String(secondsRemaining, 1) + "s  |  "
+                                 + juce::String(barsRemaining, 2) + " bars";
+            juce::String suffix = suppressed ? "  [OFF]" : "";
+            g.drawFittedText(timeStr + suffix, countArea.toNearestInt(), juce::Justification::centredRight, 1);
+        }
     }
 
 private:

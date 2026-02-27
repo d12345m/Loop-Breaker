@@ -587,10 +587,10 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
     auto tabBg = Theme::bg().brighter(0.05f);
     helpPanel = std::make_unique<HelpPanelContent>();
 
-    tabComponent->addTab("Session",   tabBg, content.get(), false);
-    tabComponent->addTab("Modifiers", tabBg, probabilityPanel.get(), false);
-    tabComponent->addTab("Debug",     tabBg, debugPanel.get(), false);
-    tabComponent->addTab("Help",      tabBg, helpPanel.get(), false);
+    tabComponent->addTab("Session",     tabBg, content.get(), false);
+    tabComponent->addTab("Probability", tabBg, probabilityPanel.get(), false);
+    tabComponent->addTab("Debug",       tabBg, debugPanel.get(), false);
+    tabComponent->addTab("Help",        tabBg, helpPanel.get(), false);
 
     // Style the tab bar
     auto& tabBar = tabComponent->getTabbedButtonBar();

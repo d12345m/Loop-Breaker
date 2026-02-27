@@ -1,7 +1,8 @@
 # Visual Design Overhaul — BufferTest Plugin
 
-> **Status:** Proposal / Design Document  
+> **Status:** In Progress — Phase 1 Complete  
 > **Date:** 2025-02-27  
+> **Updated:** 2026-02-27  
 > **Goal:** Transform the UI from a utilitarian developer tool into a visually immersive instrument that feels at home in an experimental electronic music workflow.
 
 ---
@@ -335,7 +336,7 @@ This is the "heads-up" tactical readout — should feel like a game HUD element.
 - Inactive tab: `textSecondary` text, no background.
 - Active tab: `accent1` text, thin `accent1` bottom-border (2px underline), no full background fill. Clean and minimal.
 - Hover: text brightens to `textPrimary`.
-- Tab labels: "SESSION", "MODIFIERS", "SETTINGS", "DEBUG", "HELP" — all-caps, 11px, letter-spaced +1px.
+- Tab labels: "SESSION", "PROBABILITY", "SETTINGS", "DEBUG", "HELP" — all-caps, 11px, letter-spaced +1px.
 
 ### 3.5 Modifier Probability Panel (Modifiers Tab)
 
@@ -527,17 +528,17 @@ int backgroundMode = 1; // 0=Static, 1=SlowCycle, 2=Reactive
 
 ### Phase 1: Foundation (Theme Engine + Base Palette)
 
-1. Create `ThemeEngine.h/cpp` with `ThemePalette`, `AnimationConfig`, `ColorRole` enum, and `getColor()`.
-2. Define all 5 built-in palettes as static `ThemePalette` instances.
-3. Retrofit all current `Theme::xxx()` call sites to use `ThemeEngine::getColor(ColorRole::xxx)`.
-4. Create `ThemeLookAndFeel` class with all overrides reading from `ThemeEngine`.
-5. Add theme selection to `SessionSettings` and persist it.
+1. ~~Create `ThemeEngine.h/cpp` with `ThemePalette`, `AnimationConfig`, `ColorRole` enum, and `getColor()`.~~ ✅
+2. ~~Define all 5 built-in palettes as static `ThemePalette` instances.~~ ✅
+3. ~~Retrofit all current `Theme::xxx()` call sites to use `ThemeEngine::getColor(ColorRole::xxx)`.~~ ✅ (backward-compatible `Theme::` namespace delegates to `ThemeEngine`)
+4. ~~Create `ThemeLookAndFeel` class with all overrides reading from `ThemeEngine`.~~ ✅ (drawRotarySlider, drawLinearSlider, drawToggleButton, drawComboBox, drawButtonBackground, drawScrollbar)
+5. ~~Add theme selection to `SessionSettings` and persist it.~~ ✅ (serialized in getStateInformation/setStateInformation)
 
 ### Phase 2: Dark Mode Conversion
 
-6. Invert the entire UI from the current light palette to dark (using "Neon Rave" as the new default).
+6. ~~Invert the entire UI from the current light palette to dark (using "Neon Rave" as the new default).~~ ✅ (Neon Rave is now default; all Theme:: calls route through dark palette)
 7. Audit all hard-coded colors in `PadGridComponent`, `UpcomingModifierDisplay`, `ModifierHistoryPanel`, `FxStatusPanel`, `TearingDebugPanel`, `HelpPanelContent`, `ModifierProbabilityPanel`, and `ModifierSelectionPanel`.
-8. Replace all `juce::Colours::black` / `juce::Colours::white` literals with theme roles.
+8. ~~Replace all `juce::Colours::black` / `juce::Colours::white` literals with theme roles.~~ ✅ (`ModifierSelectionPanel` migrated; `HelpPanelContent` badge border & body text contrast fixed)
 9. Test all 5 themes for readability and contrast.
 
 ### Phase 3: Component Visual Refinements

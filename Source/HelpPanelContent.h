@@ -98,7 +98,7 @@ private:
                         juce::Rectangle<int> badgeRect(padX + 2, y + 3, keyColW - 8, rowH - 6);
                         g.setColour(Theme::panelAlt());
                         g.fillRoundedRectangle(badgeRect.toFloat(), 3.0f);
-                        g.setColour(Theme::borderStrong());
+                        g.setColour(Theme::border().interpolatedWith(Theme::borderStrong(), 0.2f));
                         g.drawRoundedRectangle(badgeRect.toFloat(), 3.0f, 1.0f);
 
                         g.setColour(Theme::text());
@@ -106,7 +106,7 @@ private:
                                    juce::Justification::centredLeft, true);
 
                         // Description
-                        g.setColour(Theme::textSubtle());
+                        g.setColour(Theme::text().withAlpha(0.7f));
                         g.drawText(row.second, padX + keyColW, y, w - keyColW, rowH,
                                    juce::Justification::centredLeft, true);
 
@@ -119,12 +119,12 @@ private:
                 if (sec.body.isNotEmpty())
                 {
                     g.setFont(juce::Font(juce::FontOptions().withHeight(13.5f)));
-                    g.setColour(Theme::textSubtle());
+                    g.setColour(Theme::text().withAlpha(0.75f));
 
                     juce::AttributedString as;
                     as.setWordWrap(juce::AttributedString::byWord);
                     as.setJustification(juce::Justification::topLeft);
-                    as.setColour(Theme::textSubtle());
+                    as.setColour(Theme::text().withAlpha(0.75f));
                     as.setFont(juce::Font(juce::FontOptions().withHeight(13.5f)));
                     as.append(sec.body);
 

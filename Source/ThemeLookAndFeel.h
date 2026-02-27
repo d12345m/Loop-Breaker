@@ -15,10 +15,23 @@
 #include <JuceHeader.h>
 #include "ThemeEngine.h"
 
-class ThemeLookAndFeel final : public juce::LookAndFeel_V4
+class ThemeLookAndFeel final : public juce::LookAndFeel_V4,
+                               public ThemeListener
 {
 public:
     ThemeLookAndFeel()
+    {
+        applyCurrentTheme();
+        ThemeEngine::getInstance().addListener (this);
+    }
+
+    ~ThemeLookAndFeel() override
+    {
+        ThemeEngine::getInstance().removeListener (this);
+    }
+
+    /** Called automatically when the theme changes. */
+    void themeChanged() override
     {
         applyCurrentTheme();
     }
@@ -409,9 +422,11 @@ public:
 
     int getTabButtonBestWidth (juce::TabBarButton& button, int tabDepth) override
     {
-        auto textWidth = juce::Font (juce::FontOptions().withHeight (11.0f))
-                             .boldened()
-                             .getStringWidth (button.getButtonText().toUpperCase());
+        juce::Font f (juce::FontOptions().withHeight (11.0f));
+        f.setBold (true);
+        juce::GlyphArrangement glyphs;
+        glyphs.addLineOfText (f, button.getButtonText().toUpperCase(), 0.0f, 0.0f);
+        auto textWidth = (int) std::ceil (glyphs.getBoundingBox (0, -1, false).getWidth());
         return textWidth + 28; // padding
     }
 

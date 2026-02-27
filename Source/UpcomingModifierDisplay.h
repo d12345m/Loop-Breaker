@@ -11,10 +11,17 @@
 #include <JuceHeader.h>
 #include "Modifier.h"
 #include "ThemeEngine.h"
+#include "Animator.h"
 
-class UpcomingModifierDisplay : public juce::Component
+class UpcomingModifierDisplay : public juce::Component,
+                                private juce::Timer
 {
 public:
+    UpcomingModifierDisplay()
+    {
+        startTimerHz (30);  // shimmer needs smooth animation
+    }
+
     void setUpcoming(const std::optional<ModifierDescriptor>& desc)
     {
         if (desc.has_value())
@@ -151,7 +158,11 @@ public:
         if (upcomingVariant.isNotEmpty())
         {
             auto variantArea = topRow.withTrimmedLeft(44.0f).withTrimmedRight(170.0f);
-            variantArea.removeFromLeft(g.getCurrentFont().getStringWidthFloat(upcomingName) + 10.0f);
+            // Compute name width to offset the variant text
+            juce::GlyphArrangement nameGlyphs;
+            nameGlyphs.addLineOfText(g.getCurrentFont(), upcomingName, 0.0f, 0.0f);
+            float nameWidth = nameGlyphs.getBoundingBox(0, -1, false).getWidth();
+            variantArea.removeFromLeft(nameWidth + 10.0f);
             g.setColour(palette.textSecondary);
             g.setFont(juce::Font(juce::FontOptions().withHeight(12.0f)));
             g.drawText(upcomingVariant, variantArea, juce::Justification::centredLeft, true);
@@ -184,6 +195,25 @@ public:
                     g.setGradientFill(grad);
                 }
                 g.fillRoundedRectangle(fillRect, barCr);
+
+                // Shimmer highlight sweep
+                const auto& anim = ThemeEngine::getInstance().getAnimationConfig();
+                if (anim.enabled && anim.progressBarShimmer && !suppressed)
+                {
+                    const float shimmerW = 30.0f;
+                    const float shimmerX = fillRect.getX() + shimmerPhase * (fillRect.getWidth() + shimmerW) - shimmerW;
+                    auto shimmerRect = fillRect.withX(juce::jmax(fillRect.getX(), shimmerX))
+                                              .withWidth(juce::jmin(shimmerW, fillRect.getRight() - shimmerX));
+                    if (shimmerRect.getWidth() > 0)
+                    {
+                        juce::ColourGradient shimmer(
+                            juce::Colours::white.withAlpha(0.0f), shimmerRect.getX(), shimmerRect.getCentreY(),
+                            juce::Colours::white.withAlpha(0.18f), shimmerRect.getCentreX(), shimmerRect.getCentreY(), false);
+                        shimmer.addColour(1.0, juce::Colours::white.withAlpha(0.0f));
+                        g.setGradientFill(shimmer);
+                        g.fillRoundedRectangle(shimmerRect, barCr);
+                    }
+                }
             }
 
             // Bar border
@@ -223,6 +253,17 @@ public:
     }
 
 private:
+    void timerCallback() override
+    {
+        const auto& anim = ThemeEngine::getInstance().getAnimationConfig();
+        if (anim.enabled && anim.progressBarShimmer && progress > 0.01 && !suppressed)
+        {
+            shimmerPhase += (1.0f / 30.0f) * anim.animationSpeed * 0.5f;  // ~2s cycle
+            if (shimmerPhase > 1.0f) shimmerPhase -= 1.0f;
+            repaint();
+        }
+    }
+
     juce::String upcomingName { "--" };
     juce::String upcomingDescription;
     juce::String upcomingVariant;
@@ -230,4 +271,5 @@ private:
     double barsRemaining = 0.0;
     double progress = 0.0; // 0..1
     bool suppressed = false;
+    float shimmerPhase = 0.0f;
 };

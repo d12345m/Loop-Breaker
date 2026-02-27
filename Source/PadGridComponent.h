@@ -11,6 +11,7 @@
 
 #include <JuceHeader.h>
 #include "ThemeEngine.h"
+#include "Animator.h"
 
 // Simple 2x4 pad grid showing selectable pads and (new) filename indicators.
 class PadGridComponent : public juce::Component,
@@ -249,6 +250,9 @@ private:
     juce::OwnedArray<juce::Label> padFileLabels;
     juce::StringArray padFileNames { "", "", "", "", "", "", "", "" };
     std::array<int, numPads> flashCounters { {0,0,0,0,0,0,0,0} };
+    std::array<float, numPads> glowAlpha { {0,0,0,0,0,0,0,0} };
+    std::array<Animator, numPads> glowAnimators;
+    float midiLearnDashOffset = 0.0f;  // marching ants
     std::array<bool, numPads> playingStates { {false,false,false,false,false,false,false,false} };
     // Bottom row left->right = 36-39 (pads 1-4, idx 0-3), top row left->right = 40-43 (pads 5-8, idx 4-7)
     std::array<int, numPads> midiNotes { {36, 37, 38, 39, 40, 41, 42, 43} };
@@ -354,15 +358,31 @@ public:
     // Trigger a short flash on given pad indices (or all if list empty and global event)
     void flashPads(const juce::Array<int>& padIndices)
     {
+        const auto& anim = ThemeEngine::getInstance().getAnimationConfig();
+        const bool animate = anim.enabled && anim.padPulseOnTrigger;
+
+        auto triggerPad = [&] (int idx)
+        {
+            flashCounters[(size_t)idx] = flashDurationTicks;
+            if (animate)
+            {
+                glowAnimators[(size_t)idx].start (400, [this, idx] (float p)
+                {
+                    glowAlpha[(size_t)idx] = 0.5f * (1.0f - p);  // 0.5 → 0
+                    repaint();
+                }, {}, Animator::Easing::EaseOut);
+            }
+        };
+
         if (padIndices.isEmpty())
         {
-            for (int i = 0; i < numPads; ++i) flashCounters[i] = flashDurationTicks;
+            for (int i = 0; i < numPads; ++i) triggerPad (i);
         }
         else
         {
             for (auto idx : padIndices)
                 if (juce::isPositiveAndBelow(idx, numPads))
-                    flashCounters[(size_t)idx] = flashDurationTicks;
+                    triggerPad (idx);
         }
         repaint();
     }
@@ -594,18 +614,19 @@ private:
                     g.drawRoundedRectangle(r.expanded(3.5f), cr + 1.0f, 1.5f);
                 }
 
-                // ── MIDI learn indicator ──
+                // ── MIDI learn indicator (marching ants) ──
                 if (midiLearnActive[(size_t)i])
                 {
-                    // Dashed border
+                    // Marching-ants dashed border
                     {
-                        juce::Path learnPath;
-                        learnPath.addRoundedRectangle(r.expanded(2.0f), cr);
+                        juce::Path outline;
+                        outline.addRoundedRectangle(r.expanded(2.0f), cr);
                         const float dashLengths[] = { 6.0f, 4.0f };
-                        juce::PathStrokeType stroke(2.5f);
-                        stroke.createDashedStroke(learnPath, learnPath, dashLengths, 2);
+                        juce::PathStrokeType strokeType(2.5f);
+                        juce::Path dashed;
+                        strokeType.createDashedStroke(dashed, outline, dashLengths, 2);
                         g.setColour(palette.warn);
-                        g.strokePath(learnPath, stroke);
+                        g.strokePath(dashed, strokeType);
                     }
                     // "LEARN" badge
                     auto learnRect = juce::Rectangle<float>(r.getCentreX() - 28.0f, r.getCentreY() - 10.0f, 56.0f, 20.0f);
@@ -623,12 +644,27 @@ private:
                     g.drawRoundedRectangle(r.expanded(2.f), cr, 2.0f);
                 }
 
-                // ── Flash overlay (modifier triggered) ──
-                if (flashCounters[(size_t)i] > 0)
+                // ── Flash overlay + animated glow pulse (modifier triggered) ──
+                if (flashCounters[(size_t)i] > 0 || glowAlpha[(size_t)i] > 0.001f)
                 {
+                    // Solid tint overlay (always, even with animation off)
                     float flashAlpha = (float)flashCounters[(size_t)i] / (float)flashDurationTicks * 0.25f;
-                    g.setColour(palette.accent2.withAlpha(flashAlpha));
-                    g.fillRoundedRectangle(r.expanded(2.f), cr);
+                    if (flashAlpha > 0.0f)
+                    {
+                        g.setColour(palette.accent2.withAlpha(flashAlpha));
+                        g.fillRoundedRectangle(r.expanded(2.f), cr);
+                    }
+
+                    // Animated radial glow (only when glow animator is active)
+                    if (glowAlpha[(size_t)i] > 0.001f)
+                    {
+                        juce::ColourGradient glow(palette.accent2.withAlpha(glowAlpha[(size_t)i]),
+                                                   r.getCentreX(), r.getCentreY(),
+                                                   palette.accent2.withAlpha(0.0f),
+                                                   r.getX() - 4.0f, r.getY() - 4.0f, true);
+                        g.setGradientFill(glow);
+                        g.fillRoundedRectangle(r.expanded(4.f), cr + 1.0f);
+                    }
                 }
 
                 // ── File drag hover ──
@@ -689,11 +725,32 @@ private:
 
     void timerCallback() override
     {
+        const double dt = 1.0 / 20.0;  // 50 ms per tick
         bool any = false;
-        for (auto& c : flashCounters)
+        for (int i = 0; i < numPads; ++i)
         {
-            if (c > 0) { --c; any = true; }
+            if (flashCounters[(size_t)i] > 0) { --flashCounters[(size_t)i]; any = true; }
+            if (glowAnimators[(size_t)i].isRunning())
+            {
+                glowAnimators[(size_t)i].tick (dt);
+                any = true;
+            }
         }
+
+        // Advance marching-ants offset for MIDI learn borders
+        bool anyLearn = false;
+        for (auto b : midiLearnActive) if (b) { anyLearn = true; break; }
+        if (anyLearn)
+        {
+            const auto& anim = ThemeEngine::getInstance().getAnimationConfig();
+            if (anim.enabled)
+            {
+                midiLearnDashOffset += 0.6f * anim.animationSpeed;
+                if (midiLearnDashOffset > 10.0f) midiLearnDashOffset -= 10.0f;
+                any = true;
+            }
+        }
+
         if (any)
             repaint();
     }

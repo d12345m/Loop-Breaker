@@ -6,6 +6,8 @@
 class ModifierProbabilityPanel;
 class DebugPanelContent;
 class HelpPanelContent;
+class SettingsPanelContent;
+class BackgroundAnimator;
 
 class BufferTestAudioProcessorEditor : public juce::AudioProcessorEditor
 {
@@ -19,8 +21,10 @@ public:
 private:
     BufferTestAudioProcessor& processor;
 
+    std::unique_ptr<BackgroundAnimator> backgroundAnimator;
     std::unique_ptr<juce::Component> content;
     std::unique_ptr<ModifierProbabilityPanel> probabilityPanel;
+    std::unique_ptr<SettingsPanelContent> settingsPanel;
     std::unique_ptr<DebugPanelContent> debugPanel;
     std::unique_ptr<HelpPanelContent> helpPanel;
     std::unique_ptr<juce::TabbedComponent> tabComponent;

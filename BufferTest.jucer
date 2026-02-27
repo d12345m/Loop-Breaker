@@ -68,6 +68,12 @@
             file="Source/ThemeEngine.cpp"/>
       <FILE id="themeLookAndFeelH" name="ThemeLookAndFeel.h" compile="0"
             resource="0" file="Source/ThemeLookAndFeel.h"/>
+      <FILE id="animatorH" name="Animator.h" compile="0"
+            resource="0" file="Source/Animator.h"/>
+      <FILE id="backgroundAnimatorH" name="BackgroundAnimator.h" compile="0"
+            resource="0" file="Source/BackgroundAnimator.h"/>
+      <FILE id="settingsPanelH" name="SettingsPanelContent.h" compile="0"
+            resource="0" file="Source/SettingsPanelContent.h"/>
     </GROUP>
     <GROUP id="{MOONBASE_RES}" name="Resources">
       <FILE id="moonbaseConfig" name="moonbase_api_config.json" compile="0"

@@ -136,7 +136,7 @@ public:
 
 // ─── ThemeEngine (singleton) ─────────────────────────────────────────────────
 
-class ThemeEngine
+class ThemeEngine : private juce::Timer
 {
 public:
     /** Access the singleton instance. */
@@ -144,22 +144,27 @@ public:
 
     // ── Palette access ──────────────────────────────────────────────────
 
-    /** Get the current theme's colour for a role. */
+    /** Get the current theme's colour for a role.
+        During a crossfade transition, returns the interpolated colour. */
     juce::Colour getColor (ColorRole role) const;
 
     /** Convenience: `ThemeEngine::color(role)` — short-hand static accessor. */
     static juce::Colour color (ColorRole role);
 
-    /** Get the full current palette (e.g. for reading glowIntensity). */
-    const ThemePalette& getCurrentPalette() const  { return currentPalette; }
+    /** Get the full current palette (uses blended palette during transitions). */
+    const ThemePalette& getCurrentPalette() const  { return isTransitioning() ? blendedPalette : currentPalette; }
 
     /** Get the current animation config. */
     const AnimationConfig& getAnimationConfig() const  { return animConfig; }
     AnimationConfig& getAnimationConfigMutable()       { return animConfig; }
 
+    /** True if a crossfade is in progress. */
+    bool isTransitioning() const { return transitionProgress < 1.0f; }
+
     // ── Theme switching ─────────────────────────────────────────────────
 
-    /** Set the theme by name (must match a built-in palette name). */
+    /** Set the theme by name (must match a built-in palette name).
+        If animations are enabled, crossfades over 500ms. */
     void setTheme (const juce::String& themeName);
 
     /** Set a custom palette directly. */
@@ -183,8 +188,19 @@ private:
     ThemeEngine();
 
     void notifyListeners();
+    void startTransition (const ThemePalette& target);
+    void updateBlendedPalette();
 
-    ThemePalette  currentPalette;
+    // ── Timer (for crossfade) ───────────────────────────────────────────
+    void timerCallback() override;
+
+    ThemePalette  currentPalette;    // The destination (or final) palette
+    ThemePalette  transitionFrom;    // Palette we're fading from
+    ThemePalette  blendedPalette;    // Interpolated palette (used during transition)
+    float         transitionProgress = 1.0f; // 0→1 over transitionDurationMs
+    static constexpr int transitionDurationMs = 500;
+    static constexpr int transitionFps = 30;
+
     AnimationConfig animConfig;
 
     std::vector<ThemeListener*> listeners;

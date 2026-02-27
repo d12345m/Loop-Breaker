@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "ThemeEngine.h"
 
 // ---------------------------------------------------------------------------
 // Build the APVTS parameter layout – one AudioParameterFloat per modifier type
@@ -1072,6 +1073,23 @@ void BufferTestAudioProcessor::setStateInformation (const void* data, int sizeIn
         app.settings.animationSpeed = (float) (double) obj->getProperty("animationSpeed");
     if (obj->hasProperty("backgroundMode"))
         app.settings.backgroundMode = (int) obj->getProperty("backgroundMode");
+
+    // Push restored settings to ThemeEngine runtime config
+    {
+        auto& cfg = ThemeEngine::getInstance().getAnimationConfigMutable();
+        cfg.enabled              = app.settings.animationsEnabled;
+        cfg.backgroundColorCycle = app.settings.bgCycleEnabled;
+        cfg.padPulseOnTrigger    = app.settings.padPulseEnabled;
+        cfg.progressBarShimmer   = app.settings.progressShimmerEnabled;
+        cfg.knobGlowOnChange     = app.settings.knobGlowEnabled;
+        cfg.animationSpeed       = app.settings.animationSpeed;
+        switch (app.settings.backgroundMode)
+        {
+            case 0:  cfg.backgroundMode = BackgroundMode::Static;    break;
+            case 2:  cfg.backgroundMode = BackgroundMode::Reactive;  break;
+            default: cfg.backgroundMode = BackgroundMode::SlowCycle; break;
+        }
+    }
 
     // Defer reloading buffers until we are on the audio thread (prepareToPlay/processBlock).
     pendingRestoreReload.store(true);

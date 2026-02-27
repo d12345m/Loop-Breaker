@@ -1,6 +1,6 @@
 # Visual Design Overhaul — BufferTest Plugin
 
-> **Status:** In Progress — Phase 1 Complete, Phase 2 Complete, Phase 3 Complete  
+> **Status:** In Progress — Phase 1 Complete, Phase 2 Complete, Phase 3 Complete, Phase 4 Complete, Phase 6.26 Complete  
 > **Date:** 2025-02-27  
 > **Updated:** 2026-02-27  
 > **Goal:** Transform the UI from a utilitarian developer tool into a visually immersive instrument that feels at home in an experimental electronic music workflow.
@@ -551,12 +551,12 @@ int backgroundMode = 1; // 0=Static, 1=SlowCycle, 2=Reactive
 
 ### Phase 4: Animation
 
-15. Implement `BackgroundAnimator` component with Static / Slow Cycle / Reactive modes.
-16. Implement pad glow-pulse animation (on modifier trigger).
-17. Implement progress bar shimmer.
-18. Implement MIDI learn marching-ants animation.
-19. Implement theme transition animation (crossfade colors over 500ms when switching themes).
-20. Add animation toggle UI and wire to `AnimationConfig`.
+15. ~~Implement `BackgroundAnimator` component with Static / Slow Cycle / Reactive modes.~~ ✅ (BackgroundAnimator.h — 15 FPS timer, cached juce::Image, hue rotation for SlowCycle, reactive pulse with Animator-driven 800ms EaseOut decay, radial spotlight overlay)
+16. ~~Implement pad glow-pulse animation (on modifier trigger).~~ ✅ (PadGridComponent uses per-pad Animator instances — 400ms EaseOut glow pulse from 0.5→0 alpha, respects AnimationConfig.padPulseOnTrigger)
+17. ~~Implement progress bar shimmer.~~ ✅ (UpcomingModifierDisplay runs 30 FPS timer, sweeps a white highlight gradient across progress fill, respects AnimationConfig.progressBarShimmer)
+18. ~~Implement MIDI learn marching-ants animation.~~ ✅ (PadGridComponent advances midiLearnDashOffset in timerCallback, dashed border animates when learn mode active)
+19. ~~Implement theme transition animation (crossfade colors over 500ms when switching themes).~~ ✅ (ThemeEngine extends juce::Timer, interpolates all 24 palette colors + glowIntensity + borderRadius over 500ms with EaseInOut easing; getColor() returns blended value during transition)
+20. ~~Add animation toggle UI and wire to `AnimationConfig`.~~ ✅ (SettingsPanelContent wires all toggles → SessionSettings + ThemeEngine::getAnimationConfigMutable(); master toggle enables/disables sub-toggles; state restored from serialized JSON in PluginProcessor)
 
 ### Phase 5: Typography & Polish
 
@@ -568,11 +568,11 @@ int backgroundMode = 1; // 0=Static, 1=SlowCycle, 2=Reactive
 
 ### Phase 6: Settings & QA
 
-26. Build the Settings tab with Appearance section (theme dropdown, animation toggles, background mode).
+26. ~~Build the Settings tab with Appearance section (theme dropdown, animation toggles, background mode).~~ ✅ (SettingsPanelContent.h — theme ComboBox, master animation toggle, 4 sub-toggles, speed slider 0.25–2.0×, 3 background mode radio buttons; wired to SessionSettings + ThemeEngine; tab added between Probability and Debug)
 27. Full pass on all 5 themes across all 5 tabs — verify contrast ratios, readability, visual coherence.
 28. Performance profiling — ensure animation adds <2% CPU at 20Hz on a typical machine.
 29. Test with DAW hosts (Logic, Ableton, Reaper) for rendering compatibility.
-30. Verify plugin state save/restore preserves theme and animation settings.
+30. ~~Verify plugin state save/restore preserves theme and animation settings.~~ ✅ (PluginProcessor getStateInformation/setStateInformation serializes all 8 theme/animation fields; setStateInformation pushes restored values to ThemeEngine runtime config)
 
 ---
 

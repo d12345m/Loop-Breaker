@@ -290,6 +290,8 @@ ThemeEngine& ThemeEngine::getInstance()
 
 juce::Colour ThemeEngine::getColor (ColorRole role) const
 {
+    if (isTransitioning())
+        return blendedPalette.getColor (role);
     return currentPalette.getColor (role);
 }
 
@@ -309,8 +311,17 @@ void ThemeEngine::setTheme (const juce::String& themeName)
     {
         if (palette.name.equalsIgnoreCase (themeName))
         {
-            currentPalette = palette;
-            notifyListeners();
+            if (animConfig.enabled && currentPalette.name != palette.name)
+            {
+                startTransition (palette);
+            }
+            else
+            {
+                currentPalette = palette;
+                blendedPalette = palette;
+                transitionProgress = 1.0f;
+                notifyListeners();
+            }
             return;
         }
     }
@@ -321,8 +332,17 @@ void ThemeEngine::setTheme (const juce::String& themeName)
 
 void ThemeEngine::setTheme (const ThemePalette& palette)
 {
-    currentPalette = palette;
-    notifyListeners();
+    if (animConfig.enabled && currentPalette.name != palette.name)
+    {
+        startTransition (palette);
+    }
+    else
+    {
+        currentPalette = palette;
+        blendedPalette = palette;
+        transitionProgress = 1.0f;
+        notifyListeners();
+    }
 }
 
 juce::StringArray ThemeEngine::getAvailableThemeNames() const
@@ -357,4 +377,79 @@ void ThemeEngine::notifyListeners()
     for (auto* l : listeners)
         if (l != nullptr)
             l->themeChanged();
+}
+
+// ─── Theme crossfade transition ──────────────────────────────────────────────
+
+static juce::Colour lerpColour (const juce::Colour& a, const juce::Colour& b, float t)
+{
+    return a.interpolatedWith (b, t);
+}
+
+void ThemeEngine::startTransition (const ThemePalette& target)
+{
+    transitionFrom = isTransitioning() ? blendedPalette : currentPalette;
+    currentPalette = target;
+    transitionProgress = 0.0f;
+    updateBlendedPalette();
+    notifyListeners();
+    startTimerHz (transitionFps);
+}
+
+void ThemeEngine::updateBlendedPalette()
+{
+    const float t = transitionProgress;
+    auto& a = transitionFrom;
+    auto& b = currentPalette;
+
+    blendedPalette.name         = b.name;
+    blendedPalette.bg           = lerpColour (a.bg, b.bg, t);
+    blendedPalette.bgAlt        = lerpColour (a.bgAlt, b.bgAlt, t);
+    blendedPalette.panel        = lerpColour (a.panel, b.panel, t);
+    blendedPalette.panelAlt     = lerpColour (a.panelAlt, b.panelAlt, t);
+    blendedPalette.border       = lerpColour (a.border, b.border, t);
+    blendedPalette.borderGlow   = lerpColour (a.borderGlow, b.borderGlow, t);
+    blendedPalette.textPrimary  = lerpColour (a.textPrimary, b.textPrimary, t);
+    blendedPalette.textSecondary= lerpColour (a.textSecondary, b.textSecondary, t);
+    blendedPalette.textOnAccent = lerpColour (a.textOnAccent, b.textOnAccent, t);
+    blendedPalette.accent1      = lerpColour (a.accent1, b.accent1, t);
+    blendedPalette.accent2      = lerpColour (a.accent2, b.accent2, t);
+    blendedPalette.accent3      = lerpColour (a.accent3, b.accent3, t);
+    blendedPalette.good         = lerpColour (a.good, b.good, t);
+    blendedPalette.warn         = lerpColour (a.warn, b.warn, t);
+    blendedPalette.bad          = lerpColour (a.bad, b.bad, t);
+    blendedPalette.knobFill     = lerpColour (a.knobFill, b.knobFill, t);
+    blendedPalette.knobTrack    = lerpColour (a.knobTrack, b.knobTrack, t);
+    blendedPalette.waveformFill = lerpColour (a.waveformFill, b.waveformFill, t);
+    blendedPalette.playhead     = lerpColour (a.playhead, b.playhead, t);
+    blendedPalette.padEmpty     = lerpColour (a.padEmpty, b.padEmpty, t);
+    blendedPalette.padLoaded    = lerpColour (a.padLoaded, b.padLoaded, t);
+    blendedPalette.padSelected  = lerpColour (a.padSelected, b.padSelected, t);
+    blendedPalette.padPlaying   = lerpColour (a.padPlaying, b.padPlaying, t);
+
+    blendedPalette.glowIntensity = a.glowIntensity + (b.glowIntensity - a.glowIntensity) * t;
+    blendedPalette.borderRadius  = a.borderRadius  + (b.borderRadius  - a.borderRadius)  * t;
+}
+
+void ThemeEngine::timerCallback()
+{
+    const float step = 1.0f / ((float) transitionDurationMs / 1000.0f * (float) transitionFps);
+    transitionProgress = juce::jmin (1.0f, transitionProgress + step);
+
+    // Ease-in-out for smooth feel
+    float eased = transitionProgress < 0.5f
+                      ? 2.0f * transitionProgress * transitionProgress
+                      : 1.0f - std::pow (-2.0f * transitionProgress + 2.0f, 2.0f) / 2.0f;
+    float savedProgress = transitionProgress;
+    transitionProgress = eased;
+    updateBlendedPalette();
+    transitionProgress = savedProgress;
+
+    notifyListeners();
+
+    if (transitionProgress >= 1.0f)
+    {
+        blendedPalette = currentPalette;
+        stopTimer();
+    }
 }

@@ -12,6 +12,8 @@
 #include "DebugPanelContent.h"
 #include "ThemeEngine.h"
 #include "ThemeLookAndFeel.h"
+#include "SettingsPanelContent.h"
+#include "BackgroundAnimator.h"
 
 namespace
 {
@@ -583,12 +585,15 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
         processor.getAppState().settings.modifierProbabilities,
         processor.getAPVTS());
 
+    settingsPanel = std::make_unique<SettingsPanelContent>(processor.getAppState().settings);
+
     tabComponent = std::make_unique<juce::TabbedComponent>(juce::TabbedButtonBar::TabsAtTop);
     auto tabBg = Theme::bg().brighter(0.05f);
     helpPanel = std::make_unique<HelpPanelContent>();
 
     tabComponent->addTab("Session",     tabBg, content.get(), false);
     tabComponent->addTab("Probability", tabBg, probabilityPanel.get(), false);
+    tabComponent->addTab("Settings",    tabBg, settingsPanel.get(), false);
     tabComponent->addTab("Debug",       tabBg, debugPanel.get(), false);
     tabComponent->addTab("Help",        tabBg, helpPanel.get(), false);
 
@@ -597,7 +602,14 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
     tabBar.setColour(juce::TabbedButtonBar::tabOutlineColourId, Theme::border());
     tabBar.setColour(juce::TabbedButtonBar::frontOutlineColourId, Theme::accent());
 
+    // Background animator (sits behind everything)
+    backgroundAnimator = std::make_unique<BackgroundAnimator>();
+    addAndMakeVisible(backgroundAnimator.get());
+
     addAndMakeVisible(tabComponent.get());
+
+    // Apply the saved theme on editor open
+    ThemeEngine::getInstance().setTheme(processor.getAppState().settings.themeName);
 
     // Moonbase: enable update badge and disable analytics
     if (activationUI)
@@ -620,8 +632,13 @@ void BufferTestAudioProcessorEditor::paint (juce::Graphics& g)
 
 void BufferTestAudioProcessorEditor::resized()
 {
+    auto bounds = getLocalBounds();
+
+    if (backgroundAnimator)
+        backgroundAnimator->setBounds(bounds);
+
     if (tabComponent)
-        tabComponent->setBounds(getLocalBounds());
+        tabComponent->setBounds(bounds);
 
     MOONBASE_RESIZE_ACTIVATION_UI
 }

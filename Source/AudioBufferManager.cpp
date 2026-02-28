@@ -202,27 +202,31 @@ AudioBuffer::LoadedAudioData::Ptr decodeFileToLoadedData(const juce::File& file,
         reader->read (&nativeBuf, 0, lengthSamples, 0, true, true);
 
         const double ratio = fileSR / targetSampleRate; // >1 means file is higher SR
-        const int outLength = (int) std::ceil ((double) lengthSamples / ratio) + 4;
+        // Allocate with +4 padding so the Lagrange interpolator has headroom
+        // at the tail end of the input.  We trim to the correct musical length
+        // after processing.
+        const int usableLength = juce::jmax (1, (int) std::round ((double) lengthSamples / ratio));
+        const int allocLength  = usableLength + 4;
 
-        data->buffer.setSize (channels, outLength);
+        data->buffer.setSize (channels, allocLength);
 
         for (int ch = 0; ch < channels; ++ch)
         {
             juce::LagrangeInterpolator interp;
-            const int produced = interp.process (
+            // process() returns the number of INPUT samples consumed (not output).
+            // It always writes exactly allocLength output samples.
+            interp.process (
                 ratio,
                 nativeBuf.getReadPointer (ch),
                 data->buffer.getWritePointer (ch),
-                outLength,
+                allocLength,
                 lengthSamples,
                 0 /* no wrap */
             );
-            // Zero any tail beyond what the interpolator actually produced.
-            if (produced < outLength)
-                juce::FloatVectorOperations::clear (data->buffer.getWritePointer (ch, produced),
-                                                    outLength - produced);
         }
 
+        // Trim to the musically-correct length so the loop boundary is precise.
+        data->buffer.setSize (channels, usableLength, true);
         data->sampleRate = targetSampleRate;
     }
     else

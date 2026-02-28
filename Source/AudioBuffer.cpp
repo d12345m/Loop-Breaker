@@ -855,25 +855,30 @@ bool AudioBuffer::loadAudioFile(const juce::File& file, juce::AudioFormatManager
         reader->read (&nativeBuf, 0, fileLengthSamples, 0, true, true);
 
         const double ratio = fileSR / hostSampleRate;
-        const int outLength = (int) std::ceil ((double) fileLengthSamples / ratio) + 4;
-        newData->buffer.setSize (numChannels, outLength);
+        // Allocate with +4 padding so the Lagrange interpolator has headroom
+        // at the tail end of the input.  We trim to the correct musical length
+        // after processing.
+        const int usableLength = juce::jmax (1, (int) std::round ((double) fileLengthSamples / ratio));
+        const int allocLength  = usableLength + 4;
+        newData->buffer.setSize (numChannels, allocLength);
 
         for (int ch = 0; ch < numChannels; ++ch)
         {
             juce::LagrangeInterpolator interp;
-            const int produced = interp.process (
+            // process() returns the number of INPUT samples consumed (not output).
+            // It always writes exactly allocLength output samples.
+            interp.process (
                 ratio,
                 nativeBuf.getReadPointer (ch),
                 newData->buffer.getWritePointer (ch),
-                outLength,
+                allocLength,
                 fileLengthSamples,
                 0
             );
-            if (produced < outLength)
-                juce::FloatVectorOperations::clear (newData->buffer.getWritePointer (ch, produced),
-                                                    outLength - produced);
         }
 
+        // Trim to the musically-correct length so the loop boundary is precise.
+        newData->buffer.setSize (numChannels, usableLength, true);
         newData->sampleRate = hostSampleRate;
     }
     else

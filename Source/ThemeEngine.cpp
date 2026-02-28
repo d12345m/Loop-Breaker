@@ -63,7 +63,7 @@ juce::Colour ThemePalette::getColor (ColorRole role) const
 static ThemePalette makeNeonRave()
 {
     ThemePalette p;
-    p.name          = "Neon Rave";
+    p.name          = "Neon Rave (Dark)";
 
     p.bg            = hex (0x0A0E14);
     p.bgAlt         = hex (0x111822);
@@ -104,7 +104,7 @@ static ThemePalette makeNeonRave()
 static ThemePalette makeVintageEmber()
 {
     ThemePalette p;
-    p.name          = "Vintage Ember";
+    p.name          = "Vintage Ember (Dark)";
 
     p.bg            = hex (0x1A0F0A);
     p.bgAlt         = hex (0x241610);
@@ -145,7 +145,7 @@ static ThemePalette makeVintageEmber()
 static ThemePalette makePixelGrid()
 {
     ThemePalette p;
-    p.name          = "Pixel Grid";
+    p.name          = "Pixel Grid (Dark)";
 
     p.bg            = hex (0x000000);
     p.bgAlt         = hex (0x111111);
@@ -186,7 +186,7 @@ static ThemePalette makePixelGrid()
 static ThemePalette makeUltraviolet()
 {
     ThemePalette p;
-    p.name          = "Ultraviolet";
+    p.name          = "Ultraviolet (Dark)";
 
     p.bg            = hex (0x0C0618);
     p.bgAlt         = hex (0x120B22);
@@ -227,7 +227,7 @@ static ThemePalette makeUltraviolet()
 static ThemePalette makeStudioClean()
 {
     ThemePalette p;
-    p.name          = "Studio Clean";
+    p.name          = "Studio Clean (Dark)";
 
     p.bg            = hex (0x1E1E1E);
     p.bgAlt         = hex (0x252525);
@@ -270,7 +270,7 @@ static ThemePalette makeStudioClean()
 static ThemePalette makeDaylight()
 {
     ThemePalette p;
-    p.name          = "Daylight";
+    p.name          = "Daylight (Light)";
 
     p.bg            = hex (0xF5F5F5);
     p.bgAlt         = hex (0xEBEBEB);
@@ -311,7 +311,7 @@ static ThemePalette makeDaylight()
 static ThemePalette makeWarmPaper()
 {
     ThemePalette p;
-    p.name          = "Warm Paper";
+    p.name          = "Warm Paper (Light)";
 
     p.bg            = hex (0xF7F3EE);
     p.bgAlt         = hex (0xEDE8E0);
@@ -352,7 +352,7 @@ static ThemePalette makeWarmPaper()
 static ThemePalette makeArcticSky()
 {
     ThemePalette p;
-    p.name          = "Arctic Sky";
+    p.name          = "Arctic Sky (Light)";
 
     p.bg            = hex (0xEFF4FB);
     p.bgAlt         = hex (0xE2EBF5);
@@ -393,7 +393,7 @@ static ThemePalette makeArcticSky()
 static ThemePalette makeIvory()
 {
     ThemePalette p;
-    p.name          = "Ivory";
+    p.name          = "Ivory (Light)";
 
     p.bg            = hex (0xFAF9F6);   // faintly warm off-white
     p.bgAlt         = hex (0xF3F1ED);
@@ -434,7 +434,7 @@ static ThemePalette makeIvory()
 static ThemePalette makeSilver()
 {
     ThemePalette p;
-    p.name          = "Silver";
+    p.name          = "Silver (Light)";
 
     p.bg            = hex (0xE8EAED);   // cool silver-grey
     p.bgAlt         = hex (0xDDE0E4);
@@ -475,7 +475,7 @@ static ThemePalette makeSilver()
 static ThemePalette makeGruvbox()
 {
     ThemePalette p;
-    p.name          = "Gruvbox";
+    p.name          = "Gruvbox (Dark)";
 
     p.bg            = hex (0x282828);
     p.bgAlt         = hex (0x1D2021);
@@ -519,25 +519,21 @@ static ThemePalette makeGruvbox()
 
 ThemeEngine::ThemeEngine()
 {
-    // Register all built-in palettes
-    builtInPalettes.push_back (makeNeonRave());
-    builtInPalettes.push_back (makeVintageEmber());
-    builtInPalettes.push_back (makePixelGrid());
-    builtInPalettes.push_back (makeUltraviolet());
-    builtInPalettes.push_back (makeStudioClean());
-
-    // Light mode themes
-    builtInPalettes.push_back (makeDaylight());
-    builtInPalettes.push_back (makeWarmPaper());
+    // All built-in palettes — alphabetical order
     builtInPalettes.push_back (makeArcticSky());
-    builtInPalettes.push_back (makeIvory());
-    builtInPalettes.push_back (makeSilver());
-
-    // IDE-inspired
+    builtInPalettes.push_back (makeDaylight());
     builtInPalettes.push_back (makeGruvbox());
+    builtInPalettes.push_back (makeIvory());
+    builtInPalettes.push_back (makeNeonRave());
+    builtInPalettes.push_back (makePixelGrid());
+    builtInPalettes.push_back (makeSilver());
+    builtInPalettes.push_back (makeStudioClean());
+    builtInPalettes.push_back (makeUltraviolet());
+    builtInPalettes.push_back (makeVintageEmber());
+    builtInPalettes.push_back (makeWarmPaper());
 
     // Default to Neon Rave
-    currentPalette = builtInPalettes.front();
+    currentPalette = *getBuiltInPalette ("Neon Rave (Dark)");
 }
 
 ThemeEngine& ThemeEngine::getInstance()

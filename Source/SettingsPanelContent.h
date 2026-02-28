@@ -44,43 +44,32 @@ public:
             ThemeEngine::getInstance().setTheme (name);
         };
 
-        // ── Enable Animations toggle ────────────────────────────────────
-        addAndMakeVisible (animToggle);
+        // ── Animation controls (hidden for now — kept for future use) ──
+        // All animation widgets are created but not made visible.
         animToggle.setButtonText ("Enable Animations");
         animToggle.setToggleState (settings.animationsEnabled, juce::dontSendNotification);
         animToggle.onClick = [this] { syncAnimConfigFromUI(); };
 
-        // ── Background Color Cycling ────────────────────────────────────
-        addAndMakeVisible (bgCycleToggle);
         bgCycleToggle.setButtonText ("Background color cycling");
         bgCycleToggle.setToggleState (settings.bgCycleEnabled, juce::dontSendNotification);
         bgCycleToggle.onClick = [this] { syncAnimConfigFromUI(); };
 
-        // ── Pad Glow Effects ────────────────────────────────────────────
-        addAndMakeVisible (padPulseToggle);
         padPulseToggle.setButtonText ("Pad glow effects");
         padPulseToggle.setToggleState (settings.padPulseEnabled, juce::dontSendNotification);
         padPulseToggle.onClick = [this] { syncAnimConfigFromUI(); };
 
-        // ── Progress Bar Shimmer ────────────────────────────────────────
-        addAndMakeVisible (shimmerToggle);
         shimmerToggle.setButtonText ("Progress bar shimmer");
         shimmerToggle.setToggleState (settings.progressShimmerEnabled, juce::dontSendNotification);
         shimmerToggle.onClick = [this] { syncAnimConfigFromUI(); };
 
-        // ── Knob Glow on Change ─────────────────────────────────────────
-        addAndMakeVisible (knobGlowToggle);
         knobGlowToggle.setButtonText ("Knob glow on change");
         knobGlowToggle.setToggleState (settings.knobGlowEnabled, juce::dontSendNotification);
         knobGlowToggle.onClick = [this] { syncAnimConfigFromUI(); };
 
-        // ── Animation Speed slider ──────────────────────────────────────
-        addAndMakeVisible (speedLabel);
         speedLabel.setText ("Animation Speed", juce::dontSendNotification);
         speedLabel.setJustificationType (juce::Justification::centredRight);
         speedLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
 
-        addAndMakeVisible (speedSlider);
         speedSlider.setRange (0.25, 2.0, 0.05);
         speedSlider.setValue (settings.animationSpeed, juce::dontSendNotification);
         speedSlider.setTextValueSuffix ("x");
@@ -88,8 +77,6 @@ public:
         speedSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 44, 20);
         speedSlider.onValueChange = [this] { syncAnimConfigFromUI(); };
 
-        // ── Background Mode radio buttons ───────────────────────────────
-        addAndMakeVisible (bgModeLabel);
         bgModeLabel.setText ("Background Mode", juce::dontSendNotification);
         bgModeLabel.setJustificationType (juce::Justification::centredRight);
         bgModeLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
@@ -97,7 +84,6 @@ public:
         for (int i = 0; i < 3; ++i)
         {
             bgModeButtons[i] = std::make_unique<juce::ToggleButton>();
-            addAndMakeVisible (bgModeButtons[i].get());
             bgModeButtons[i]->setRadioGroupId (42);
             bgModeButtons[i]->onClick = [this, i] { selectBgMode (i); };
         }
@@ -171,52 +157,9 @@ public:
             themeCombo.setBounds (row.removeFromLeft (200));
         }
 
-        area.removeFromTop (8);
-
-        // Enable animations
-        {
-            auto row = area.removeFromTop (rowH);
-            row.removeFromLeft (toggleIndent);
-            animToggle.setBounds (row.removeFromLeft (toggleWidth));
-        }
-
-        // Sub-toggles (indented further)
-        const int subIndent = toggleIndent + 24;
-        auto placeSubToggle = [&] (juce::ToggleButton& btn)
-        {
-            auto row = area.removeFromTop (rowH - 4);
-            row.removeFromLeft (subIndent);
-            btn.setBounds (row.removeFromLeft (toggleWidth));
-        };
-
-        placeSubToggle (bgCycleToggle);
-        placeSubToggle (padPulseToggle);
-        placeSubToggle (shimmerToggle);
-        placeSubToggle (knobGlowToggle);
-
-        area.removeFromTop (8);
-
-        // Animation speed
-        {
-            auto row = area.removeFromTop (rowH);
-            speedLabel.setBounds (row.removeFromLeft (labelW));
-            row.removeFromLeft (10);
-            speedSlider.setBounds (row.removeFromLeft (260));
-        }
-
-        area.removeFromTop (8);
-
-        // Background mode
-        {
-            auto row = area.removeFromTop (rowH);
-            bgModeLabel.setBounds (row.removeFromLeft (labelW));
-            row.removeFromLeft (10);
-            for (int i = 0; i < 3; ++i)
-            {
-                bgModeButtons[i]->setBounds (row.removeFromLeft (120));
-                row.removeFromLeft (4);
-            }
-        }
+        // Animation controls are hidden — layout only contains the theme row above.
+        // When re-enabling, restore the resized() layout for animation toggles,
+        // speed slider, and background mode radio buttons here.
     }
 
 private:

@@ -114,15 +114,15 @@ enum class BackgroundMode
 
 struct AnimationConfig
 {
-    bool  enabled               = true;
-    bool  backgroundColorCycle  = true;
-    bool  padPulseOnTrigger     = true;
-    bool  progressBarShimmer    = true;
-    bool  knobGlowOnChange     = true;
+    bool  enabled               = false;
+    bool  backgroundColorCycle  = false;
+    bool  padPulseOnTrigger     = false;
+    bool  progressBarShimmer    = false;
+    bool  knobGlowOnChange      = false;
     float animationSpeed        = 1.0f;   // 0.25 – 2.0
     float backgroundCycleRate   = 0.02f;  // hue degrees per frame
 
-    BackgroundMode backgroundMode = BackgroundMode::SlowCycle;
+    BackgroundMode backgroundMode = BackgroundMode::Static;
 };
 
 // ─── ThemeListener ───────────────────────────────────────────────────────────

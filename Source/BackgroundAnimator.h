@@ -72,7 +72,7 @@ public:
         auto bounds = getLocalBounds();
         const auto& palette = ThemeEngine::getInstance().getCurrentPalette();
         const auto& anim    = ThemeEngine::getInstance().getAnimationConfig();
-        const bool isPixelGrid = (palette.name == "Pixel Grid");
+        const bool isPixelGrid = (palette.name == "Pixel Grid (Dark)");
 
         auto mode = anim.backgroundMode;
         if (! anim.enabled)
@@ -244,7 +244,7 @@ private:
     void timerCallback() override
     {
         const auto& anim = ThemeEngine::getInstance().getAnimationConfig();
-        const bool isPixelGrid = (ThemeEngine::getInstance().getCurrentPalette().name == "Pixel Grid");
+        const bool isPixelGrid = (ThemeEngine::getInstance().getCurrentPalette().name == "Pixel Grid (Dark)");
 
         auto mode = anim.backgroundMode;
         if (! anim.enabled)

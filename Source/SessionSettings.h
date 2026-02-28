@@ -45,14 +45,14 @@ struct SessionSettings
   } parts;
 
     // Visual / UX
-    juce::String themeName { "Neon Rave" };
-    bool animationsEnabled = true;
-    bool bgCycleEnabled = true;
-    bool padPulseEnabled = true;
-    bool progressShimmerEnabled = true;
+    juce::String themeName { "Neon Rave (Dark)" };
+    bool animationsEnabled = false;
+    bool bgCycleEnabled = false;
+    bool padPulseEnabled = false;
+    bool progressShimmerEnabled = false;
     bool knobGlowEnabled = false;
     float animationSpeed = 1.0f;
-    int backgroundMode = 1; // 0=Static, 1=SlowCycle, 2=Reactive
+    int backgroundMode = 0; // 0=Static, 1=SlowCycle, 2=Reactive
 
   // Pad file paths (absolute). Index corresponds to pad/buffer index. Empty means no file.
   juce::StringArray padFilePaths { "", "", "", "", "", "", "", "" };

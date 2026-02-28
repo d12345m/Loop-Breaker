@@ -156,7 +156,7 @@ private:
     /** Quick check: is the current theme "Pixel Grid"? */
     static bool isPixelGridTheme()
     {
-        return ThemeEngine::getInstance().getCurrentPalette().name == "Pixel Grid";
+        return ThemeEngine::getInstance().getCurrentPalette().name == "Pixel Grid (Dark)";
     }
 
     juce::Typeface::Ptr displayBoldTypeface;

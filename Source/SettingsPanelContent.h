@@ -119,6 +119,20 @@ public:
 
     void themeChanged() override
     {
+        // Refresh label colours / fonts for the new theme
+        themeLabel.setColour (juce::Label::textColourId, Theme::text());
+        themeLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
+        speedLabel.setColour (juce::Label::textColourId, Theme::text());
+        speedLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
+        bgModeLabel.setColour (juce::Label::textColourId, Theme::text());
+        bgModeLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
+
+        // Refresh combo box colours
+        themeCombo.setColour (juce::ComboBox::backgroundColourId, Theme::panel());
+        themeCombo.setColour (juce::ComboBox::outlineColourId,    Theme::border());
+        themeCombo.setColour (juce::ComboBox::textColourId,       Theme::text());
+        themeCombo.setColour (juce::ComboBox::arrowColourId,      Theme::textSubtle());
+
         repaint();
     }
 

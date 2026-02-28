@@ -15,9 +15,11 @@
 #include <JuceHeader.h>
 #include "ThemeEngine.h"
 #include "ThemeFonts.h"
+#include <unordered_map>
 
 class ThemeLookAndFeel final : public juce::LookAndFeel_V4,
-                               public ThemeListener
+                               public ThemeListener,
+                               private juce::Timer
 {
 public:
     ThemeLookAndFeel()
@@ -175,7 +177,36 @@ public:
             g.fillEllipse (hx - 2.0f, hy - 2.0f, 4.0f, 4.0f);
         }
 
-        (void) slider;
+        // ── Knob glow on value change ────────────────────────────────────
+        const auto& animCfg = ThemeEngine::getInstance().getAnimationConfig();
+        if (animCfg.enabled && animCfg.knobGlowOnChange)
+        {
+            auto* sliderPtr = &slider;
+            auto& state = knobGlowStates[sliderPtr];
+
+            if (state.lastValue != sliderPosProportional)
+            {
+                state.lastValue = sliderPosProportional;
+                state.glowAlpha = 1.0f;
+
+                if (! isTimerRunning())
+                    startTimerHz (30);
+            }
+
+            if (state.glowAlpha > 0.0f)
+            {
+                const float glowRadius = radius + 4.0f;
+                g.setColour (palette.accent1.withAlpha (state.glowAlpha * 0.5f));
+                g.drawEllipse (centreX - glowRadius, centreY - glowRadius,
+                               glowRadius * 2.0f, glowRadius * 2.0f, 2.5f);
+
+                // Softer outer ring
+                const float outerGlow = radius + 7.0f;
+                g.setColour (palette.accent1.withAlpha (state.glowAlpha * 0.2f));
+                g.drawEllipse (centreX - outerGlow, centreY - outerGlow,
+                               outerGlow * 2.0f, outerGlow * 2.0f, 2.0f);
+            }
+        }
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -424,5 +455,42 @@ public:
     }
 
 private:
+    // ── Knob glow state tracking ─────────────────────────────────────
+    struct KnobGlowState
+    {
+        float lastValue = -1.0f;
+        float glowAlpha = 0.0f;
+    };
+
+    std::unordered_map<juce::Slider*, KnobGlowState> knobGlowStates;
+
+    void timerCallback() override
+    {
+        bool anyActive = false;
+        const float decayRate = 1.0f / 6.0f;  // fade over ~200ms at 30Hz
+
+        for (auto it = knobGlowStates.begin(); it != knobGlowStates.end(); )
+        {
+            auto& state = it->second;
+            if (state.glowAlpha > 0.0f)
+            {
+                state.glowAlpha -= decayRate;
+                if (state.glowAlpha < 0.01f)
+                    state.glowAlpha = 0.0f;
+
+                // Repaint the slider to show the fading glow
+                if (auto* comp = it->first)
+                    comp->repaint();
+
+                if (state.glowAlpha > 0.0f)
+                    anyActive = true;
+            }
+            ++it;
+        }
+
+        if (! anyActive)
+            stopTimer();
+    }
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ThemeLookAndFeel)
 };

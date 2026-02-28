@@ -209,8 +209,7 @@ public:
 
     void paint(juce::Graphics& g) override
     {
-        g.fillAll(Theme::bg());
-
+        // No opaque fill — BackgroundAnimator paints the background
         g.setColour(Theme::border());
         g.drawRect(getLocalBounds(), 1);
     }
@@ -607,7 +606,7 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
     setLookAndFeel(&editorLnf);
 
     tabComponent = std::make_unique<juce::TabbedComponent>(juce::TabbedButtonBar::TabsAtTop);
-    auto tabBg = Theme::bg().brighter(0.05f);
+    auto tabBg = juce::Colour (0x00000000);  // transparent — BackgroundAnimator shows through
     helpPanel = std::make_unique<HelpPanelContent>();
 
     tabComponent->addTab("Session",     tabBg, content.get(), false);
@@ -650,9 +649,9 @@ BufferTestAudioProcessorEditor::~BufferTestAudioProcessorEditor()
     setLookAndFeel(nullptr);
 }
 
-void BufferTestAudioProcessorEditor::paint (juce::Graphics& g)
+void BufferTestAudioProcessorEditor::paint (juce::Graphics&)
 {
-    g.fillAll(Theme::bg());
+    // No opaque fill — BackgroundAnimator paints the background
 }
 
 void BufferTestAudioProcessorEditor::resized()

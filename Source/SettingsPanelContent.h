@@ -139,7 +139,7 @@ public:
     void paint (juce::Graphics& g) override
     {
         const auto& palette = ThemeEngine::getInstance().getCurrentPalette();
-        g.fillAll (palette.bg);
+        // No opaque fill — BackgroundAnimator paints the background
 
         auto bounds = getLocalBounds().reduced (20, 16);
 

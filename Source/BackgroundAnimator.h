@@ -75,7 +75,7 @@ public:
         const bool isPixelGrid = (palette.name == "Pixel Grid");
 
         auto mode = anim.backgroundMode;
-        if (! anim.enabled || ! anim.backgroundColorCycle)
+        if (! anim.enabled)
             mode = BackgroundMode::Static;
 
         if (mode == BackgroundMode::Static)
@@ -232,7 +232,7 @@ private:
         const bool isPixelGrid = (ThemeEngine::getInstance().getCurrentPalette().name == "Pixel Grid");
 
         auto mode = anim.backgroundMode;
-        if (! anim.enabled || ! anim.backgroundColorCycle)
+        if (! anim.enabled)
             mode = BackgroundMode::Static;
 
         // Skip all work if the component isn't showing on screen (e.g. DAW hid the editor)

@@ -32,9 +32,9 @@ public:
         contentHolder.setSize(viewport.getWidth() - viewport.getScrollBarThickness(), contentHolder.getHeight());
     }
 
-    void paint(juce::Graphics& g) override
+    void paint(juce::Graphics&) override
     {
-        g.fillAll(Theme::bg());
+        // No opaque fill — BackgroundAnimator paints the background
     }
 
 private:
@@ -56,7 +56,7 @@ private:
     public:
         void paint(juce::Graphics& g) override
         {
-            g.fillAll(Theme::bg());
+            // No opaque fill — BackgroundAnimator paints the background
 
             const int padX = 28;
             int y = 20;

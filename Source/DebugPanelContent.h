@@ -58,9 +58,9 @@ public:
         });
     }
 
-    void paint(juce::Graphics& g) override
+    void paint(juce::Graphics&) override
     {
-        g.fillAll(Theme::bg());
+        // No opaque fill — BackgroundAnimator paints the background
     }
 
     void resized() override

@@ -588,6 +588,8 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
 
     settingsPanel = std::make_unique<SettingsPanelContent>(processor.getAppState().settings);
 
+    setLookAndFeel(&editorLnf);
+
     tabComponent = std::make_unique<juce::TabbedComponent>(juce::TabbedButtonBar::TabsAtTop);
     auto tabBg = Theme::bg().brighter(0.05f);
     helpPanel = std::make_unique<HelpPanelContent>();
@@ -624,7 +626,10 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
     setResizeLimits(920, 600, 2400, 1600);
 }
 
-BufferTestAudioProcessorEditor::~BufferTestAudioProcessorEditor() = default;
+BufferTestAudioProcessorEditor::~BufferTestAudioProcessorEditor()
+{
+    setLookAndFeel(nullptr);
+}
 
 void BufferTestAudioProcessorEditor::paint (juce::Graphics& g)
 {

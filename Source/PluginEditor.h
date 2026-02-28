@@ -2,6 +2,7 @@
 
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
+#include "ThemeLookAndFeel.h"
 
 class ModifierProbabilityPanel;
 class DebugPanelContent;
@@ -28,6 +29,8 @@ private:
     std::unique_ptr<DebugPanelContent> debugPanel;
     std::unique_ptr<HelpPanelContent> helpPanel;
     std::unique_ptr<juce::TabbedComponent> tabComponent;
+
+    ThemeLookAndFeel editorLnf;
 
     MOONBASE_DECLARE_AND_INIT_ACTIVATION_UI (processor);
 

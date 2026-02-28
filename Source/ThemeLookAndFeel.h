@@ -175,13 +175,6 @@ public:
             g.fillEllipse (hx - 2.0f, hy - 2.0f, 4.0f, 4.0f);
         }
 
-        // Indicator dot at arc endpoint
-        const float dotRadius = 3.5f;
-        const float dotX = centreX + radius * std::cos (angle);
-        const float dotY = centreY + radius * std::sin (angle);
-        g.setColour (palette.textPrimary);
-        g.fillEllipse (dotX - dotRadius, dotY - dotRadius, dotRadius * 2.0f, dotRadius * 2.0f);
-
         (void) slider;
     }
 

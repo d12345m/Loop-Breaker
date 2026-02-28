@@ -4,7 +4,7 @@
 #
 set -euo pipefail
 
-VST3_PATH="/Library/Audio/Plug-Ins/VST3/TestPlugin.vst3"
+VST3_PATH="/Library/Audio/Plug-Ins/VST3/LoopBreaker.vst3"
 PKG_ID="com.glowmachineaudio.LoopBreaker"
 
 echo "Loop Breaker Uninstaller"

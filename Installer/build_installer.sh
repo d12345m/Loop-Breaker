@@ -14,7 +14,7 @@ set -euo pipefail
 
 # ─── Configuration ────────────────────────────────────────────────────────────
 PLUGIN_NAME="Loop Breaker"
-PLUGIN_FILENAME="TestPlugin"                       # .vst3 bundle name
+PLUGIN_FILENAME="LoopBreaker"                      # .vst3 bundle name
 BUNDLE_ID="com.glowmachineaudio.LoopBreaker"
 COMPANY="GlowMachineAudio"
 VERSION="1.0.0"

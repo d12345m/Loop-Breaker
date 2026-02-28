@@ -1,24 +1,24 @@
 #!/bin/bash
 
-# TestPlugin - Build Script (VST3)
+# LoopBreaker - Build Script (VST3)
 # This script builds the VST3 plugin target.
 
 set -e  # Exit on any error
 
-echo "🔨 Building TestPlugin (VST3, Debug)..."
+echo "🔨 Building LoopBreaker (VST3, Debug)..."
 SCRIPT_DIR="$(dirname "$0")"
 cd "$SCRIPT_DIR/Builds/MacOSX"
 
-xcodebuild -project TestPlugin.xcodeproj -scheme "TestPlugin - VST3" -configuration Debug build -quiet || { echo "❌ Build failed!"; exit 1; }
+xcodebuild -project LoopBreaker.xcodeproj -scheme "LoopBreaker - VST3" -configuration Debug build -quiet || { echo "❌ Build failed!"; exit 1; }
 
-VST3_PATH="build/Debug/TestPlugin.vst3"
+VST3_PATH="build/Debug/LoopBreaker.vst3"
 if [ -d "$VST3_PATH" ]; then
     echo "✅ Built: $SCRIPT_DIR/Builds/MacOSX/$VST3_PATH"
 else
     echo "⚠️  Build succeeded but VST3 bundle not found at $VST3_PATH"
 fi
 
-INSTALLED="$HOME/Library/Audio/Plug-Ins/VST3/TestPlugin.vst3"
+INSTALLED="$HOME/Library/Audio/Plug-Ins/VST3/LoopBreaker.vst3"
 if [ -d "$INSTALLED" ]; then
     echo "✅ Installed: $INSTALLED"
 else

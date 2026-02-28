@@ -24,6 +24,8 @@ class PluginEditorContent final : public juce::Component,
                                  private juce::Timer
 {
 public:
+    BackgroundAnimator* bgAnimator = nullptr;
+
     explicit PluginEditorContent (BufferTestAudioProcessor& p,
                                   ModifierHistoryPanel* historyPanel = nullptr)
         : processor(p),
@@ -269,6 +271,11 @@ public:
             padGrid.flashPads(targets);
             if (! targets.isEmpty())
                 padGrid.clearSelections();
+
+            // Trigger reactive background pulse toward the theme accent
+            if (bgAnimator != nullptr)
+                bgAnimator->triggerReactivePulse (ThemeEngine::getInstance().getColor (ColorRole::Accent1));
+
             refreshStatus();
         });
     }
@@ -617,6 +624,9 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
     // Background animator (sits behind everything)
     backgroundAnimator = std::make_unique<BackgroundAnimator>();
     addAndMakeVisible(backgroundAnimator.get());
+
+    // Wire up reactive background pulse from modifier triggers
+    static_cast<PluginEditorContent*>(content.get())->bgAnimator = backgroundAnimator.get();
 
     addAndMakeVisible(tabComponent.get());
 

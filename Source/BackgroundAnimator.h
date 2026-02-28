@@ -91,10 +91,13 @@ public:
 
         if (mode == BackgroundMode::SlowCycle || mode == BackgroundMode::Reactive)
         {
-            // Rotate hue
+            // Rotate hue with boosted saturation/brightness so the effect is
+            // visible on the ultra-dark backgrounds used by all built-in themes.
             float h, s, b;
             baseBg.getHSB (h, s, b);
             h = std::fmod (h + hueOffset, 1.0f);
+            s = juce::jmax (s, 0.55f);
+            b = juce::jmax (b, 0.14f);
             baseBg = juce::Colour::fromHSV (h, s, b, baseBg.getFloatAlpha());
         }
 

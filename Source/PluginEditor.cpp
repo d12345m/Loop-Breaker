@@ -83,7 +83,9 @@ public:
             }
         }
         addAndMakeVisible(barsBetweenModifiersLabel);
-        barsBetweenModifiersLabel.attachToComponent(&barsBetweenModifiersSlider, true);
+        barsBetweenModifiersLabel.setJustificationType(juce::Justification::centred);
+        barsBetweenModifiersLabel.setColour(juce::Label::textColourId, Theme::textSubtle());
+        barsBetweenModifiersLabel.setFont(ThemeFonts::getInstance().controlLabelFont(12.0f));
 
         // Master volume knob
         addAndMakeVisible(masterVolumeSlider);
@@ -100,7 +102,7 @@ public:
         addAndMakeVisible(masterVolumeLabel);
         masterVolumeLabel.setJustificationType(juce::Justification::centred);
         masterVolumeLabel.setColour(juce::Label::textColourId, Theme::textSubtle());
-        masterVolumeLabel.setFont(ThemeFonts::getInstance().controlLabelFont(11.0f));
+        masterVolumeLabel.setFont(ThemeFonts::getInstance().controlLabelFont(13.0f));
 
         addAndMakeVisible(statusLabel);
         statusLabel.setJustificationType(juce::Justification::centredLeft);
@@ -216,9 +218,14 @@ public:
         modifierDisplay.setBounds(topBar.removeFromLeft(topBar.getWidth() * 0.5f).reduced(4));
 
         auto controlBar = topBar;
-        modifiersToggle.setBounds(controlBar.removeFromLeft(120).reduced(2));
-        partsCountBox.setBounds(controlBar.removeFromLeft(120).reduced(2));
-        barsBetweenModifiersSlider.setBounds(controlBar.removeFromLeft(220).reduced(2));
+        modifiersToggle.setBounds(controlBar.removeFromLeft(130).reduced(2));
+        partsCountBox.setBounds(controlBar.removeFromLeft(130).reduced(2));
+
+        // Bars/Mod: label above, slider below
+        auto barsRegion = controlBar.removeFromLeft(160).reduced(2);
+        auto barsLabelArea = barsRegion.removeFromTop(16);
+        barsBetweenModifiersLabel.setBounds(barsLabelArea);
+        barsBetweenModifiersSlider.setBounds(barsRegion);
 
         // Volume knob: place label above the knob within the same region
         auto volRegion = controlBar.removeFromRight(100).reduced(2);

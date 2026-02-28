@@ -39,7 +39,7 @@ public:
     juce::Font displayFont (float height) const
     {
         if (isPixelGridTheme())
-            return makeFont (pixelTypeface, height);
+            return makeFont (pixelTypeface, height * 0.6f);
         return makeFont (displayBoldTypeface, height);
     }
 
@@ -47,7 +47,7 @@ public:
     juce::Font headingFont (float height) const
     {
         if (isPixelGridTheme())
-            return makeFont (pixelTypeface, height);
+            return makeFont (pixelTypeface, height * 0.6f);
         return makeFont (displayBoldTypeface, height);
     }
 
@@ -67,7 +67,7 @@ public:
     juce::Font monoFont (float height) const
     {
         if (isPixelGridTheme())
-            return makeFont (pixelTypeface, height);
+            return makeFont (pixelTypeface, height * 0.6f);
         return makeFont (monoTypeface, height);
     }
 
@@ -75,7 +75,7 @@ public:
     juce::Font monoBoldFont (float height) const
     {
         if (isPixelGridTheme())
-            return makeFont (pixelTypeface, height);
+            return makeFont (pixelTypeface, height * 0.6f);
         return makeFont (monoTypeface, height).boldened();
     }
 
@@ -90,7 +90,7 @@ public:
     juce::Font controlLabelFont (float height) const
     {
         if (isPixelGridTheme())
-            return makeFont (pixelTypeface, juce::jmax (7.0f, height - 2.0f));
+            return makeFont (pixelTypeface, juce::jmax (7.0f, height * 0.6f));
         return juce::Font (juce::FontOptions().withHeight (height));
     }
 
@@ -98,7 +98,7 @@ public:
     juce::Font modifierNameFont (float height) const
     {
         if (isPixelGridTheme())
-            return makeFont (pixelTypeface, height);
+            return makeFont (pixelTypeface, height * 0.6f);
         return makeFont (displayBoldTypeface, height);
     }
 
@@ -106,7 +106,7 @@ public:
     juce::Font tabFont (float height) const
     {
         if (isPixelGridTheme())
-            return makeFont (pixelTypeface, juce::jmax (7.0f, height - 1.0f));
+            return makeFont (pixelTypeface, juce::jmax (7.0f, height * 0.55f));
         return makeFont (displayBoldTypeface, height);
     }
 

@@ -431,7 +431,7 @@ public:
             textCol = palette.textSecondary;
 
         g.setColour (textCol);
-        g.setFont (ThemeFonts::getInstance().tabFont (11.0f));
+        g.setFont (ThemeFonts::getInstance().tabFont (13.0f));
 
         auto textArea = bounds.reduced (4.0f, 0.0f).withTrimmedBottom (3.0f);
         g.drawText (button.getButtonText().toUpperCase(), textArea,
@@ -447,11 +447,16 @@ public:
 
     int getTabButtonBestWidth (juce::TabBarButton& button, int tabDepth) override
     {
-        auto f = ThemeFonts::getInstance().tabFont (11.0f);
+        auto f = ThemeFonts::getInstance().tabFont (13.0f);
         juce::GlyphArrangement glyphs;
         glyphs.addLineOfText (f, button.getButtonText().toUpperCase(), 0.0f, 0.0f);
         auto textWidth = (int) std::ceil (glyphs.getBoundingBox (0, -1, false).getWidth());
-        return textWidth + 28; // padding
+        return textWidth + 36; // padding
+    }
+
+    int getTabButtonOverlap (int tabDepth) override
+    {
+        return 0;
     }
 
 private:

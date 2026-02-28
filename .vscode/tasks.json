@@ -16,6 +16,15 @@
       "group": "build",
       "problemMatcher": ["$gcc"],
       "isBackground": false
+    },
+    {
+      "label": "Build macOS Installer",
+      "type": "shell",
+      "command": "bash Installer/build_installer.sh --skip-build",
+      "group": "build",
+      "problemMatcher": [],
+      "isBackground": false,
+      "dependsOn": "Build VST3 (Release)"
     }
   ]
 }

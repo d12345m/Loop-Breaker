@@ -74,7 +74,7 @@ static ThemePalette makeNeonRave()
     p.borderGlow    = hex (0x00E5FF);
 
     p.textPrimary   = hex (0xE8ECF0);
-    p.textSecondary = hex (0x7A8A9E);
+    p.textSecondary = hex (0x7C8CA0);
     p.textOnAccent  = hex (0x0A0E14);
 
     p.accent1       = hex (0x00E5FF);
@@ -115,7 +115,7 @@ static ThemePalette makeVintageEmber()
     p.borderGlow    = hex (0xFF8C00);
 
     p.textPrimary   = hex (0xF5E6D0);
-    p.textSecondary = hex (0xA08070);
+    p.textSecondary = hex (0xA78777);
     p.textOnAccent  = hex (0x1A0F0A);
 
     p.accent1       = hex (0xFF6B2B);
@@ -156,7 +156,7 @@ static ThemePalette makePixelGrid()
     p.borderGlow    = hex (0x33FF33);
 
     p.textPrimary   = hex (0x33FF33);
-    p.textSecondary = hex (0x1A8A1A);
+    p.textSecondary = hex (0x2E9E2E);
     p.textOnAccent  = hex (0x000000);
 
     p.accent1       = hex (0x33FF33);
@@ -197,7 +197,7 @@ static ThemePalette makeUltraviolet()
     p.borderGlow    = hex (0xBF40FF);
 
     p.textPrimary   = hex (0xE8DEFF);
-    p.textSecondary = hex (0x8A70B0);
+    p.textSecondary = hex (0x947ABA);
     p.textOnAccent  = hex (0x0C0618);
 
     p.accent1       = hex (0xBF40FF);
@@ -238,7 +238,7 @@ static ThemePalette makeStudioClean()
     p.borderGlow    = hex (0xFFFFFF);
 
     p.textPrimary   = hex (0xEBEBEB);
-    p.textSecondary = hex (0x999999);
+    p.textSecondary = hex (0x9C9C9C);
     p.textOnAccent  = hex (0x1E1E1E);
 
     p.accent1       = hex (0x5B9BD5);

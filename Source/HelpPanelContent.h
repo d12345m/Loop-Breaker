@@ -105,7 +105,7 @@ private:
                                    juce::Justification::centredLeft, true);
 
                         // Description
-                        g.setColour(Theme::text().withAlpha(0.7f));
+                        g.setColour(Theme::text().withAlpha(0.85f));
                         g.drawText(row.second, padX + keyColW, y, w - keyColW, rowH,
                                    juce::Justification::centredLeft, true);
 
@@ -118,15 +118,14 @@ private:
                 if (sec.body.isNotEmpty())
                 {
                     auto helpBodyFont = ThemeFonts::getInstance().bodyFont(13.5f);
+                    auto bodyColour = Theme::text().withAlpha(0.85f);
                     g.setFont(helpBodyFont);
-                    g.setColour(Theme::text().withAlpha(0.75f));
+                    g.setColour(bodyColour);
 
                     juce::AttributedString as;
                     as.setWordWrap(juce::AttributedString::byWord);
                     as.setJustification(juce::Justification::topLeft);
-                    as.setColour(Theme::text().withAlpha(0.75f));
-                    as.setFont(helpBodyFont);
-                    as.append(sec.body);
+                    as.append(sec.body, helpBodyFont, bodyColour);
 
                     juce::TextLayout tl;
                     tl.createLayout(as, (float) w);
@@ -167,7 +166,7 @@ private:
                 "4.  Watch the upcoming-modifier display in the Session tab header.  "
                 "When the bar counter reaches zero the modifier fires, "
                 "the pads flash, and the next modifier is randomly queued.\n\n"
-                "5.  Use the Modifiers tab to adjust how likely each modifier type is to appear.";
+                "5.  Use the Probability tab to adjust how likely each modifier type is to appear.";
             contentHolder.sections.push_back(s);
         }
 
@@ -224,10 +223,10 @@ private:
             contentHolder.sections.push_back(s);
         }
 
-        // ---- Modifiers tab ----
+        // ---- Probability tab ----
         {
             Section s;
-            s.heading = "Modifiers Tab";
+            s.heading = "Probability Tab";
             s.body =
                 "Each modifier type has a probability slider.  "
                 "Set a slider to 0 to completely disable that modifier.  "

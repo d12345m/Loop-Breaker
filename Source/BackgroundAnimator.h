@@ -104,12 +104,17 @@ public:
         }
 
         // Use cached image to avoid full repaint overhead
-        if (cachedBg.isNull() || cachedBg.getWidth() != bounds.getWidth()
-            || cachedBg.getHeight() != bounds.getHeight()
-            || cachedBgColour != baseBg)
+        const bool needsResize = cachedBg.isNull()
+                                 || cachedBg.getWidth()  != bounds.getWidth()
+                                 || cachedBg.getHeight() != bounds.getHeight();
+
+        if (needsResize || cachedBgColour != baseBg)
         {
-            cachedBg = juce::Image (juce::Image::ARGB, juce::jmax (1, bounds.getWidth()),
-                                    juce::jmax (1, bounds.getHeight()), true);
+            // Only allocate when the size changes; otherwise reuse the buffer
+            if (needsResize)
+                cachedBg = juce::Image (juce::Image::ARGB, juce::jmax (1, bounds.getWidth()),
+                                        juce::jmax (1, bounds.getHeight()), false);
+
             juce::Graphics ig (cachedBg);
 
             ig.setColour (baseBg);
@@ -227,6 +232,10 @@ private:
         if (! anim.enabled || ! anim.backgroundColorCycle)
             mode = BackgroundMode::Static;
 
+        // Skip all work if the component isn't showing on screen (e.g. DAW hid the editor)
+        if (! isShowing())
+            return;
+
         bool needsRepaint = false;
 
         if (mode != BackgroundMode::Static)
@@ -240,7 +249,9 @@ private:
             // Tick reactive decay
             reactiveDecay.tick (dt);
 
-            cachedBg = {};   // invalidate — colour changed
+            // Invalidate cached colour so paint() regenerates into the
+            // existing image buffer (avoids reallocating ~1.9 MB per frame).
+            cachedBgColour = juce::Colour();
             needsRepaint = true;
         }
 

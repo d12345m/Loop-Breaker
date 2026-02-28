@@ -459,6 +459,49 @@ public:
         return 0;
     }
 
+    // ──────────────────────────────────────────────────────────────────────
+    //  Font overrides — ensure all JUCE components use ThemeFonts
+    // ──────────────────────────────────────────────────────────────────────
+
+    juce::Font getComboBoxFont (juce::ComboBox& box) override
+    {
+        return ThemeFonts::getInstance().controlLabelFont (juce::jmin (16.0f, (float) box.getHeight() * 0.75f));
+    }
+
+    juce::Font getPopupMenuFont() override
+    {
+        return ThemeFonts::getInstance().controlLabelFont (14.0f);
+    }
+
+    juce::Font getLabelFont (juce::Label& label) override
+    {
+        return ThemeFonts::getInstance().controlLabelFont (juce::jmin (16.0f, label.getFont().getHeight()));
+    }
+
+    juce::Font getSliderPopupFont (juce::Slider&) override
+    {
+        return ThemeFonts::getInstance().monoFont (13.0f);
+    }
+
+    juce::Font getTextButtonFont (juce::TextButton&, int buttonHeight) override
+    {
+        return ThemeFonts::getInstance().controlLabelFont (juce::jmin (16.0f, (float) buttonHeight * 0.65f));
+    }
+
+    juce::Slider::SliderLayout getSliderLayout (juce::Slider& slider) override
+    {
+        auto layout = juce::LookAndFeel_V4::getSliderLayout (slider);
+        // Ensure the text box label uses our themed font
+        return layout;
+    }
+
+    juce::Label* createSliderTextBox (juce::Slider& slider) override
+    {
+        auto* label = juce::LookAndFeel_V4::createSliderTextBox (slider);
+        label->setFont (ThemeFonts::getInstance().monoFont (13.0f));
+        return label;
+    }
+
 private:
     // ── Knob glow state tracking ─────────────────────────────────────
     struct KnobGlowState

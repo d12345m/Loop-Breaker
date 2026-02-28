@@ -54,12 +54,16 @@ public:
     /** Body / label font — System sans-serif (no bundled override needed). */
     juce::Font bodyFont (float height) const
     {
+        if (isPixelGridTheme())
+            return makeFont (pixelTypeface, height * 0.6f);
         return juce::Font (juce::FontOptions().withHeight (height));
     }
 
     /** Bold body font. */
     juce::Font bodyBoldFont (float height) const
     {
+        if (isPixelGridTheme())
+            return makeFont (pixelTypeface, height * 0.6f);
         return juce::Font (juce::FontOptions().withHeight (height)).boldened();
     }
 

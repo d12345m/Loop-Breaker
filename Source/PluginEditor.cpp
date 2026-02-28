@@ -107,10 +107,12 @@ public:
         addAndMakeVisible(statusLabel);
         statusLabel.setJustificationType(juce::Justification::centredLeft);
         statusLabel.setColour(juce::Label::textColourId, Theme::textSubtle());
+        statusLabel.setFont(ThemeFonts::getInstance().monoFont(13.0f));
 
         addAndMakeVisible(hostTransportLabel);
         hostTransportLabel.setJustificationType(juce::Justification::centredRight);
         hostTransportLabel.setColour(juce::Label::textColourId, Theme::textSubtle());
+        hostTransportLabel.setFont(ThemeFonts::getInstance().monoFont(13.0f));
 
         padGrid.setAudioFormatManager(&processor.getFormatManager());
         attachPadCallbacks();

@@ -30,6 +30,7 @@ public:
         addAndMakeVisible (themeLabel);
         themeLabel.setText ("Theme", juce::dontSendNotification);
         themeLabel.setJustificationType (juce::Justification::centredRight);
+        themeLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
 
         addAndMakeVisible (themeCombo);
         auto themes = ThemeEngine::getInstance().getAvailableThemeNames();
@@ -77,6 +78,7 @@ public:
         addAndMakeVisible (speedLabel);
         speedLabel.setText ("Animation Speed", juce::dontSendNotification);
         speedLabel.setJustificationType (juce::Justification::centredRight);
+        speedLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
 
         addAndMakeVisible (speedSlider);
         speedSlider.setRange (0.25, 2.0, 0.05);
@@ -90,6 +92,7 @@ public:
         addAndMakeVisible (bgModeLabel);
         bgModeLabel.setText ("Background Mode", juce::dontSendNotification);
         bgModeLabel.setJustificationType (juce::Justification::centredRight);
+        bgModeLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
 
         for (int i = 0; i < 3; ++i)
         {

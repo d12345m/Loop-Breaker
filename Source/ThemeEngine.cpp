@@ -265,6 +265,254 @@ static ThemePalette makeStudioClean()
     return p;
 }
 
+// ─── Light mode themes ───────────────────────────────────────────────────────
+
+static ThemePalette makeDaylight()
+{
+    ThemePalette p;
+    p.name          = "Daylight";
+
+    p.bg            = hex (0xF5F5F5);
+    p.bgAlt         = hex (0xEBEBEB);
+    p.panel         = hex (0xFFFFFF);
+    p.panelAlt      = hex (0xF0F0F0);
+
+    p.border        = hex (0xD4D4D4);
+    p.borderGlow    = hex (0x0078D4);
+
+    p.textPrimary   = hex (0x1A1A1A);
+    p.textSecondary = hex (0x666666);
+    p.textOnAccent  = hex (0xFFFFFF);
+
+    p.accent1       = hex (0x0078D4);
+    p.accent2       = hex (0x00A58E);
+    p.accent3       = hex (0xD4380D);
+
+    p.good          = hex (0x388A34);
+    p.warn          = hex (0xB46C00);
+    p.bad           = hex (0xC52317);
+
+    p.knobFill      = hex (0x0078D4);
+    p.knobTrack     = hex (0xD6D6D6);
+    p.waveformFill  = hex (0x0098FF);
+    p.playhead      = hex (0x0078D4);
+
+    p.padEmpty      = hex (0xEBEBEB);
+    p.padLoaded     = hex (0xF0F0F0);
+    p.padSelected   = hexA (0x0078D4, 0.18f);
+    p.padPlaying    = hex (0x0078D4);
+
+    p.glowIntensity = 0.1f;
+    p.borderRadius  = 4.0f;
+
+    return p;
+}
+
+static ThemePalette makeWarmPaper()
+{
+    ThemePalette p;
+    p.name          = "Warm Paper";
+
+    p.bg            = hex (0xF7F3EE);
+    p.bgAlt         = hex (0xEDE8E0);
+    p.panel         = hex (0xFFFDF8);
+    p.panelAlt      = hex (0xF5F0E8);
+
+    p.border        = hex (0xD6C8B8);
+    p.borderGlow    = hex (0xB07040);
+
+    p.textPrimary   = hex (0x2C1E14);
+    p.textSecondary = hex (0x8A7060);
+    p.textOnAccent  = hex (0xFFFDF8);
+
+    p.accent1       = hex (0xC06030);
+    p.accent2       = hex (0x3A7A55);
+    p.accent3       = hex (0x6050A0);
+
+    p.good          = hex (0x3A7A55);
+    p.warn          = hex (0xB07020);
+    p.bad           = hex (0xA03030);
+
+    p.knobFill      = hex (0xC06030);
+    p.knobTrack     = hex (0xD6C8B8);
+    p.waveformFill  = hex (0xC07040);
+    p.playhead      = hex (0xC06030);
+
+    p.padEmpty      = hex (0xEDE8E0);
+    p.padLoaded     = hex (0xF5F0E8);
+    p.padSelected   = hexA (0xC06030, 0.15f);
+    p.padPlaying    = hex (0xC06030);
+
+    p.glowIntensity = 0.0f;
+    p.borderRadius  = 5.0f;
+
+    return p;
+}
+
+static ThemePalette makeArcticSky()
+{
+    ThemePalette p;
+    p.name          = "Arctic Sky";
+
+    p.bg            = hex (0xEFF4FB);
+    p.bgAlt         = hex (0xE2EBF5);
+    p.panel         = hex (0xFAFCFF);
+    p.panelAlt      = hex (0xEEF3FA);
+
+    p.border        = hex (0xC2D0E8);
+    p.borderGlow    = hex (0x2D7DD2);
+
+    p.textPrimary   = hex (0x1A2535);
+    p.textSecondary = hex (0x5A7095);
+    p.textOnAccent  = hex (0xFFFFFF);
+
+    p.accent1       = hex (0x2D7DD2);
+    p.accent2       = hex (0x1AAEAC);
+    p.accent3       = hex (0xE85D4A);
+
+    p.good          = hex (0x2E8B57);
+    p.warn          = hex (0xD97C0A);
+    p.bad           = hex (0xE85D4A);
+
+    p.knobFill      = hex (0x2D7DD2);
+    p.knobTrack     = hex (0xC2D0E8);
+    p.waveformFill  = hex (0x1AAEAC);
+    p.playhead      = hex (0x2D7DD2);
+
+    p.padEmpty      = hex (0xE2EBF5);
+    p.padLoaded     = hex (0xEEF3FA);
+    p.padSelected   = hexA (0x2D7DD2, 0.15f);
+    p.padPlaying    = hex (0x2D7DD2);
+
+    p.glowIntensity = 0.15f;
+    p.borderRadius  = 6.0f;
+
+    return p;
+}
+
+static ThemePalette makeIvory()
+{
+    ThemePalette p;
+    p.name          = "Ivory";
+
+    p.bg            = hex (0xFAF9F6);   // faintly warm off-white
+    p.bgAlt         = hex (0xF3F1ED);
+    p.panel         = hex (0xFFFEFC);
+    p.panelAlt      = hex (0xF5F4F0);
+
+    p.border        = hex (0xDDDAD4);
+    p.borderGlow    = hex (0x5C7CFA);
+
+    p.textPrimary   = hex (0x1C1C1A);
+    p.textSecondary = hex (0x7A7670);
+    p.textOnAccent  = hex (0xFFFFFF);
+
+    p.accent1       = hex (0x5C7CFA);   // periwinkle blue
+    p.accent2       = hex (0x12B886);   // teal-green
+    p.accent3       = hex (0xF76707);   // warm orange
+
+    p.good          = hex (0x2F9E44);
+    p.warn          = hex (0xE67700);
+    p.bad           = hex (0xC92A2A);
+
+    p.knobFill      = hex (0x5C7CFA);
+    p.knobTrack     = hex (0xDDDAD4);
+    p.waveformFill  = hex (0x5C7CFA);
+    p.playhead      = hex (0xF76707);
+
+    p.padEmpty      = hex (0xF3F1ED);
+    p.padLoaded     = hex (0xF5F4F0);
+    p.padSelected   = hexA (0x5C7CFA, 0.15f);
+    p.padPlaying    = hex (0x5C7CFA);
+
+    p.glowIntensity = 0.0f;
+    p.borderRadius  = 5.0f;
+
+    return p;
+}
+
+static ThemePalette makeSilver()
+{
+    ThemePalette p;
+    p.name          = "Silver";
+
+    p.bg            = hex (0xE8EAED);   // cool silver-grey
+    p.bgAlt         = hex (0xDDE0E4);
+    p.panel         = hex (0xF2F3F5);
+    p.panelAlt      = hex (0xE2E5E9);
+
+    p.border        = hex (0xBEC3CB);
+    p.borderGlow    = hex (0x7B93B5);
+
+    p.textPrimary   = hex (0x1E2430);
+    p.textSecondary = hex (0x5A6680);
+    p.textOnAccent  = hex (0xFFFFFF);
+
+    p.accent1       = hex (0x4A72A8);   // steel blue
+    p.accent2       = hex (0x3D9970);   // sage green
+    p.accent3       = hex (0xA0527A);   // muted rose
+
+    p.good          = hex (0x3D9970);
+    p.warn          = hex (0xB8860B);
+    p.bad           = hex (0xA0404A);
+
+    p.knobFill      = hex (0x4A72A8);
+    p.knobTrack     = hex (0xBEC3CB);
+    p.waveformFill  = hex (0x6690BE);
+    p.playhead      = hex (0x4A72A8);
+
+    p.padEmpty      = hex (0xDDE0E4);
+    p.padLoaded     = hex (0xE8EAED);
+    p.padSelected   = hexA (0x4A72A8, 0.18f);
+    p.padPlaying    = hex (0x4A72A8);
+
+    p.glowIntensity = 0.05f;
+    p.borderRadius  = 4.0f;
+
+    return p;
+}
+
+static ThemePalette makeGruvbox()
+{
+    ThemePalette p;
+    p.name          = "Gruvbox";
+
+    p.bg            = hex (0x282828);
+    p.bgAlt         = hex (0x1D2021);
+    p.panel         = hex (0x3C3836);
+    p.panelAlt      = hex (0x504945);
+
+    p.border        = hex (0x665C54);
+    p.borderGlow    = hex (0xFE8019);   // bright orange
+
+    p.textPrimary   = hex (0xEBDBB2);   // cream fg
+    p.textSecondary = hex (0xA89984);   // grey fg4
+    p.textOnAccent  = hex (0x282828);
+
+    p.accent1       = hex (0xFE8019);   // bright orange
+    p.accent2       = hex (0x8EC07C);   // bright aqua
+    p.accent3       = hex (0xD3869B);   // bright purple
+
+    p.good          = hex (0xB8BB26);   // bright green
+    p.warn          = hex (0xFABD2F);   // bright yellow
+    p.bad           = hex (0xFB4934);   // bright red
+
+    p.knobFill      = hex (0xFE8019);
+    p.knobTrack     = hex (0x504945);
+    p.waveformFill  = hex (0x83A598);   // bright blue
+    p.playhead      = hex (0xFABD2F);
+
+    p.padEmpty      = hex (0x1D2021);
+    p.padLoaded     = hex (0x3C3836);
+    p.padSelected   = hexA (0xFE8019, 0.18f);
+    p.padPlaying    = hex (0xB8BB26);
+
+    p.glowIntensity = 0.2f;
+    p.borderRadius  = 3.0f;
+
+    return p;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  ThemeEngine implementation
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -277,6 +525,16 @@ ThemeEngine::ThemeEngine()
     builtInPalettes.push_back (makePixelGrid());
     builtInPalettes.push_back (makeUltraviolet());
     builtInPalettes.push_back (makeStudioClean());
+
+    // Light mode themes
+    builtInPalettes.push_back (makeDaylight());
+    builtInPalettes.push_back (makeWarmPaper());
+    builtInPalettes.push_back (makeArcticSky());
+    builtInPalettes.push_back (makeIvory());
+    builtInPalettes.push_back (makeSilver());
+
+    // IDE-inspired
+    builtInPalettes.push_back (makeGruvbox());
 
     // Default to Neon Rave
     currentPalette = builtInPalettes.front();

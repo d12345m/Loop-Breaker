@@ -260,6 +260,10 @@ private:
             case 1: cfg.backgroundMode = BackgroundMode::SlowCycle; break;
             case 2: cfg.backgroundMode = BackgroundMode::Reactive;  break;
         }
+
+        // Force full repaint so buttons and background update immediately
+        if (auto* topLevel = getTopLevelComponent())
+            topLevel->repaint();
     }
 
     SessionSettings& settings;

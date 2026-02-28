@@ -91,13 +91,28 @@ public:
 
         if (mode == BackgroundMode::SlowCycle || mode == BackgroundMode::Reactive)
         {
-            // Rotate hue with boosted saturation/brightness so the effect is
-            // visible on the ultra-dark backgrounds used by all built-in themes.
+            // Rotate hue — scale the effect based on background brightness.
+            // Dark themes need boosted saturation to see any change;
+            // light themes should stay subtle (just a gentle tint).
             float h, s, b;
             baseBg.getHSB (h, s, b);
+
+            const bool isLight = (b > 0.5f);
             h = std::fmod (h + hueOffset, 1.0f);
-            s = juce::jmax (s, 0.55f);
-            b = juce::jmax (b, 0.14f);
+
+            if (isLight)
+            {
+                // Light themes: gentle tint — low saturation, preserve brightness
+                s = juce::jlimit (0.0f, 0.12f, s + 0.06f);
+                // b stays as-is (already bright)
+            }
+            else
+            {
+                // Dark themes: boost saturation so the shift is visible
+                s = juce::jmax (s, 0.55f);
+                b = juce::jmax (b, 0.14f);
+            }
+
             baseBg = juce::Colour::fromHSV (h, s, b, baseBg.getFloatAlpha());
         }
 

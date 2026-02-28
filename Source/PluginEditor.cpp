@@ -21,6 +21,7 @@ namespace
 
 class PluginEditorContent final : public juce::Component,
                                  public ModifierSchedulerListener,
+                                 public ThemeListener,
                                  private juce::Timer
 {
 public:
@@ -33,6 +34,7 @@ public:
           externalModifierHistory(historyPanel)
     {
         setLookAndFeel(&hipLnf);
+        ThemeEngine::getInstance().addListener(this);
 
         addAndMakeVisible(modifierDisplay);
         addAndMakeVisible(padGrid);
@@ -53,10 +55,6 @@ public:
             partsCountBox.setSelectedId(initialParts, juce::dontSendNotification);
         }
         partsCountBox.onChange = [this]{ partsCountChanged(); };
-        partsCountBox.setColour(juce::ComboBox::backgroundColourId, Theme::panel());
-        partsCountBox.setColour(juce::ComboBox::outlineColourId, Theme::border());
-        partsCountBox.setColour(juce::ComboBox::textColourId, Theme::text());
-        partsCountBox.setColour(juce::ComboBox::arrowColourId, Theme::textSubtle());
 
         // Bars between modifiers slider
         addAndMakeVisible(barsBetweenModifiersSlider);
@@ -65,55 +63,26 @@ public:
         barsBetweenModifiersSlider.onValueChange = [this]{ barsBetweenModifiersChanged(); };
         barsBetweenModifiersSlider.setSliderStyle(juce::Slider::LinearBar);
         barsBetweenModifiersSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 44, 20);
-        // Make the bar itself readable (separate colours for track vs background).
-        barsBetweenModifiersSlider.setColour(juce::Slider::backgroundColourId, Theme::panelAlt());
-        barsBetweenModifiersSlider.setColour(juce::Slider::trackColourId, Theme::warn());
-        barsBetweenModifiersSlider.setColour(juce::Slider::thumbColourId, Theme::warn().brighter(0.2f));
-        // Improve readability: blue textbox background with white text.
-        barsBetweenModifiersSlider.setColour(juce::Slider::textBoxBackgroundColourId, Theme::accent());
-        barsBetweenModifiersSlider.setColour(juce::Slider::textBoxTextColourId, Theme::text());
-        barsBetweenModifiersSlider.setColour(juce::Slider::textBoxOutlineColourId, Theme::accent().darker(0.35f));
-        // Some LookAndFeels/styles end up with a transparent child Label; force it opaque.
-        for (int i = 0; i < barsBetweenModifiersSlider.getNumChildComponents(); ++i)
-        {
-            if (auto* label = dynamic_cast<juce::Label*>(barsBetweenModifiersSlider.getChildComponent(i)))
-            {
-                label->setColour(juce::Label::backgroundColourId, Theme::accent());
-                label->setColour(juce::Label::textColourId, Theme::text());
-                label->setColour(juce::Label::outlineColourId, Theme::accent().darker(0.35f));
-                label->setOpaque(true);
-            }
-        }
         addAndMakeVisible(barsBetweenModifiersLabel);
         barsBetweenModifiersLabel.setJustificationType(juce::Justification::centred);
-        barsBetweenModifiersLabel.setColour(juce::Label::textColourId, Theme::textSubtle());
         barsBetweenModifiersLabel.setFont(ThemeFonts::getInstance().controlLabelFont(12.0f));
 
         // Master volume knob
         addAndMakeVisible(masterVolumeSlider);
         masterVolumeSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
         masterVolumeSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 54, 16);
-        masterVolumeSlider.setColour(juce::Slider::rotarySliderFillColourId, Theme::accent());
-        masterVolumeSlider.setColour(juce::Slider::rotarySliderOutlineColourId, Theme::panelAlt());
-        masterVolumeSlider.setColour(juce::Slider::thumbColourId, Theme::accent().brighter(0.2f));
-        masterVolumeSlider.setColour(juce::Slider::textBoxBackgroundColourId, Theme::panelAlt());
-        masterVolumeSlider.setColour(juce::Slider::textBoxTextColourId, Theme::text());
-        masterVolumeSlider.setColour(juce::Slider::textBoxOutlineColourId, Theme::border());
         masterVolumeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
             processor.getAPVTS(), "masterVolume", masterVolumeSlider);
         addAndMakeVisible(masterVolumeLabel);
         masterVolumeLabel.setJustificationType(juce::Justification::centred);
-        masterVolumeLabel.setColour(juce::Label::textColourId, Theme::textSubtle());
         masterVolumeLabel.setFont(ThemeFonts::getInstance().controlLabelFont(13.0f));
 
         addAndMakeVisible(statusLabel);
         statusLabel.setJustificationType(juce::Justification::centredLeft);
-        statusLabel.setColour(juce::Label::textColourId, Theme::textSubtle());
         statusLabel.setFont(ThemeFonts::getInstance().monoFont(13.0f));
 
         addAndMakeVisible(hostTransportLabel);
         hostTransportLabel.setJustificationType(juce::Justification::centredRight);
-        hostTransportLabel.setColour(juce::Label::textColourId, Theme::textSubtle());
         hostTransportLabel.setFont(ThemeFonts::getInstance().monoFont(13.0f));
 
         padGrid.setAudioFormatManager(&processor.getFormatManager());
@@ -197,14 +166,22 @@ public:
 
         refreshStatus();
         refreshHostTransportReadout();
+        applyThemeColors();
         startTimerHz(20); // 50ms UI refresh - lower overhead
     }
 
     ~PluginEditorContent() override
     {
         stopTimer();
+        ThemeEngine::getInstance().removeListener(this);
         app.scheduler.removeListener(this);
         setLookAndFeel(nullptr);
+    }
+
+    void themeChanged() override
+    {
+        applyThemeColors();
+        repaint();
     }
 
     void paint(juce::Graphics& g) override
@@ -306,6 +283,53 @@ private:
     std::unique_ptr<juce::FileChooser> fileChooser;
 
     bool padPathsSynced = false; // true once pad file paths have been synced to the UI after state restore
+
+    void applyThemeColors()
+    {
+        // Parts combo box
+        partsCountBox.setColour(juce::ComboBox::backgroundColourId, Theme::panel());
+        partsCountBox.setColour(juce::ComboBox::outlineColourId,    Theme::border());
+        partsCountBox.setColour(juce::ComboBox::textColourId,       Theme::text());
+        partsCountBox.setColour(juce::ComboBox::arrowColourId,      Theme::textSubtle());
+        partsCountBox.repaint();
+
+        // Bars/Mod slider
+        barsBetweenModifiersSlider.setColour(juce::Slider::backgroundColourId,        Theme::panelAlt());
+        barsBetweenModifiersSlider.setColour(juce::Slider::trackColourId,             Theme::warn());
+        barsBetweenModifiersSlider.setColour(juce::Slider::thumbColourId,             Theme::warn().brighter(0.2f));
+        barsBetweenModifiersSlider.setColour(juce::Slider::textBoxBackgroundColourId, Theme::accent());
+        barsBetweenModifiersSlider.setColour(juce::Slider::textBoxTextColourId,       Theme::text());
+        barsBetweenModifiersSlider.setColour(juce::Slider::textBoxOutlineColourId,    Theme::accent().darker(0.35f));
+        for (int i = 0; i < barsBetweenModifiersSlider.getNumChildComponents(); ++i)
+        {
+            if (auto* label = dynamic_cast<juce::Label*>(barsBetweenModifiersSlider.getChildComponent(i)))
+            {
+                label->setColour(juce::Label::backgroundColourId, Theme::accent());
+                label->setColour(juce::Label::textColourId,       Theme::text());
+                label->setColour(juce::Label::outlineColourId,    Theme::accent().darker(0.35f));
+                label->setOpaque(true);
+                label->repaint();
+            }
+        }
+        barsBetweenModifiersSlider.repaint();
+
+        barsBetweenModifiersLabel.setColour(juce::Label::textColourId, Theme::textSubtle());
+
+        // Master volume knob
+        masterVolumeSlider.setColour(juce::Slider::rotarySliderFillColourId, Theme::accent());
+        masterVolumeSlider.setColour(juce::Slider::rotarySliderOutlineColourId, Theme::panelAlt());
+        masterVolumeSlider.setColour(juce::Slider::thumbColourId, Theme::accent().brighter(0.2f));
+        masterVolumeSlider.setColour(juce::Slider::textBoxBackgroundColourId, Theme::panelAlt());
+        masterVolumeSlider.setColour(juce::Slider::textBoxTextColourId, Theme::text());
+        masterVolumeSlider.setColour(juce::Slider::textBoxOutlineColourId, Theme::border());
+        masterVolumeSlider.repaint();
+
+        masterVolumeLabel.setColour(juce::Label::textColourId, Theme::textSubtle());
+
+        // Status / transport labels
+        statusLabel.setColour(juce::Label::textColourId, Theme::textSubtle());
+        hostTransportLabel.setColour(juce::Label::textColourId, Theme::textSubtle());
+    }
 
     void refreshHostTransportReadout()
     {

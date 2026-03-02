@@ -13,19 +13,21 @@ Add the ability for the user to **capture the current modifier states across all
 Modifier state is currently distributed across two layers per buffer (×8 buffers):
 
 ### Per-Buffer: `AudioBuffer` transform state
-| Field | Type | Default |
-|---|---|---|
-| `speed` | `double` | `1.0` |
-| `stretchRatio` | `double` | `1.0` |
-| `pitchSemiTones` | `double` | `0.0` |
-| `continuousRandomSlicing` | `bool` | `false` |
-| `pingPongEnabled` | `bool` | `false` |
-| `pingPongDivision` | `double` | `0.25` |
+
+| Field                     | Type     | Default |
+| ------------------------- | -------- | ------- |
+| `speed`                   | `double` | `1.0`   |
+| `stretchRatio`            | `double` | `1.0`   |
+| `pitchSemiTones`          | `double` | `0.0`   |
+| `continuousRandomSlicing` | `bool`   | `false` |
+| `pingPongEnabled`         | `bool`   | `false` |
+| `pingPongDivision`        | `double` | `0.25`  |
 
 ### Per-Buffer: `ChannelStrip` FX state
-| Field | Type | Default |
-|---|---|---|
-| **Enable flags** (`EffectChainPlaceholder`): `delayEnabled`, `reverbEnabled`, `lowPassEnabled`, `highPassEnabled`, `tremoloEnabled`, `chorusEnabled`, `autoPanEnabled`, `volumeRampEnabled` | `bool` | `false` |
+
+| Field                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Type           | Default          |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- | ---------------- |
+| **Enable flags** (`EffectChainPlaceholder`): `delayEnabled`, `reverbEnabled`, `lowPassEnabled`, `highPassEnabled`, `tremoloEnabled`, `chorusEnabled`, `autoPanEnabled`, `volumeRampEnabled`                                                                                                                                                                                                                                                                                                                                                     | `bool`         | `false`          |
 | **FX params** (`FxParams`): `reverbWet`, `reverbPreDelayMs`, `delayFeedback`, `delayTimeMs`, `delayWet`, `delayPingPong`, `delayFeedbackHighCutHz`, `delayFbDrive`, `duckingEnabled`, `duckAmount`, `duckReleaseMs`, `wowFlutterEnabled`, `wowDepthMs`, `wowRateHz`, `flutterDepthMs`, `flutterRateHz`, `wowPeriodBars`, `flutterPeriodBars`, `lowPassCutoff`, `highPassCutoff`, `tremoloDepth`, `tremoloRateHz`, `chorusDepth`, `chorusRateHz`, `chorusMix`, `chorusDelayMs`, `panRateHz`, `panDepth`, `panMix`, `panPeriodBars`, `volumeGain` | `float`/`bool` | see `FxParams{}` |
 
 **Total per preset:** 8 × (6 AudioBuffer fields + 8 FX enable flags + ~31 FxParams fields) ≈ **360 values**.
@@ -34,16 +36,16 @@ Modifier state is currently distributed across two layers per buffer (×8 buffer
 
 ## Effort Assessment
 
-| Area | Scope | Estimate |
-|---|---|---|
-| New data structures (`BufferSnapshot`, `ModifierPreset`, `PresetBank`) | Small – plain structs + serialization | ~150 LOC |
-| Capture/restore logic in `AppState` | Medium – read/write across AudioBuffer + ChannelStrip | ~120 LOC |
-| Session tab UI (4 buttons + layout) | Medium – new `PresetBarComponent` | ~200 LOC |
-| MIDI control (note map, learn, process) | Medium – follows existing pattern exactly | ~120 LOC |
-| Right-click context menu | Small – reuse `showModifierToggleContextMenu` pattern | ~60 LOC |
-| State serialization (`getStateInformation` / `setStateInformation`) | Medium – JSON array of 4 preset snapshots | ~100 LOC |
-| Help tab documentation | Small – add section + table rows | ~30 LOC |
-| **Total** | | **~780 LOC** |
+| Area                                                                   | Scope                                                 | Estimate     |
+| ---------------------------------------------------------------------- | ----------------------------------------------------- | ------------ |
+| New data structures (`BufferSnapshot`, `ModifierPreset`, `PresetBank`) | Small – plain structs + serialization                 | ~150 LOC     |
+| Capture/restore logic in `AppState`                                    | Medium – read/write across AudioBuffer + ChannelStrip | ~120 LOC     |
+| Session tab UI (4 buttons + layout)                                    | Medium – new `PresetBarComponent`                     | ~200 LOC     |
+| MIDI control (note map, learn, process)                                | Medium – follows existing pattern exactly             | ~120 LOC     |
+| Right-click context menu                                               | Small – reuse `showModifierToggleContextMenu` pattern | ~60 LOC      |
+| State serialization (`getStateInformation` / `setStateInformation`)    | Medium – JSON array of 4 preset snapshots             | ~100 LOC     |
+| Help tab documentation                                                 | Small – add section + table rows                      | ~30 LOC      |
+| **Total**                                                              |                                                       | **~780 LOC** |
 
 **Complexity:** Moderate. No new architectural patterns needed – every subsystem (MIDI learn, context menus, state serialization, timer-based UI polling) has an existing exemplar to follow.
 
@@ -109,6 +111,7 @@ Follow the established pattern for `modifierToggleMidiNote`:
 ### 6. State Serialization (`PluginProcessor.cpp`)
 
 **`getStateInformation()`** – add:
+
 ```json
 {
   "presets": [
@@ -135,13 +138,13 @@ Follow the established pattern for `modifierToggleMidiNote`:
 
 Add rows to the **"Session Tab Controls"** section table:
 
-| Control | Description |
-|---|---|
-| Preset A–D buttons | Click to recall a saved modifier snapshot. Right-click for save/clear/MIDI options. |
-| Save Preset | Right-click a preset button → "Save to Preset" to capture the current modifier states of all 8 pads. |
-| Recall Preset | Click a filled preset button (or trigger via MIDI) to instantly restore all modifier states. |
-| Clear Preset | Right-click → "Clear Preset" to remove the saved snapshot. |
-| Preset MIDI Learn | Right-click → "MIDI Learn", then send a note to assign. "Clear MIDI Note" to remove. |
+| Control            | Description                                                                                          |
+| ------------------ | ---------------------------------------------------------------------------------------------------- |
+| Preset A–D buttons | Click to recall a saved modifier snapshot. Right-click for save/clear/MIDI options.                  |
+| Save Preset        | Right-click a preset button → "Save to Preset" to capture the current modifier states of all 8 pads. |
+| Recall Preset      | Click a filled preset button (or trigger via MIDI) to instantly restore all modifier states.         |
+| Clear Preset       | Right-click → "Clear Preset" to remove the saved snapshot.                                           |
+| Preset MIDI Learn  | Right-click → "MIDI Learn", then send a note to assign. "Clear MIDI Note" to remove.                 |
 
 Add a new **"Modifier Presets"** section between "Session Tab Controls" and "Settings Tab":
 
@@ -152,6 +155,7 @@ Add a new **"Modifier Presets"** section between "Session Tab Controls" and "Set
 ## Implementation Checklist
 
 ### Data Layer
+
 - [x] Create `ModifierPreset.h` with `BufferModifierSnapshot`, `ModifierPresetSlot`, `ModifierPresetBank` structs
 - [x] Implement `toVar()` / `fromVar()` serialization on `ModifierPresetBank`
 - [x] Add `ModifierPresetBank presetBank` to `AppState`
@@ -160,6 +164,7 @@ Add a new **"Modifier Presets"** section between "Session Tab Controls" and "Set
 - [x] Add `std::array<int, 4> presetMidiNoteMap` to `SessionSettings`
 
 ### UI Layer
+
 - [x] Create `PresetBarComponent` (4 styled buttons, occupied/empty visual states)
 - [x] Add `PresetBarComponent` to `PluginEditorContent` with layout in `resized()`
 - [x] Implement left-click behavior (recall if occupied, save if empty)
@@ -170,6 +175,7 @@ Add a new **"Modifier Presets"** section between "Session Tab Controls" and "Set
 - [x] Theme the preset buttons using `ThemeEngine` colors
 
 ### MIDI Control
+
 - [x] Add preset MIDI atomics to `PluginProcessor` (`midiPresetRecallRequests[4]`)
 - [x] Add preset note-on detection in `processBlock()` MIDI loop
 - [x] Add preset MIDI learn detection in `processBlock()` MIDI loop
@@ -177,6 +183,7 @@ Add a new **"Modifier Presets"** section between "Session Tab Controls" and "Set
 - [x] Wire UI callbacks: `startPresetMidiLearn(slot)`, `clearPresetMidiNote(slot)`
 
 ### Serialization
+
 - [x] Add preset bank JSON to `getStateInformation()`
 - [x] Add `presetMidiNotes` array to `getStateInformation()`
 - [x] Parse preset bank JSON in `setStateInformation()`
@@ -184,14 +191,17 @@ Add a new **"Modifier Presets"** section between "Session Tab Controls" and "Set
 - [x] Verify backward compatibility (missing keys → empty presets, no crash)
 
 ### Help Documentation
+
 - [x] Add preset button rows to "Session Tab Controls" table
 - [x] Add new "Modifier Presets" explanatory section
 
 ### Build Verification
+
 - [x] Build VST3 (Debug) — no errors
 - [x] Build VST3 (Release) — no errors
 
 ### Testing (Manual)
+
 - [ ] Verify capture → recall round-trip for all modifier types (speed, stretch, pitch, slicing, ping-pong, all FX)
 - [ ] Verify Parts settings are NOT affected by preset recall
 - [ ] Verify pad file assignments are NOT affected

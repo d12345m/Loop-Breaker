@@ -24,6 +24,10 @@ struct AppState : public ModifierSchedulerListener
     // Modifier state presets (A-D)
     ModifierPresetBank presetBank;
 
+    // When >= 0, the next modifier trigger will apply this preset slot instead of the
+    // randomly selected modifier.  Set by UI/MIDI recall, consumed by modifierTriggered().
+    std::atomic<int> pendingPresetRecall { -1 };
+
     // Channel strips for FX placeholder wrapping existing buffers
     juce::OwnedArray<ChannelStrip> channelStrips;
 
@@ -284,6 +288,16 @@ struct AppState : public ModifierSchedulerListener
         // §4.2  A modifier trigger is a musically relevant cue — start any
         // buffers that were loaded mid-transport and deferred until now.
         bufferManager.startBuffersAwaitingMusicalCue();
+
+        // If a preset recall is pending, apply the preset instead of the
+        // scheduled modifier.  The preset replaces the modifier entirely.
+        const int presetSlot = pendingPresetRecall.exchange(-1);
+        if (presetSlot >= 0 && presetSlot < ModifierPresetBank::kNumPresets
+            && presetBank.isSlotOccupied(presetSlot))
+        {
+            restorePreset(presetSlot);
+            return; // skip normal modifier application
+        }
 
         switch (desc.type)
         {

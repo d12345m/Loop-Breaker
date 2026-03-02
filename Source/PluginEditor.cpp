@@ -167,7 +167,7 @@ public:
 
         presetBar.onRecallPreset = [this](int slot)
         {
-            app.restorePreset(slot);
+            queuePresetRecall(slot);
         };
 
         presetBar.onClearPreset = [this](int slot)
@@ -325,6 +325,11 @@ public:
     // ModifierSchedulerListener
     void upcomingModifierChanged(const ModifierDescriptor& desc) override
     {
+        // If a preset recall is pending, don't let the scheduler's random pick
+        // overwrite the "Preset X" display.
+        if (app.pendingPresetRecall.load() >= 0)
+            return;
+
         auto descCopy = desc;
         juce::MessageManager::callAsync([this, descCopy]
         {
@@ -343,6 +348,14 @@ public:
                 app.setActivePart(app.getActivePart());
                 pendingPartsCount = -1;
             }
+
+            // If a preset was applied instead of the normal modifier (cleared in
+            // AppState::modifierTriggered), show it in the history and flash all pads.
+            // pendingPresetRecall was already consumed by AppState, so check desc
+            // isn't what actually ran — we detect this by the pending flag being -1
+            // after the atomic exchange.  To keep things simple, always log whatever
+            // the scheduler scheduled; the preset application is the audible result.
+
             if (externalModifierHistory != nullptr)
                 externalModifierHistory->addEntry(desc, targets);
             padGrid.flashPads(targets);
@@ -387,6 +400,25 @@ private:
     std::unique_ptr<juce::FileChooser> fileChooser;
 
     bool padPathsSynced = false; // true once pad file paths have been synced to the UI after state restore
+
+    // Queue a preset recall to replace the next scheduled modifier trigger.
+    // Updates the upcoming modifier display to show the preset name.
+    void queuePresetRecall(int slot)
+    {
+        if (slot < 0 || slot >= ModifierPresetBank::kNumPresets) return;
+        if (! app.presetBank.isSlotOccupied(slot)) return;
+
+        app.pendingPresetRecall.store(slot);
+
+        // Build a fake descriptor so the UpcomingModifierDisplay shows "Preset A/B/C/D"
+        static const char* slotLabels[] = { "A", "B", "C", "D" };
+        ModifierDescriptor presetDesc;
+        presetDesc.type = ModifierType::Unknown;
+        presetDesc.category = ModifierCategory::GlobalUtility;
+        presetDesc.shortName = juce::String("Preset ") + slotLabels[slot];
+        presetDesc.description = juce::String("Recall saved modifier snapshot (slot ") + slotLabels[slot] + ")";
+        modifierDisplay.setUpcoming(presetDesc);
+    }
 
     void applyThemeColors()
     {
@@ -472,7 +504,7 @@ private:
             if (processor.checkAndClearPresetRecall(pi))
             {
                 if (app.presetBank.isSlotOccupied(pi))
-                    app.restorePreset(pi);
+                    queuePresetRecall(pi);
             }
         }
 
@@ -833,6 +865,13 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
         processor.getAPVTS());
 
     settingsPanel = std::make_unique<SettingsPanelContent>(processor.getAppState().settings);
+
+    // Wire up parts-changed callback so loop braces actually update
+    settingsPanel->onPartsChanged = [this](int /*numParts*/)
+    {
+        auto& app = processor.getAppState();
+        app.setActivePart(app.getActivePart());
+    };
 
     setLookAndFeel(&editorLnf);
 

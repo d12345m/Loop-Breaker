@@ -294,9 +294,12 @@ private:
 
     SessionSettings& settings;
 
+public:
     // Callbacks (set by parent to integrate with session logic)
     std::function<void(int)> onPartsChanged;
     std::function<void(int)> onBarsChanged;
+
+private:
 
     // Theme
     juce::Label    themeLabel;

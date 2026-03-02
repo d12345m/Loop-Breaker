@@ -203,6 +203,9 @@ private:
                 { "Alt + Click",                 "Clear the MIDI note assignment for this pad (alias)" },
                 { "Shift + Cmd + Click  (macOS)","Remove the loaded sample from this pad" },
             };
+            s.body =
+                "The Modifiers toggle also supports the same keyboard shortcuts and "
+                "right-click context menu for MIDI note assignment.";
             contentHolder.sections.push_back(s);
         }
 
@@ -211,14 +214,26 @@ private:
             Section s;
             s.heading = "Session Tab Controls";
             s.table = {
-                { "Modifiers toggle",     "Enable or disable the modifier scheduler entirely" },
+                { "Modifiers toggle",     "Enable or disable the modifier scheduler entirely. "
+                                          "Supports MIDI note assignment (right-click or "
+                                          "Shift+Click to learn, Cmd/Alt+Click to clear)." },
+                { "Master Volume knob",   "Boost or cut overall output level (-12 dB to +12 dB); "
+                                          "applies equally to all pads and output buses" },
+            };
+            contentHolder.sections.push_back(s);
+        }
+
+        // ---- Settings tab ----
+        {
+            Section s;
+            s.heading = "Settings Tab";
+            s.table = {
+                { "Theme dropdown",       "Choose a visual theme for the plugin interface" },
                 { "Parts selector",       "Split each buffer into 1-4 equal sections (A-D); "
                                           "change takes effect on the next modifier trigger "
                                           "when the transport is running" },
-                { "Bars / Mod slider",    "How many bars elapse between each modifier application "
+                { "Bars / Modifier slider","How many bars elapse between each modifier application "
                                           "(1-16 bars)" },
-                { "Master Volume knob",   "Boost or cut overall output level (-12 dB to +12 dB); "
-                                          "applies equally to all pads and output buses" },
             };
             contentHolder.sections.push_back(s);
         }
@@ -256,7 +271,11 @@ private:
                 "Use Shift+Click on any pad to re-assign it to a different MIDI note.  "
                 "Compatible with most drum-pad controllers (Akai MPD, NI Maschine, "
                 "Novation Launchpad, etc.).  "
-                "Note-off is ignored; velocity is ignored.";
+                "Note-off is ignored; velocity is ignored.\n\n"
+                "The Modifiers toggle can also be assigned to a MIDI note so you can "
+                "enable or disable the modifier scheduler from your controller. "
+                "Right-click the toggle and choose MIDI Learn, or Shift+Click it. "
+                "Use Cmd+Click (macOS) or Alt+Click to clear the assignment.";
             contentHolder.sections.push_back(s);
         }
 

@@ -24,6 +24,7 @@ struct BufferModifierSnapshot
     double stretchRatio        = 1.0;
     double pitchSemiTones      = 0.0;
     bool   continuousRandomSlicing = false;
+    int    numSlices           = 1;
     bool   pingPongEnabled     = false;
     double pingPongDivision    = 0.25;
 
@@ -78,6 +79,7 @@ struct BufferModifierSnapshot
         o->setProperty("stretch",      stretchRatio);
         o->setProperty("pitch",        pitchSemiTones);
         o->setProperty("slicing",      continuousRandomSlicing);
+        o->setProperty("numSlices",    numSlices);
         o->setProperty("ppOn",         pingPongEnabled);
         o->setProperty("ppDiv",        pingPongDivision);
 
@@ -141,6 +143,7 @@ struct BufferModifierSnapshot
         s.stretchRatio             = getD("stretch",  1.0);
         s.pitchSemiTones           = getD("pitch",    0.0);
         s.continuousRandomSlicing  = getB("slicing",  false);
+        s.numSlices                = (int) getD("numSlices", 1.0);
         s.pingPongEnabled          = getB("ppOn",     false);
         s.pingPongDivision         = getD("ppDiv",    0.25);
 

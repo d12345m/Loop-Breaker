@@ -152,6 +152,7 @@ struct AppState : public ModifierSchedulerListener
             snap.stretchRatio            = buf->getStretchRatio();
             snap.pitchSemiTones          = buf->getPitchSemiTones();
             snap.continuousRandomSlicing = buf->isInContinuousRandomMode();
+            snap.numSlices               = buf->getNumSlices();
             snap.pingPongEnabled         = buf->isPingPongModeEnabled();
             snap.pingPongDivision        = buf->getPingPongDivision();
 
@@ -218,6 +219,7 @@ struct AppState : public ModifierSchedulerListener
             buf->setSpeed(snap.speed);
             buf->setStretchRatio(snap.stretchRatio);
             buf->setPitchSemiTones(snap.pitchSemiTones);
+            buf->setNumSlices(snap.numSlices);
             if (snap.continuousRandomSlicing)
                 buf->startContinuousRandomSlicing();
             else

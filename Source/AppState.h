@@ -642,12 +642,12 @@ private:
         {
             if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
             {
-                // Cap repetitions so one slice never repeats for more than 2 bars
+                // Cap repetitions so one slice never repeats for more than 1 bar
                 double bufDur = b->getDurationInSeconds();
                 if (bufDur > 0.0 && secondsPerBar > 0.0)
                 {
                     double sliceDur = bufDur / (double)totalSlices;
-                    int maxReps = (int)std::floor(2.0 * secondsPerBar / sliceDur);
+                    int maxReps = (int)std::floor(secondsPerBar / sliceDur);
                     maxReps = juce::jmax(1, maxReps);
                     reps = juce::jmin(reps, maxReps);
                 }

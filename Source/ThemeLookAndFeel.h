@@ -168,13 +168,14 @@ public:
         g.fillEllipse (centreX - innerRadius, centreY - innerRadius,
                        innerRadius * 2.0f, innerRadius * 2.0f);
 
-        // Subtle specular highlight (small white arc at 10 o'clock)
+        // Rotating indicator dot — tracks knob position
         {
-            const float highlightAngle = juce::MathConstants<float>::pi * 1.25f; // ~225°
-            const float hx = centreX + (innerRadius * 0.55f) * std::cos (highlightAngle);
-            const float hy = centreY + (innerRadius * 0.55f) * std::sin (highlightAngle);
-            g.setColour (palette.textPrimary.withAlpha (0.08f));
-            g.fillEllipse (hx - 2.0f, hy - 2.0f, 4.0f, 4.0f);
+            const float dotRadius = juce::jmax (2.0f, innerRadius * 0.09f);
+            const float dotDist   = innerRadius * 0.65f;
+            const float dx = centreX + dotDist * std::cos (angle - juce::MathConstants<float>::halfPi);
+            const float dy = centreY + dotDist * std::sin (angle - juce::MathConstants<float>::halfPi);
+            g.setColour (palette.knobFill);
+            g.fillEllipse (dx - dotRadius, dy - dotRadius, dotRadius * 2.0f, dotRadius * 2.0f);
         }
 
         // ── Knob glow on value change ────────────────────────────────────

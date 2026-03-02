@@ -305,12 +305,20 @@ public:
         if (slot < 0 || slot >= 4) return;
 
         pendingGlowAnimators[static_cast<size_t>(slot)].stop();
+        highlightAnimators[static_cast<size_t>(slot)].stop();
+
+        highlightGlowAlpha[static_cast<size_t>(slot)] = 0.0f;
 
         if (pendingGlowSlot == slot)
             pendingGlowSlot = -1;
 
-        // Quick fade-out after application
-        triggerHighlight(slot, HighlightType::Recall);
+        if (highlightedSlot == slot)
+        {
+            highlightedSlot = -1;
+            highlightType = HighlightType::None;
+        }
+
+        repaint();
     }
 
     /** Clear any pending glow regardless of slot. */

@@ -393,11 +393,6 @@ public:
                 pendingPartsCount = -1;
             }
 
-            // Clear pending glow if a preset was queued
-            const int pendingSlot = presetBar.getPendingGlowSlot();
-            if (pendingSlot >= 0)
-                presetBar.clearPendingGlow(pendingSlot);
-
             if (externalModifierHistory != nullptr)
                 externalModifierHistory->addEntry(desc, targets);
             padGrid.flashPads(targets);
@@ -538,6 +533,15 @@ private:
         {
             modifiersToggle.setToggleState(! modifiersToggle.getToggleState(), juce::dontSendNotification);
             modifiersToggleChanged();
+        }
+
+        // If a pending glow is active but the preset has already been consumed
+        // by AppState::modifierTriggered (atomic went back to -1), clear the
+        // glow immediately so it doesn't linger past the measure boundary.
+        {
+            const int glowSlot = presetBar.getPendingGlowSlot();
+            if (glowSlot >= 0 && app.pendingPresetRecall.load() < 0)
+                presetBar.clearPendingGlow(glowSlot);
         }
 
         // Poll for MIDI preset-recall requests (from audio thread)

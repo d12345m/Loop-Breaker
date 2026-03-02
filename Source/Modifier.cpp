@@ -75,6 +75,7 @@ juce::OwnedArray<IModifier> ModifierFactory::createAllPrototypes()
     add(ModifierType::PitchDownOctave, ModifierCategory::BufferTransform, "-Oct", "Pitch down one octave");
     add(ModifierType::BeatSliceRandom, ModifierCategory::BufferTransform, "Slice", "Random beat slicing");
     add(ModifierType::ArpSlice, ModifierCategory::BufferTransform, "Arp Slice", "Arpeggio-style beat slicing");
+    add(ModifierType::SliceRepeater, ModifierCategory::BufferTransform, "Slice Rpt", "Repeat one random slice N times, then pick another");
     add(ModifierType::PingPong, ModifierCategory::BufferTransform, "PingPong", "Oscillate forward/backward playback");
 
     // Buffer FX

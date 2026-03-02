@@ -63,6 +63,7 @@ public:
     addToggle(ModifierType::ResetAll, "Reset");
     addToggle(ModifierType::BeatSliceRandom, "Slice (rand)");
     addToggle(ModifierType::ArpSlice, "Arp Slice");
+    addToggle(ModifierType::SliceRepeater, "Slice Repeater");
     addToggle(ModifierType::SwitchPart, "Switch Part");
     }
 

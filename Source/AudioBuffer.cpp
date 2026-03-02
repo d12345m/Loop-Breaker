@@ -659,8 +659,18 @@ void AudioBuffer::processWithRepitching(juce::AudioBuffer<float>& outputBuffer)
                             params.arpCycleCount = 0;
                             int seqLen = (int)params.arpSequence.size();
                             params.arpSequence.clear();
-                            for (int si = 0; si < seqLen; ++si)
-                                params.arpSequence.push_back(random.nextInt(params.numSlices));
+                            if (params.arpSliceRepeaterMode)
+                            {
+                                // Repeater: pick one random slice and fill entire sequence
+                                int rs = random.nextInt(params.numSlices);
+                                for (int si = 0; si < seqLen; ++si)
+                                    params.arpSequence.push_back(rs);
+                            }
+                            else
+                            {
+                                for (int si = 0; si < seqLen; ++si)
+                                    params.arpSequence.push_back(random.nextInt(params.numSlices));
+                            }
                         }
                     }
                     const int nextSlice = params.arpSequence[(size_t)params.arpSequencePos];
@@ -1547,8 +1557,17 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                             params.arpCycleCount = 0;
                             int seqLen = (int)params.arpSequence.size();
                             params.arpSequence.clear();
-                            for (int si = 0; si < seqLen; ++si)
-                                params.arpSequence.push_back(random.nextInt(params.numSlices));
+                            if (params.arpSliceRepeaterMode)
+                            {
+                                int rs = random.nextInt(params.numSlices);
+                                for (int si = 0; si < seqLen; ++si)
+                                    params.arpSequence.push_back(rs);
+                            }
+                            else
+                            {
+                                for (int si = 0; si < seqLen; ++si)
+                                    params.arpSequence.push_back(random.nextInt(params.numSlices));
+                            }
                         }
                     }
                     const int nextSlice = params.arpSequence[(size_t)params.arpSequencePos];
@@ -2080,6 +2099,7 @@ void AudioBuffer::startArpSlicing(int totalSlices, int sequenceLength, int repea
     // through the sequence, we pick a new sequence.
     params.arpTotalCyclesPerRefresh = juce::jmax(1, repeatBars);
     params.arpSliceActive = true;
+    params.arpSliceRepeaterMode = false;   // normal arp mode
     params.continuousRandomSlicing = false; // disable random mode
 
     // Trigger the first slice in the sequence
@@ -2097,11 +2117,41 @@ void AudioBuffer::stopArpSlicing()
     params.arpCycleCount = 0;
 }
 
+void AudioBuffer::startSliceRepeater(int totalSlices, int repetitions)
+{
+    // Set up the slice grid
+    int slices = juce::jlimit(4, 64, totalSlices);
+    setNumSlices(slices);
+
+    repetitions = juce::jlimit(4, 32, repetitions);
+
+    // Build a sequence that repeats one random slice 'repetitions' times.
+    // When the sequence ends, arp refresh logic picks a new random sequence
+    // of the same length — effectively repeating a new random slice.
+    int chosenSlice = random.nextInt(slices);
+    params.arpSequence.clear();
+    for (int i = 0; i < repetitions; ++i)
+        params.arpSequence.push_back(chosenSlice);
+
+    params.arpSequencePos = 0;
+    params.arpRepeatBars = 1;           // refresh after every full pass through the sequence
+    params.arpCycleCount = 0;
+    params.arpTotalCyclesPerRefresh = 1; // pick a new slice after one full cycle
+    params.arpSliceActive = true;
+    params.arpSliceRepeaterMode = true;    // repeater mode: single-slice refresh
+    params.continuousRandomSlicing = false;
+
+    // Trigger the first slice
+    triggerSlice(chosenSlice);
+    slicingModeActive.store(true);
+}
+
 void AudioBuffer::exitSlicingMode()
 {
     slicingModeActive.store(false);
     params.continuousRandomSlicing = false;
     params.arpSliceActive = false;
+    params.arpSliceRepeaterMode = false;
     params.arpSequence.clear();
     params.arpSequencePos = 0;
     params.arpCycleCount = 0;

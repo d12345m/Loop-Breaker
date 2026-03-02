@@ -429,6 +429,14 @@ void ModifierScheduler::forceUpcomingVariant(ModifierType type, const juce::Stri
                 if (parts.size() >= 3) base.plannedArpRepeatBars = parts[2].getIntValue();
                 base.description = base.description + " -> Arp " + variant;
             }
+            else if (type == ModifierType::SliceRepeater)
+            {
+                // Variant format: "reps|totalSlices" e.g. "8|16"
+                auto parts = juce::StringArray::fromTokens(variant, "|", "");
+                if (parts.size() >= 1) base.plannedSliceRepeaterReps = parts[0].getIntValue();
+                if (parts.size() >= 2) base.plannedSliceRepeaterTotal = parts[1].getIntValue();
+                base.description = base.description + " -> Rpt " + variant;
+            }
             else if (type == ModifierType::BufferDelayOn)
             {
                 // Combined syntax: divisions comma-separated | wet | fb:feedback
@@ -508,6 +516,7 @@ ModifierDescriptor ModifierScheduler::pickRandomDescriptor() const
                 || t == ModifierType::ResetAll
                 || t == ModifierType::BeatSliceRandom
                 || t == ModifierType::ArpSlice
+                || t == ModifierType::SliceRepeater
                 || t == ModifierType::BufferReverbOn
                 || t == ModifierType::BufferDelayOn
                 || t == ModifierType::BufferDelayDubBurst
@@ -607,6 +616,20 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
         modified.plannedArpRepeatBars = repeatBars;
         modified.description = base.description + " -> Arp " + juce::String(seqLen) + " slices / "
             + juce::String(totalSlices) + " grid / " + juce::String(repeatBars) + " cycles";
+    }
+    else if (base.type == ModifierType::SliceRepeater)
+    {
+        // Repetitions per slice: {4,8,16,32}
+        static const int repOptions[] { 4, 8, 16, 32 };
+        // Total slice grid: {4,8,16,32}
+        static const int sliceCounts[] { 4, 8, 16, 32 };
+        const juce::SpinLock::ScopedLockType lock(rngLock);
+        int reps = repOptions[rng.nextInt((int)std::size(repOptions))];
+        int totalSlices = sliceCounts[rng.nextInt((int)std::size(sliceCounts))];
+        modified.plannedSliceRepeaterReps = reps;
+        modified.plannedSliceRepeaterTotal = totalSlices;
+        modified.description = base.description + " -> Rpt x" + juce::String(reps) + " / "
+            + juce::String(totalSlices) + " grid";
     }
     else if (base.type == ModifierType::BufferReverbOn)
     {

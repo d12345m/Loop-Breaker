@@ -345,6 +345,9 @@ struct AppState : public ModifierSchedulerListener
             case ModifierType::ArpSlice:
                 applyArpSlice(desc, targets);
                 break;
+            case ModifierType::SliceRepeater:
+                applySliceRepeater(desc, targets);
+                break;
             case ModifierType::PingPong:
                 applyPingPong(desc, targets);
                 break;
@@ -619,6 +622,37 @@ private:
             if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
             {
                 b->startArpSlicing(totalSlices, seqLen, repeatBars);
+                if (!b->isPlaying()) b->play();
+            }
+        }
+    }
+
+    void applySliceRepeater(const ModifierDescriptor& desc, const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        int reps = desc.plannedSliceRepeaterReps.value_or(8);
+        int totalSlices = desc.plannedSliceRepeaterTotal.value_or(16);
+
+        reps = juce::jlimit(4, 32, reps);
+        totalSlices = juce::jlimit(4, 64, totalSlices);
+
+        const double secondsPerBar = settings.getSecondsPerBar();
+
+        for (int idx : targets)
+        {
+            if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
+            {
+                // Cap repetitions so one slice never repeats for more than 2 bars
+                double bufDur = b->getDurationInSeconds();
+                if (bufDur > 0.0 && secondsPerBar > 0.0)
+                {
+                    double sliceDur = bufDur / (double)totalSlices;
+                    int maxReps = (int)std::floor(2.0 * secondsPerBar / sliceDur);
+                    maxReps = juce::jmax(1, maxReps);
+                    reps = juce::jmin(reps, maxReps);
+                }
+
+                b->startSliceRepeater(totalSlices, reps);
                 if (!b->isPlaying()) b->play();
             }
         }

@@ -115,6 +115,7 @@ public:
             case ModifierType::PitchDownOctave:     return "Pitch Down Octave";
             case ModifierType::BeatSliceRandom:     return "Beat Slice";
             case ModifierType::ArpSlice:             return "Arp Slice";
+            case ModifierType::SliceRepeater:        return "Slice Repeater";
             case ModifierType::PingPong:            return "Ping Pong";
             case ModifierType::BufferDelayOn:       return "Delay";
             case ModifierType::BufferDelayDubBurst: return "Delay Dub Burst";
@@ -147,6 +148,7 @@ public:
             case ModifierType::PitchDownOctave:
             case ModifierType::BeatSliceRandom:
             case ModifierType::ArpSlice:
+            case ModifierType::SliceRepeater:
             case ModifierType::PingPong:
                 return "Buffer";
 
@@ -189,6 +191,7 @@ public:
             ModifierType::PitchDownOctave,
             ModifierType::BeatSliceRandom,
             ModifierType::ArpSlice,
+            ModifierType::SliceRepeater,
             ModifierType::PingPong,
             // Channel FX
             ModifierType::BufferDelayOn,

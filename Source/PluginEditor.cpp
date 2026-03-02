@@ -867,10 +867,16 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
     settingsPanel = std::make_unique<SettingsPanelContent>(processor.getAppState().settings);
 
     // Wire up parts-changed callback so loop braces actually update
-    settingsPanel->onPartsChanged = [this](int /*numParts*/)
+    settingsPanel->onPartsChanged = [this](int numParts)
     {
         auto& app = processor.getAppState();
         app.setActivePart(app.getActivePart());
+    };
+
+    // Wire up bars-per-modifier callback (keeps PluginEditorContent in sync)
+    settingsPanel->onBarsChanged = [this](int /*bars*/)
+    {
+        // Setting is already stored by SettingsPanelContent; nothing extra needed.
     };
 
     setLookAndFeel(&editorLnf);

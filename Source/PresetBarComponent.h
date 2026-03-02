@@ -14,8 +14,10 @@
 #include "ModifierPreset.h"
 #include "ThemeEngine.h"
 #include "ThemeFonts.h"
+#include "Animator.h"
 
-class PresetBarComponent : public juce::Component
+class PresetBarComponent : public juce::Component,
+                           private juce::Timer
 {
 public:
     // Callbacks set by the parent (PluginEditorContent)
@@ -25,6 +27,8 @@ public:
     std::function<void(int)> onMidiLearnRequest;     // slot index
     std::function<void(int)> onClearMidiNote;        // slot index
 
+    enum class HighlightType { None, Save, Recall };
+
     PresetBarComponent()
     {
         for (int i = 0; i < 4; ++i)
@@ -33,6 +37,12 @@ public:
             buttons[i]->setInterceptsMouseClicks(false, false);
             addAndMakeVisible(buttons[i].get());
         }
+        startTimerHz(30); // drive highlight animations
+    }
+
+    ~PresetBarComponent() override
+    {
+        stopTimer();
     }
 
     void setSlotOccupied(int index, bool occupied)
@@ -90,8 +100,17 @@ public:
             const bool learning = midiLearnActive[static_cast<size_t>(i)];
             const int midiNote = midiNotes[static_cast<size_t>(i)];
 
+            const bool isHighlighted = (highlightedSlot == i && highlightType != HighlightType::None);
+
             // Background
-            if (occupied)
+            if (isHighlighted)
+            {
+                // Highlighted background: accent2 (teal) for recall, accent1 (periwinkle) for save
+                auto hlColour = (highlightType == HighlightType::Recall)
+                    ? palette.accent2 : palette.accent1;
+                g.setColour(hlColour.withAlpha(0.15f + highlightGlowAlpha[static_cast<size_t>(i)] * 0.35f));
+            }
+            else if (occupied)
                 g.setColour(palette.accent1.withAlpha(0.25f));
             else
                 g.setColour(palette.panelAlt.withAlpha(0.5f));
@@ -109,6 +128,18 @@ public:
                 strokeType.createDashedStroke(dashed, outline, dashLengths, 2);
                 g.setColour(palette.warn);
                 g.strokePath(dashed, strokeType);
+            }
+            else if (isHighlighted)
+            {
+                // Glow border matching highlight type
+                auto hlColour = (highlightType == HighlightType::Recall)
+                    ? palette.accent2 : palette.accent1;
+                float glowA = highlightGlowAlpha[static_cast<size_t>(i)];
+                g.setColour(hlColour.withAlpha(0.6f + glowA * 0.4f));
+                g.drawRoundedRectangle(btnBounds.reduced(0.5f), 5.0f, 2.0f);
+                // Outer glow ring
+                g.setColour(hlColour.withAlpha(glowA * 0.15f));
+                g.drawRoundedRectangle(btnBounds.expanded(2.0f), 6.0f, 1.5f);
             }
             else if (occupied)
             {
@@ -190,28 +221,73 @@ public:
         // Normal click: recall if occupied, save if empty
         if (slotOccupied[static_cast<size_t>(slot)])
         {
+            triggerHighlight(slot, HighlightType::Recall);
             if (onRecallPreset) onRecallPreset(slot);
         }
         else
         {
+            triggerHighlight(slot, HighlightType::Save);
             if (onSavePreset) onSavePreset(slot);
         }
     }
 
-    void mouseDoubleClick(const juce::MouseEvent& e) override
+    /** Trigger a transient highlight on a preset slot.
+        Save = accent1 (periwinkle), Recall = accent2 (teal). */
+    void triggerHighlight(int slot, HighlightType type)
     {
-        const int slot = getSlotAtPoint(e.getPosition());
-        if (slot < 0) return;
+        if (slot < 0 || slot >= 4) return;
 
-        // Double-click: force save (overwrite)
-        if (onSavePreset) onSavePreset(slot);
+        highlightedSlot = slot;
+        highlightType = type;
+
+        // Animate glow: quick ramp up then fade out
+        highlightAnimators[static_cast<size_t>(slot)].start(
+            600, // duration ms
+            [this, slot](float progress)
+            {
+                // Quick in (first 20%), then fade out
+                float alpha;
+                if (progress < 0.2f)
+                    alpha = progress / 0.2f;          // 0→1 ramp
+                else
+                    alpha = 1.0f - (progress - 0.2f) / 0.8f; // 1→0 fade
+                highlightGlowAlpha[static_cast<size_t>(slot)] = juce::jlimit(0.0f, 1.0f, alpha);
+                repaint();
+            },
+            [this, slot]()
+            {
+                highlightGlowAlpha[static_cast<size_t>(slot)] = 0.0f;
+                // Only clear if this slot is still the highlighted one
+                if (highlightedSlot == slot)
+                {
+                    highlightedSlot = -1;
+                    highlightType = HighlightType::None;
+                }
+                repaint();
+            },
+            Animator::Easing::EaseOut);
+
+        repaint();
     }
 
 private:
+    void timerCallback() override
+    {
+        const double dt = 1.0 / 30.0;
+        for (int i = 0; i < 4; ++i)
+            highlightAnimators[static_cast<size_t>(i)].tick(dt);
+    }
+
     std::unique_ptr<juce::Component> buttons[4];
     std::array<bool, 4> slotOccupied { false, false, false, false };
     std::array<int, 4>  midiNotes { -1, -1, -1, -1 };
     std::array<bool, 4> midiLearnActive { false, false, false, false };
+
+    // Highlight state
+    int highlightedSlot = -1;
+    HighlightType highlightType = HighlightType::None;
+    std::array<float, 4> highlightGlowAlpha { 0.0f, 0.0f, 0.0f, 0.0f };
+    std::array<Animator, 4> highlightAnimators;
 
     int getSlotAtPoint(juce::Point<int> point) const
     {
@@ -267,8 +343,8 @@ private:
             {
                 switch (result)
                 {
-                    case 1: if (onSavePreset) onSavePreset(slot); break;
-                    case 2: if (onRecallPreset) onRecallPreset(slot); break;
+                    case 1: triggerHighlight(slot, HighlightType::Save); if (onSavePreset) onSavePreset(slot); break;
+                    case 2: triggerHighlight(slot, HighlightType::Recall); if (onRecallPreset) onRecallPreset(slot); break;
                     case 3: if (onClearPreset) onClearPreset(slot); break;
                     case 4: if (onMidiLearnRequest) onMidiLearnRequest(slot); break;
                     case 5: if (onClearMidiNote) onClearMidiNote(slot); break;

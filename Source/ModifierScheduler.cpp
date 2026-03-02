@@ -300,9 +300,18 @@ void ModifierScheduler::triggerIfDueHost(double currentPpq, double bpm)
             const int total = juce::jmax(1, bars) * quartersPerBar;
             quarterNoteBurstRemaining.store(total);
 
-            // Advance the MAIN loop schedule right now so burst ticks don't move it.
-            if (barLenPpq > 0.0)
-                nextMainTriggerPpq = nextTriggerPpq + ((double) settings.barsBetweenModifiers * barLenPpq);
+            // Only advance the main loop schedule when it hasn't already
+            // been set ahead of the current position.  A burst-within-burst
+            // must NOT overwrite a bar-aligned main schedule, otherwise the
+            // post-burst resume point drifts off the bar grid.
+            if (barLenPpq > 0.0 && nextMainTriggerPpq <= currentPpq + 1e-9)
+            {
+                // Snap to the bar boundary at or before the current trigger,
+                // then step forward by barsBetweenModifiers whole bars.
+                const double currentBar = std::floor((nextTriggerPpq / barLenPpq) + 1e-9);
+                const double targetBar  = currentBar + (double) settings.barsBetweenModifiers;
+                nextMainTriggerPpq = targetBar * barLenPpq;
+            }
         }
         else
         {

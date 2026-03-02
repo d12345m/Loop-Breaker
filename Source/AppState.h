@@ -219,11 +219,17 @@ struct AppState : public ModifierSchedulerListener
             buf->setSpeed(snap.speed);
             buf->setStretchRatio(snap.stretchRatio);
             buf->setPitchSemiTones(snap.pitchSemiTones);
-            buf->setNumSlices(snap.numSlices);
             if (snap.continuousRandomSlicing)
+            {
+                buf->setNumSlices(snap.numSlices);
                 buf->startContinuousRandomSlicing();
+            }
             else
-                buf->stopContinuousRandomSlicing();
+            {
+                // Fully exit slicing mode so the buffer doesn't get stuck in a
+                // single-slice boundary check that stops playback.
+                buf->exitSlicingMode();
+            }
             buf->setPingPongMode(snap.pingPongEnabled, snap.pingPongDivision,
                                  settings.bpm, buf->getFileSampleRate());
 
@@ -270,6 +276,18 @@ struct AppState : public ModifierSchedulerListener
             fp.panMix                 = snap.panMix;
             fp.panPeriodBars          = snap.panPeriodBars;
             fp.volumeGain             = snap.volumeGain;
+
+            // Reset playhead to the beginning of the file (or loop bracket start
+            // if parts are active) so preset recall behaves like a fresh start,
+            // matching the state at capture time (e.g. after a ResetAll modifier).
+            if (buf->isLoopWindowEnabled())
+                buf->setPlayheadSamples(buf->getLoopStartSamples());
+            else
+                buf->setPlayheadSamples(0);
+
+            // Ensure playback continues if the buffer has audio loaded
+            if (buf->hasAudioLoaded() && !buf->isPlaying())
+                buf->play();
         }
     }
 

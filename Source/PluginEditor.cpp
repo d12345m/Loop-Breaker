@@ -540,16 +540,19 @@ private:
     {
         const bool enabled = modifiersToggle.getToggleState();
         app.settings.modifiersEnabled = enabled;
-        if (enabled)
-        {
-            if (! app.scheduler.isRunning())
-                app.scheduler.start();
-        }
-        else
-        {
-            if (app.scheduler.isRunning())
-                app.scheduler.stop();
-        }
+
+        // Use suppression instead of stop/start so the scheduler timeline
+        // stays synchronised with the DAW transport.  The progress bar
+        // keeps running (with a "PAUSED" overlay) when modifiers are off,
+        // and turning them back on does not reset timing.
+        app.scheduler.setSuppressed(! enabled);
+
+        // If the scheduler isn't running yet (e.g. first enable before
+        // transport has started it), kick it off so there is something
+        // to show in the progress display.
+        if (enabled && ! app.scheduler.isRunning())
+            app.scheduler.start();
+
         refreshStatus();
     }
 

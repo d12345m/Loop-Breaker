@@ -684,17 +684,13 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
 
     const bool enabled = transportPlaybackEnabled.load();
 
-    // Start modifier queue when the host begins playback (and user hasn't disabled modifiers).
-    if (app.settings.modifiersEnabled)
-    {
-        if (! app.scheduler.isRunning())
-            app.scheduler.start();
-    }
-    else
-    {
-        if (app.scheduler.isRunning())
-            app.scheduler.stop();
-    }
+    // Always keep the scheduler running while the host transport is playing
+    // so the progress bar stays synchronised with the DAW timeline.
+    // Use suppression (not stop/start) to honour the modifiers-enabled toggle
+    // without resetting the scheduler's accumulated time.
+    if (! app.scheduler.isRunning())
+        app.scheduler.start();
+    app.scheduler.setSuppressed(! app.settings.modifiersEnabled);
 
     // When following the DAW transport, keep buffers playing while the host is playing.
     // This makes transport-start reliable and also starts newly-loaded pads immediately

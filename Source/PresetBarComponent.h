@@ -271,8 +271,9 @@ public:
     }
 
     /** Start a looping pulse glow on a preset slot, indicating the recall
-        is pending and will be applied at the next modifier point. */
-    void startPendingGlow(int slot)
+        is pending and will be applied at the next modifier point.
+        @p bpm  current session tempo — pulse cycle = one beat. */
+    void startPendingGlow(int slot, double bpm = 120.0)
     {
         if (slot < 0 || slot >= 4) return;
 
@@ -284,9 +285,13 @@ public:
         highlightedSlot = slot;
         highlightType = HighlightType::Recall;
 
-        // Pulsing glow: sinusoidal 0.35→1.0 over 800ms cycle
+        // Pulse cycle = one beat at the current BPM (clamped to reasonable range)
+        const double safeBpm = juce::jlimit(30.0, 300.0, bpm);
+        const int cycleDurationMs = juce::roundToInt(60000.0 / safeBpm);
+
+        // Pulsing glow: sinusoidal 0.35→1.0 over one beat
         pendingGlowAnimators[static_cast<size_t>(slot)].startLoop(
-            800, // cycle duration ms
+            cycleDurationMs,
             [this, slot](float progress)
             {
                 // Sine-based pulse between 0.35 and 1.0

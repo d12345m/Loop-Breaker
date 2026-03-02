@@ -169,7 +169,7 @@ public:
         {
             if (isTransportRunning())
             {
-                presetBar.startPendingGlow(slot);
+                presetBar.startPendingGlow(slot, app.settings.bpm);
                 queuePresetRecall(slot);
             }
             else
@@ -553,7 +553,7 @@ private:
                 {
                     if (isTransportRunning())
                     {
-                        presetBar.startPendingGlow(pi);
+                        presetBar.startPendingGlow(pi, app.settings.bpm);
                         queuePresetRecall(pi);
                     }
                     else

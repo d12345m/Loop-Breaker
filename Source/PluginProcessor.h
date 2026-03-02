@@ -62,6 +62,15 @@ public:
         return midiPadToggleRequests[padIndex].exchange(false);
     }
 
+    // Check and clear a pending MIDI modifier-toggle request (call from UI thread)
+    bool checkAndClearModifierToggle()
+    {
+        return midiModifierToggleRequest.exchange(false);
+    }
+
+    // Special learn-mode pad index used for the modifier toggle button
+    static constexpr int kModifierToggleLearnIndex = 8;
+
     // MIDI learn mode (pad notes)
     void setMidiLearnMode(bool enabled, int padIndex = -1)
     {
@@ -73,6 +82,7 @@ public:
     bool isMidiLearnEnabled() const { return midiLearnEnabled.load(); }
 
     // Check if a MIDI note was learned (call from UI thread)
+    // learnedPadIndex is set to the pad index the note was learned for
     int checkAndClearLearnedNote()
     {
         return learnedMidiNote.exchange(-1);
@@ -184,6 +194,9 @@ private:
 
     // MIDI pad control: atomic flags for toggle requests (written on audio thread, read/cleared on UI thread)
     std::atomic<bool> midiPadToggleRequests[8] { {false}, {false}, {false}, {false}, {false}, {false}, {false}, {false} };
+
+    // MIDI modifier toggle request (written on audio thread, read/cleared on UI thread)
+    std::atomic<bool> midiModifierToggleRequest { false };
 
     // MIDI learn mode (written on audio thread, read/written on UI thread)
     std::atomic<bool> midiLearnEnabled { false };

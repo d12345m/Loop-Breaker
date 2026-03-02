@@ -310,7 +310,7 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                 DBG("MIDI Note On: " + juce::String(note));
                 
                 // MIDI learn mode: capture note for assignment
-                if (learnMode && learnPad >= 0 && learnPad < 8)
+                if (learnMode && learnPad >= 0 && learnPad <= kModifierToggleLearnIndex)
                 {
                     DBG("Capturing note " + juce::String(note) + " for pad " + juce::String(learnPad));
                     learnedMidiNote.store(note);
@@ -318,6 +318,12 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                     continue;
                 }
                 
+                // Check modifier toggle MIDI note
+                if (app.settings.modifierToggleMidiNote >= 0 && app.settings.modifierToggleMidiNote == note)
+                {
+                    midiModifierToggleRequest.store(true);
+                }
+
                 // Normal mode: check if note matches any pad mapping
                 const auto& noteMap = app.settings.midiNoteMap;
                 for (int i = 0; i < 8; ++i)
@@ -907,6 +913,9 @@ void BufferTestAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
         midiNotes.add(app.settings.midiNoteMap[i]);
     obj->setProperty("midiNotes", juce::var(midiNotes));
 
+    // Modifier toggle MIDI note
+    obj->setProperty("modifierToggleMidiNote", app.settings.modifierToggleMidiNote);
+
     // Playback enabled state
     obj->setProperty("playbackEnabled", transportPlaybackEnabled.load());
 
@@ -1055,6 +1064,10 @@ void BufferTestAudioProcessor::setStateInformation (const void* data, int sizeIn
                 app.settings.midiNoteMap[i] = (int) midiArr->getReference(i);
         }
     }
+
+    // Restore modifier toggle MIDI note
+    if (obj->hasProperty("modifierToggleMidiNote"))
+        app.settings.modifierToggleMidiNote = (int) obj->getProperty("modifierToggleMidiNote");
 
     // Restore theme & animation settings
     if (obj->hasProperty("themeName"))

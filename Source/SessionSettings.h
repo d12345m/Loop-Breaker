@@ -61,6 +61,9 @@ struct SessionSettings
     // Layout: bottom row left->right = 36-39 (pads 1-4), top row left->right = 40-43 (pads 5-8)
     std::array<int, 8> midiNoteMap { 36, 37, 38, 39, 40, 41, 42, 43 };
 
+    // MIDI note for toggling modifiers on/off. -1 means unassigned.
+    int modifierToggleMidiNote = -1;
+
     // MIDI CC mappings for modifier probability sliders.
     // Index i corresponds to ModifierProbabilityManager::allModifierTypes()[i].
     // Value is CC number (0-127), or -1 if unassigned.

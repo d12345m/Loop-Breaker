@@ -42,6 +42,7 @@ public:
         addAndMakeVisible(modifiersToggle);
         modifiersToggle.setToggleState(app.settings.modifiersEnabled, juce::dontSendNotification);
         modifiersToggle.onClick = [this]{ modifiersToggleChanged(); };
+        modifiersToggle.addMouseListener(this, false);
 
         // Parts count selector (lives in Settings tab; created here for state management)
         partsCountBox.addItem("1 part", 1);
@@ -181,6 +182,74 @@ public:
         // No opaque fill — BackgroundAnimator paints the background
         g.setColour(Theme::border());
         g.drawRect(getLocalBounds(), 1);
+
+        // Draw MIDI note badge on modifier toggle (below the toggle)
+        const auto& palette = ThemeEngine::getInstance().getCurrentPalette();
+        const int midiNote = app.settings.modifierToggleMidiNote;
+
+        if (modifierToggleLearnActive)
+        {
+            // Marching-ants learn indicator around the toggle
+            auto toggleArea = modifiersToggle.getBounds().toFloat().expanded(2.0f);
+            juce::Path outline;
+            outline.addRoundedRectangle(toggleArea, 4.0f);
+            const float dashLengths[] = { 6.0f, 4.0f };
+            juce::PathStrokeType strokeType(2.5f);
+            juce::Path dashed;
+            strokeType.createDashedStroke(dashed, outline, dashLengths, 2);
+            g.setColour(palette.warn);
+            g.strokePath(dashed, strokeType);
+
+            // "LEARN" badge
+            auto learnRect = juce::Rectangle<float>(
+                modifiersToggle.getBounds().getCentreX() - 28.0f,
+                (float) modifiersToggle.getBounds().getBottom() + 2.0f, 56.0f, 18.0f);
+            g.setColour(palette.warn);
+            g.fillRoundedRectangle(learnRect, 3.0f);
+            g.setColour(palette.bg);
+            g.setFont(ThemeFonts::getInstance().monoBoldFont(11.0f));
+            g.drawText("LEARN", learnRect, juce::Justification::centred);
+        }
+        else if (midiNote >= 0)
+        {
+            auto noteRect = juce::Rectangle<float>(
+                modifiersToggle.getBounds().getCentreX() - 18.0f,
+                (float) modifiersToggle.getBounds().getBottom() + 2.0f, 36.0f, 16.0f);
+            g.setColour(palette.panelAlt);
+            g.fillRoundedRectangle(noteRect, 3.0f);
+            g.setColour(palette.textSecondary);
+            g.setFont(ThemeFonts::getInstance().monoFont(11.0f));
+            g.drawText(juce::String(midiNote), noteRect, juce::Justification::centred);
+        }
+    }
+
+    void mouseDown(const juce::MouseEvent& e) override
+    {
+        // Only handle events targeting the modifiers toggle button
+        if (e.eventComponent != &modifiersToggle)
+            return;
+
+        // Right-click: show context menu
+        if (e.mods.isPopupMenu())
+        {
+            showModifierToggleContextMenu();
+            // Consume the event so the toggle doesn't fire
+            return;
+        }
+
+        // Shift+click to enter MIDI learn mode
+        if (e.mods.isShiftDown() && !e.mods.isCommandDown())
+        {
+            startModifierToggleMidiLearn();
+            return;
+        }
+
+        // Cmd+click (or Alt+click) to clear MIDI assignment
+        if (e.mods.isCommandDown() || e.mods.isAltDown())
+        {
+            clearModifierToggleMidiNote();
+            return;
+        }
     }
 
     void resized() override
@@ -192,13 +261,17 @@ public:
         modifierDisplay.setBounds(topBar.removeFromLeft(topBar.getWidth() * 0.65f).reduced(4));
 
         auto controlBar = topBar;
-        modifiersToggle.setBounds(controlBar.removeFromLeft(140).reduced(2));
 
-        // Volume knob: place label above the knob within the same region
+        // Volume knob on the right
         auto volRegion = controlBar.removeFromRight(100).reduced(2);
         auto volLabelArea = volRegion.removeFromTop(16);
         masterVolumeLabel.setBounds(volLabelArea);
         masterVolumeSlider.setBounds(volRegion);
+
+        // Center the modifiers toggle in the remaining space
+        const int toggleW = 140;
+        auto toggleArea = controlBar.withSizeKeepingCentre(toggleW, controlBar.getHeight()).reduced(2);
+        modifiersToggle.setBounds(toggleArea);
 
         // ── Status row ──
         auto row2 = area.removeFromTop(24).reduced(2);
@@ -255,6 +328,7 @@ private:
     ModifierHistoryPanel* externalModifierHistory = nullptr;
 
     juce::ToggleButton modifiersToggle { "Modifiers" };
+    bool modifierToggleLearnActive = false;
 
     juce::ComboBox partsCountBox;
     int pendingPartsCount = -1; // -1 = none; otherwise apply on next modifier trigger
@@ -341,6 +415,13 @@ private:
             }
         }
 
+        // Poll for MIDI modifier-toggle request (from audio thread)
+        if (processor.checkAndClearModifierToggle())
+        {
+            modifiersToggle.setToggleState(! modifiersToggle.getToggleState(), juce::dontSendNotification);
+            modifiersToggleChanged();
+        }
+
         // Poll for MIDI learn completion
         // Check for learned note even if learn mode was disabled by audio thread
         const int learnedNote = processor.checkAndClearLearnedNote();
@@ -348,7 +429,17 @@ private:
         {
             DBG("UI received learned note: " + juce::String(learnedNote));
             const int padIndex = processor.getMidiLearnPadIndex();
-            if (padIndex >= 0 && padIndex < 8)
+
+            if (padIndex == BufferTestAudioProcessor::kModifierToggleLearnIndex)
+            {
+                // Learned note for modifier toggle
+                DBG("Assigning note " + juce::String(learnedNote) + " to modifier toggle");
+                app.settings.modifierToggleMidiNote = learnedNote;
+                modifierToggleLearnActive = false;
+                processor.setMidiLearnMode(false, -1);
+                repaint();
+            }
+            else if (padIndex >= 0 && padIndex < 8)
             {
                 DBG("Assigning note " + juce::String(learnedNote) + " to pad " + juce::String(padIndex));
                 app.settings.midiNoteMap[padIndex] = learnedNote;
@@ -517,7 +608,75 @@ private:
         return false;
     }
 
+    void startModifierToggleMidiLearn()
+    {
+        // Cancel any existing pad learn mode
+        if (processor.isMidiLearnEnabled())
+        {
+            const int prevPad = processor.getMidiLearnPadIndex();
+            if (prevPad >= 0 && prevPad < 8)
+                padGrid.setMidiLearnForPad(prevPad, false);
+        }
 
+        // If already learning for toggle, cancel
+        if (modifierToggleLearnActive)
+        {
+            modifierToggleLearnActive = false;
+            processor.setMidiLearnMode(false, -1);
+            repaint();
+            return;
+        }
+
+        modifierToggleLearnActive = true;
+        processor.setMidiLearnMode(true, BufferTestAudioProcessor::kModifierToggleLearnIndex);
+        repaint();
+    }
+
+    void clearModifierToggleMidiNote()
+    {
+        app.settings.modifierToggleMidiNote = -1;
+        modifierToggleLearnActive = false;
+        processor.setMidiLearnMode(false, -1);
+        repaint();
+    }
+
+    void showModifierToggleContextMenu()
+    {
+        const int midiNote = app.settings.modifierToggleMidiNote;
+
+        juce::PopupMenu menu;
+
+        // MIDI learn
+        juce::String learnLabel = "MIDI Learn";
+        learnLabel += "    [Shift+Click]";
+        menu.addItem(1, learnLabel);
+
+        // Clear MIDI note
+        juce::String clearLabel = "Clear MIDI Note";
+       #if JUCE_MAC
+        clearLabel += "    [Cmd+Click]";
+       #else
+        clearLabel += "    [Alt+Click]";
+       #endif
+        menu.addItem(2, clearLabel, midiNote >= 0);
+
+        if (midiNote >= 0)
+        {
+            menu.addSeparator();
+            menu.addItem(0, "MIDI Note: " + juce::String(midiNote), false);
+        }
+
+        menu.showMenuAsync(juce::PopupMenu::Options().withMousePosition(),
+            [this](int result)
+            {
+                switch (result)
+                {
+                    case 1: startModifierToggleMidiLearn(); break;
+                    case 2: clearModifierToggleMidiNote();  break;
+                    default: break;
+                }
+            });
+    }
 
     void refreshStatus()
     {

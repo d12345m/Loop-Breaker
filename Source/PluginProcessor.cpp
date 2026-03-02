@@ -86,6 +86,10 @@ BufferTestAudioProcessor::BufferTestAudioProcessor()
         , apvts (*this, nullptr, "BufferTestParams", createParamLayout())
 {
     formatManager.registerBasicFormats();
+
+    // Catch future mismatches between kNumModifierTypes and allModifierTypes()
+    jassert (static_cast<int> (ModifierProbabilityManager::allModifierTypes().size())
+             == SessionSettings::kNumModifierTypes);
 }
 
 BufferTestAudioProcessor::~BufferTestAudioProcessor() = default;
@@ -357,7 +361,8 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                 {
                     // CC learn mode: record which CC was moved and assign it
                     const auto& types = ModifierProbabilityManager::allModifierTypes();
-                    if (learnIdx < static_cast<int> (types.size()))
+                    if (learnIdx < static_cast<int> (types.size())
+                        && learnIdx < SessionSettings::kNumModifierTypes)
                     {
                         app.settings.midiProbCCMap[learnIdx] = cc;
                         learnedMidiCC.store (cc);             // signals the UI
@@ -378,8 +383,10 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                 {
                     // Normal operation: look up the CC in the modifier prob map
                     const auto& types = ModifierProbabilityManager::allModifierTypes();
+                    const int numMapped = juce::jmin (static_cast<int> (types.size()),
+                                                      SessionSettings::kNumModifierTypes);
                     bool handled = false;
-                    for (int idx = 0; idx < static_cast<int> (types.size()); ++idx)
+                    for (int idx = 0; idx < numMapped; ++idx)
                     {
                         if (app.settings.midiProbCCMap[idx] == cc)
                         {

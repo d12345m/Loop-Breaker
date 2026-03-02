@@ -71,7 +71,7 @@ struct SessionSettings
     // MIDI CC mappings for modifier probability sliders.
     // Index i corresponds to ModifierProbabilityManager::allModifierTypes()[i].
     // Value is CC number (0-127), or -1 if unassigned.
-    static constexpr int kNumModifierTypes = 22;
+    static constexpr int kNumModifierTypes = 23;
     std::array<int, kNumModifierTypes> midiProbCCMap = []() {
         std::array<int, kNumModifierTypes> a;
         a.fill(-1);

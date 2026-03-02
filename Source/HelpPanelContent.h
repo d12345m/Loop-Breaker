@@ -219,6 +219,35 @@ private:
                                           "Shift+Click to learn, Cmd/Alt+Click to clear)." },
                 { "Master Volume knob",   "Boost or cut overall output level (-12 dB to +12 dB); "
                                           "applies equally to all pads and output buses" },
+                { "Preset buttons (A\u2013D)","Click to recall a saved modifier snapshot. "
+                                          "If the slot is empty, clicking saves the current state. "
+                                          "Double-click to overwrite an existing preset. "
+                                          "Right-click for save/recall/clear/MIDI options." },
+            };
+            contentHolder.sections.push_back(s);
+        }
+
+        // ---- Settings tab ----
+        {
+            Section s;
+            s.heading = "Modifier Presets";
+            s.body =
+                "Modifier Presets let you snapshot the current state of all buffer transforms "
+                "(speed, stretch, pitch, slicing, ping-pong) and effects (reverb, delay, filter, "
+                "tremolo, chorus, auto-pan, volume ramp) across all 8 pads.\n\n"
+                "Four preset slots (A\u2013D) are available in the Session tab.  "
+                "Click an empty slot to save, click a filled slot to recall.  "
+                "Double-click any slot to force-overwrite it with the current state.\n\n"
+                "Presets do NOT save or restore Parts settings, pad file assignments, "
+                "probability weights, or timing configuration.  "
+                "Presets are saved with your DAW session and restored on reload.";
+            s.table = {
+                { "Click (empty slot)",       "Save the current modifier states into this preset" },
+                { "Click (filled slot)",      "Recall the saved modifier states from this preset" },
+                { "Double-click",             "Force-save (overwrite) the current states into this preset" },
+                { "Right-click",              "Open context menu: Save, Recall, Clear, MIDI Learn, Clear MIDI" },
+                { "Shift + Click",            "Enter MIDI learn mode for this preset slot" },
+                { "Cmd + Click  (macOS)",     "Clear the MIDI note assignment for this preset" },
             };
             contentHolder.sections.push_back(s);
         }

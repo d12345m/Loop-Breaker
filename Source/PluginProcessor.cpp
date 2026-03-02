@@ -310,7 +310,7 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                 DBG("MIDI Note On: " + juce::String(note));
                 
                 // MIDI learn mode: capture note for assignment
-                if (learnMode && learnPad >= 0 && learnPad <= kModifierToggleLearnIndex)
+                if (learnMode && learnPad >= 0 && learnPad <= (kPresetLearnIndexBase + 3))
                 {
                     DBG("Capturing note " + juce::String(note) + " for pad " + juce::String(learnPad));
                     learnedMidiNote.store(note);
@@ -322,6 +322,16 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                 if (app.settings.modifierToggleMidiNote >= 0 && app.settings.modifierToggleMidiNote == note)
                 {
                     midiModifierToggleRequest.store(true);
+                }
+
+                // Check preset recall MIDI notes (A-D)
+                for (int pi = 0; pi < 4; ++pi)
+                {
+                    if (app.settings.presetMidiNoteMap[static_cast<size_t>(pi)] >= 0
+                        && app.settings.presetMidiNoteMap[static_cast<size_t>(pi)] == note)
+                    {
+                        midiPresetRecallRequests[pi].store(true);
+                    }
                 }
 
                 // Normal mode: check if note matches any pad mapping
@@ -912,6 +922,18 @@ void BufferTestAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     // Modifier toggle MIDI note
     obj->setProperty("modifierToggleMidiNote", app.settings.modifierToggleMidiNote);
 
+    // Modifier preset bank (A-D snapshots)
+    obj->setProperty("presets", app.presetBank.toVar());
+
+    // Preset MIDI note mappings
+    {
+        juce::Array<juce::var> presetNotes;
+        presetNotes.ensureStorageAllocated(4);
+        for (int i = 0; i < 4; ++i)
+            presetNotes.add(app.settings.presetMidiNoteMap[static_cast<size_t>(i)]);
+        obj->setProperty("presetMidiNotes", juce::var(presetNotes));
+    }
+
     // Playback enabled state
     obj->setProperty("playbackEnabled", transportPlaybackEnabled.load());
 
@@ -1064,6 +1086,23 @@ void BufferTestAudioProcessor::setStateInformation (const void* data, int sizeIn
     // Restore modifier toggle MIDI note
     if (obj->hasProperty("modifierToggleMidiNote"))
         app.settings.modifierToggleMidiNote = (int) obj->getProperty("modifierToggleMidiNote");
+
+    // Restore modifier preset bank
+    if (obj->hasProperty("presets"))
+        app.presetBank = ModifierPresetBank::fromVar(obj->getProperty("presets"));
+
+    // Restore preset MIDI note mappings
+    if (obj->hasProperty("presetMidiNotes"))
+    {
+        auto pnVar = obj->getProperty("presetMidiNotes");
+        if (pnVar.isArray())
+        {
+            auto* pnArr = pnVar.getArray();
+            const int n = juce::jmin((int) pnArr->size(), 4);
+            for (int i = 0; i < n; ++i)
+                app.settings.presetMidiNoteMap[static_cast<size_t>(i)] = (int) pnArr->getReference(i);
+        }
+    }
 
     // Restore theme & animation settings
     if (obj->hasProperty("themeName"))

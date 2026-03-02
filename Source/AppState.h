@@ -12,6 +12,7 @@
 #include "ModifierScheduler.h"
 #include "AudioBufferManager.h"
 #include "ChannelStrip.h"
+#include "ModifierPreset.h"
 
 struct AppState : public ModifierSchedulerListener
 {
@@ -19,6 +20,9 @@ struct AppState : public ModifierSchedulerListener
     AudioBufferManager bufferManager; // existing engine
     SessionSettings& settings = projectManager.getMutableSettings();
     ModifierScheduler scheduler { settings };
+
+    // Modifier state presets (A-D)
+    ModifierPresetBank presetBank;
 
     // Channel strips for FX placeholder wrapping existing buffers
     juce::OwnedArray<ChannelStrip> channelStrips;
@@ -125,6 +129,143 @@ struct AppState : public ModifierSchedulerListener
         b->setPlayheadSamples(startClamped);
     }
 
+
+    // ── Modifier presets ──────────────────────────────────────────────
+    void capturePreset(int slotIndex)
+    {
+        if (slotIndex < 0 || slotIndex >= ModifierPresetBank::kNumPresets) return;
+        auto& slot = presetBank.slots[static_cast<size_t>(slotIndex)];
+        slot.occupied = true;
+        for (int i = 0; i < 8; ++i)
+        {
+            auto& snap = slot.buffers[static_cast<size_t>(i)];
+            auto* buf = bufferManager.getBuffer(i);
+            auto* strip = channelStrips[i];
+            if (buf == nullptr || strip == nullptr) continue;
+
+            // AudioBuffer transform state
+            snap.speed                   = buf->getSpeed();
+            snap.stretchRatio            = buf->getStretchRatio();
+            snap.pitchSemiTones          = buf->getPitchSemiTones();
+            snap.continuousRandomSlicing = buf->isInContinuousRandomMode();
+            snap.pingPongEnabled         = buf->isPingPongModeEnabled();
+            snap.pingPongDivision        = buf->getPingPongDivision();
+
+            // ChannelStrip FX enable flags
+            const auto& fx = strip->effects();
+            snap.delayEnabled      = fx.delayEnabled;
+            snap.reverbEnabled     = fx.reverbEnabled;
+            snap.lowPassEnabled    = fx.lowPassEnabled;
+            snap.highPassEnabled   = fx.highPassEnabled;
+            snap.tremoloEnabled    = fx.tremoloEnabled;
+            snap.chorusEnabled     = fx.chorusEnabled;
+            snap.autoPanEnabled    = fx.autoPanEnabled;
+            snap.volumeRampEnabled = fx.volumeRampEnabled;
+
+            // ChannelStrip FxParams
+            const auto& fp = strip->getFxParams();
+            snap.reverbWet              = fp.reverbWet;
+            snap.reverbPreDelayMs       = fp.reverbPreDelayMs;
+            snap.delayFeedback          = fp.delayFeedback;
+            snap.delayTimeMs            = fp.delayTimeMs;
+            snap.delayWet               = fp.delayWet;
+            snap.delayPingPong          = fp.delayPingPong;
+            snap.delayFeedbackHighCutHz = fp.delayFeedbackHighCutHz;
+            snap.delayFbDrive           = fp.delayFbDrive;
+            snap.duckingEnabled         = fp.duckingEnabled;
+            snap.duckAmount             = fp.duckAmount;
+            snap.duckReleaseMs          = fp.duckReleaseMs;
+            snap.wowFlutterEnabled      = fp.wowFlutterEnabled;
+            snap.wowDepthMs             = fp.wowDepthMs;
+            snap.wowRateHz              = fp.wowRateHz;
+            snap.flutterDepthMs         = fp.flutterDepthMs;
+            snap.flutterRateHz          = fp.flutterRateHz;
+            snap.wowPeriodBars          = fp.wowPeriodBars;
+            snap.flutterPeriodBars      = fp.flutterPeriodBars;
+            snap.lowPassCutoff          = fp.lowPassCutoff;
+            snap.highPassCutoff         = fp.highPassCutoff;
+            snap.tremoloDepth           = fp.tremoloDepth;
+            snap.tremoloRateHz          = fp.tremoloRateHz;
+            snap.chorusDepth            = fp.chorusDepth;
+            snap.chorusRateHz           = fp.chorusRateHz;
+            snap.chorusMix              = fp.chorusMix;
+            snap.chorusDelayMs          = fp.chorusDelayMs;
+            snap.panRateHz              = fp.panRateHz;
+            snap.panDepth               = fp.panDepth;
+            snap.panMix                 = fp.panMix;
+            snap.panPeriodBars          = fp.panPeriodBars;
+            snap.volumeGain             = fp.volumeGain;
+        }
+    }
+
+    void restorePreset(int slotIndex)
+    {
+        if (slotIndex < 0 || slotIndex >= ModifierPresetBank::kNumPresets) return;
+        const auto& slot = presetBank.slots[static_cast<size_t>(slotIndex)];
+        if (! slot.occupied) return;
+        for (int i = 0; i < 8; ++i)
+        {
+            const auto& snap = slot.buffers[static_cast<size_t>(i)];
+            auto* buf = bufferManager.getBuffer(i);
+            auto* strip = channelStrips[i];
+            if (buf == nullptr || strip == nullptr) continue;
+
+            // AudioBuffer transform state
+            buf->setSpeed(snap.speed);
+            buf->setStretchRatio(snap.stretchRatio);
+            buf->setPitchSemiTones(snap.pitchSemiTones);
+            if (snap.continuousRandomSlicing)
+                buf->startContinuousRandomSlicing();
+            else
+                buf->stopContinuousRandomSlicing();
+            buf->setPingPongMode(snap.pingPongEnabled, snap.pingPongDivision,
+                                 settings.bpm, buf->getFileSampleRate());
+
+            // ChannelStrip: clear envelopes and reset FX state, then apply snapshot
+            auto& fx = strip->effects();
+            fx.delayEnabled      = snap.delayEnabled;
+            fx.reverbEnabled     = snap.reverbEnabled;
+            fx.lowPassEnabled    = snap.lowPassEnabled;
+            fx.highPassEnabled   = snap.highPassEnabled;
+            fx.tremoloEnabled    = snap.tremoloEnabled;
+            fx.chorusEnabled     = snap.chorusEnabled;
+            fx.autoPanEnabled    = snap.autoPanEnabled;
+            fx.volumeRampEnabled = snap.volumeRampEnabled;
+
+            auto& fp = strip->getMutableFxParams();
+            fp.reverbWet              = snap.reverbWet;
+            fp.reverbPreDelayMs       = snap.reverbPreDelayMs;
+            fp.delayFeedback          = snap.delayFeedback;
+            fp.delayTimeMs            = snap.delayTimeMs;
+            fp.delayWet               = snap.delayWet;
+            fp.delayPingPong          = snap.delayPingPong;
+            fp.delayFeedbackHighCutHz = snap.delayFeedbackHighCutHz;
+            fp.delayFbDrive           = snap.delayFbDrive;
+            fp.duckingEnabled         = snap.duckingEnabled;
+            fp.duckAmount             = snap.duckAmount;
+            fp.duckReleaseMs          = snap.duckReleaseMs;
+            fp.wowFlutterEnabled      = snap.wowFlutterEnabled;
+            fp.wowDepthMs             = snap.wowDepthMs;
+            fp.wowRateHz              = snap.wowRateHz;
+            fp.flutterDepthMs         = snap.flutterDepthMs;
+            fp.flutterRateHz          = snap.flutterRateHz;
+            fp.wowPeriodBars          = snap.wowPeriodBars;
+            fp.flutterPeriodBars      = snap.flutterPeriodBars;
+            fp.lowPassCutoff          = snap.lowPassCutoff;
+            fp.highPassCutoff         = snap.highPassCutoff;
+            fp.tremoloDepth           = snap.tremoloDepth;
+            fp.tremoloRateHz          = snap.tremoloRateHz;
+            fp.chorusDepth            = snap.chorusDepth;
+            fp.chorusRateHz           = snap.chorusRateHz;
+            fp.chorusMix              = snap.chorusMix;
+            fp.chorusDelayMs          = snap.chorusDelayMs;
+            fp.panRateHz              = snap.panRateHz;
+            fp.panDepth               = snap.panDepth;
+            fp.panMix                 = snap.panMix;
+            fp.panPeriodBars          = snap.panPeriodBars;
+            fp.volumeGain             = snap.volumeGain;
+        }
+    }
 
     ~AppState() override
     {

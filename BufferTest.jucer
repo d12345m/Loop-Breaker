@@ -51,6 +51,10 @@
             resource="0" file="Source/ProjectManager.cpp"/>
       <FILE id="channelStripH" name="ChannelStrip.h" compile="0" resource="0"
             file="Source/ChannelStrip.h"/>
+      <FILE id="modifierPresetH" name="ModifierPreset.h" compile="0" resource="0"
+            file="Source/ModifierPreset.h"/>
+      <FILE id="presetBarH" name="PresetBarComponent.h" compile="0" resource="0"
+            file="Source/PresetBarComponent.h"/>
       <FILE id="appStateH" name="AppState.h" compile="0" resource="0" file="Source/AppState.h"/>
       <FILE id="padGridH" name="PadGridComponent.h" compile="0" resource="0"
             file="Source/PadGridComponent.h"/>

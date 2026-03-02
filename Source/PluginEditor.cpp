@@ -15,6 +15,7 @@
 #include "ThemeLookAndFeel.h"
 #include "SettingsPanelContent.h"
 #include "BackgroundAnimator.h"
+#include "PresetBarComponent.h"
 
 namespace
 {
@@ -150,6 +151,41 @@ public:
         for (int i = 0; i < 8; ++i)
             padGrid.setMidiNoteForPad(i, app.settings.midiNoteMap[i]);
 
+        // ── Preset bar (A–D) ──
+        addAndMakeVisible(presetBar);
+        for (int i = 0; i < 4; ++i)
+        {
+            presetBar.setSlotOccupied(i, app.presetBank.isSlotOccupied(i));
+            presetBar.setMidiNote(i, app.settings.presetMidiNoteMap[static_cast<size_t>(i)]);
+        }
+
+        presetBar.onSavePreset = [this](int slot)
+        {
+            app.capturePreset(slot);
+            presetBar.setSlotOccupied(slot, true);
+        };
+
+        presetBar.onRecallPreset = [this](int slot)
+        {
+            app.restorePreset(slot);
+        };
+
+        presetBar.onClearPreset = [this](int slot)
+        {
+            app.presetBank.clearSlot(slot);
+            presetBar.setSlotOccupied(slot, false);
+        };
+
+        presetBar.onMidiLearnRequest = [this](int slot)
+        {
+            startPresetMidiLearn(slot);
+        };
+
+        presetBar.onClearMidiNote = [this](int slot)
+        {
+            clearPresetMidiNote(slot);
+        };
+
         app.scheduler.addListener(this);
 
         app.scheduler.setQuantizationEnabled(app.settings.quantizeEnabled);
@@ -277,6 +313,11 @@ public:
         auto row2 = area.removeFromTop(24).reduced(2);
         statusLabel.setBounds(row2.reduced(2));
 
+        // ── Preset bar (A–D) ──
+        area.removeFromTop(4);
+        auto presetRow = area.removeFromTop(38);
+        presetBar.setBounds(presetRow.reduced(4, 0));
+
         area.removeFromTop(6);
         padGrid.setBounds(area);
     }
@@ -329,6 +370,9 @@ private:
 
     juce::ToggleButton modifiersToggle { "Modifiers" };
     bool modifierToggleLearnActive = false;
+
+    PresetBarComponent presetBar;
+    int presetLearnSlot = -1; // which preset slot is in MIDI learn mode (-1 = none)
 
     juce::ComboBox partsCountBox;
     int pendingPartsCount = -1; // -1 = none; otherwise apply on next modifier trigger
@@ -422,6 +466,16 @@ private:
             modifiersToggleChanged();
         }
 
+        // Poll for MIDI preset-recall requests (from audio thread)
+        for (int pi = 0; pi < 4; ++pi)
+        {
+            if (processor.checkAndClearPresetRecall(pi))
+            {
+                if (app.presetBank.isSlotOccupied(pi))
+                    app.restorePreset(pi);
+            }
+        }
+
         // Poll for MIDI learn completion
         // Check for learned note even if learn mode was disabled by audio thread
         const int learnedNote = processor.checkAndClearLearnedNote();
@@ -438,6 +492,18 @@ private:
                 modifierToggleLearnActive = false;
                 processor.setMidiLearnMode(false, -1);
                 repaint();
+            }
+            else if (padIndex >= BufferTestAudioProcessor::kPresetLearnIndexBase
+                     && padIndex <= BufferTestAudioProcessor::kPresetLearnIndexBase + 3)
+            {
+                // Learned note for a preset slot
+                const int slot = padIndex - BufferTestAudioProcessor::kPresetLearnIndexBase;
+                DBG("Assigning note " + juce::String(learnedNote) + " to preset " + juce::String(slot));
+                app.settings.presetMidiNoteMap[static_cast<size_t>(slot)] = learnedNote;
+                presetBar.setMidiNote(slot, learnedNote);
+                presetBar.setMidiLearnActive(slot, false);
+                presetLearnSlot = -1;
+                processor.setMidiLearnMode(false, -1);
             }
             else if (padIndex >= 0 && padIndex < 8)
             {
@@ -487,6 +553,14 @@ private:
                     partsCountBox.setSelectedId(loadedParts, juce::dontSendNotification);
                 }
                 barsBetweenModifiersSlider.setValue(app.settings.barsBetweenModifiers, juce::dontSendNotification);
+
+                // Sync preset bar state from restored settings
+                for (int i = 0; i < 4; ++i)
+                {
+                    presetBar.setSlotOccupied(i, app.presetBank.isSlotOccupied(i));
+                    presetBar.setMidiNote(i, app.settings.presetMidiNoteMap[static_cast<size_t>(i)]);
+                }
+
                 padPathsSynced = true;
             }
         }
@@ -641,6 +715,52 @@ private:
         modifierToggleLearnActive = false;
         processor.setMidiLearnMode(false, -1);
         repaint();
+    }
+
+    void startPresetMidiLearn(int slot)
+    {
+        if (slot < 0 || slot >= 4) return;
+
+        // Cancel any existing learn mode (pad, modifier toggle, or another preset)
+        if (processor.isMidiLearnEnabled())
+        {
+            const int prevPad = processor.getMidiLearnPadIndex();
+            if (prevPad >= 0 && prevPad < 8)
+                padGrid.setMidiLearnForPad(prevPad, false);
+            if (modifierToggleLearnActive)
+            {
+                modifierToggleLearnActive = false;
+                repaint();
+            }
+            if (presetLearnSlot >= 0 && presetLearnSlot < 4)
+                presetBar.setMidiLearnActive(presetLearnSlot, false);
+        }
+
+        // If clicking the same slot already in learn mode, cancel
+        if (presetLearnSlot == slot)
+        {
+            presetLearnSlot = -1;
+            presetBar.setMidiLearnActive(slot, false);
+            processor.setMidiLearnMode(false, -1);
+            return;
+        }
+
+        presetLearnSlot = slot;
+        presetBar.setMidiLearnActive(slot, true);
+        processor.setMidiLearnMode(true, BufferTestAudioProcessor::kPresetLearnIndexBase + slot);
+    }
+
+    void clearPresetMidiNote(int slot)
+    {
+        if (slot < 0 || slot >= 4) return;
+        app.settings.presetMidiNoteMap[static_cast<size_t>(slot)] = -1;
+        presetBar.setMidiNote(slot, -1);
+        if (presetLearnSlot == slot)
+        {
+            presetLearnSlot = -1;
+            presetBar.setMidiLearnActive(slot, false);
+            processor.setMidiLearnMode(false, -1);
+        }
     }
 
     void showModifierToggleContextMenu()

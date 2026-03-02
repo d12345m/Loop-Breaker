@@ -342,6 +342,9 @@ struct AppState : public ModifierSchedulerListener
             case ModifierType::BeatSliceRandom:
                 applyBeatSliceRandom(desc, targets);
                 break;
+            case ModifierType::ArpSlice:
+                applyArpSlice(desc, targets);
+                break;
             case ModifierType::PingPong:
                 applyPingPong(desc, targets);
                 break;
@@ -594,6 +597,28 @@ private:
                 if (slices < 2) continue;
                 b->setNumSlices(slices);
                 b->startContinuousRandomSlicing();
+                if (!b->isPlaying()) b->play();
+            }
+        }
+    }
+
+    void applyArpSlice(const ModifierDescriptor& desc, const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        // Determine parameters from planned fields or defaults
+        int seqLen = desc.plannedArpSequenceLength.value_or(4);
+        int totalSlices = desc.plannedArpTotalSlices.value_or(16);
+        int repeatBars = desc.plannedArpRepeatBars.value_or(2);
+
+        seqLen = juce::jlimit(1, 8, seqLen);
+        totalSlices = juce::jlimit(4, 64, totalSlices);
+        repeatBars = juce::jmax(1, repeatBars);
+
+        for (int idx : targets)
+        {
+            if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
+            {
+                b->startArpSlicing(totalSlices, seqLen, repeatBars);
                 if (!b->isPlaying()) b->play();
             }
         }

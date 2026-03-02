@@ -32,6 +32,7 @@ enum class ModifierType
     PitchUpOctave,
     PitchDownOctave,
     BeatSliceRandom,
+    ArpSlice,
     PingPong,
 
     // Individual buffer FX modifiers
@@ -77,6 +78,9 @@ struct ModifierDescriptor
     std::optional<double> plannedStretch;         // e.g. 0.25, 0.50, 2.00 for Stretch (tempo only)
     std::optional<double> plannedWet;             // e.g. 0.25, 0.50, 0.75, 1.00 for Reverb
     juce::String plannedSliceDivision;            // e.g. "1/8", "1/8T" for BeatSliceRandom (empty if unset)
+    std::optional<int> plannedArpSequenceLength;    // ArpSlice: how many slices in the arp pattern (1,2,3,4,6,8)
+    std::optional<int> plannedArpRepeatBars;        // ArpSlice: how many bars before picking a new sequence
+    std::optional<int> plannedArpTotalSlices;       // ArpSlice: total slice count to divide the buffer into
     juce::String plannedDelayDivision;            // e.g. "1/4", "1/8", "1/8D", "1/8T" for Delay (empty if unset)
     std::optional<double> plannedDelayWet;        // e.g. 0.25, 0.50, 0.75, 1.00 for Delay wet mix
     juce::StringArray plannedDelayDivisions;      // Multiple divisions (if multi-tap selected)

@@ -420,6 +420,15 @@ void ModifierScheduler::forceUpcomingVariant(ModifierType type, const juce::Stri
                 base.plannedSliceDivision = variant; // expect one of division labels
                 base.description = base.description + " -> " + base.plannedSliceDivision;
             }
+            else if (type == ModifierType::ArpSlice)
+            {
+                // Variant format: "seqLen|totalSlices|repeatBars" e.g. "4|16|2"
+                auto parts = juce::StringArray::fromTokens(variant, "|", "");
+                if (parts.size() >= 1) base.plannedArpSequenceLength = parts[0].getIntValue();
+                if (parts.size() >= 2) base.plannedArpTotalSlices = parts[1].getIntValue();
+                if (parts.size() >= 3) base.plannedArpRepeatBars = parts[2].getIntValue();
+                base.description = base.description + " -> Arp " + variant;
+            }
             else if (type == ModifierType::BufferDelayOn)
             {
                 // Combined syntax: divisions comma-separated | wet | fb:feedback
@@ -498,6 +507,7 @@ ModifierDescriptor ModifierScheduler::pickRandomDescriptor() const
                 || t == ModifierType::PitchDownOctave
                 || t == ModifierType::ResetAll
                 || t == ModifierType::BeatSliceRandom
+                || t == ModifierType::ArpSlice
                 || t == ModifierType::BufferReverbOn
                 || t == ModifierType::BufferDelayOn
                 || t == ModifierType::BufferDelayDubBurst
@@ -579,6 +589,24 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
         // Store as a simple numeric label for reuse in apply
         modified.plannedSliceDivision = juce::String(chosen);
         modified.description = base.description + " -> " + juce::String(chosen) + " slices";
+    }
+    else if (base.type == ModifierType::ArpSlice)
+    {
+        // Sequence lengths: {1,2,3,4,6,8}
+        static const int seqLens[] { 1, 2, 3, 4, 6, 8 };
+        // Total slice counts for the grid: {4,8,16,32}
+        static const int sliceCounts[] { 4, 8, 16, 32 };
+        // Repeat cycles before refreshing: {1,2,4,8}
+        static const int repeatOptions[] { 1, 2, 4, 8 };
+        const juce::SpinLock::ScopedLockType lock(rngLock);
+        int seqLen = seqLens[rng.nextInt((int)std::size(seqLens))];
+        int totalSlices = sliceCounts[rng.nextInt((int)std::size(sliceCounts))];
+        int repeatBars = repeatOptions[rng.nextInt((int)std::size(repeatOptions))];
+        modified.plannedArpSequenceLength = seqLen;
+        modified.plannedArpTotalSlices = totalSlices;
+        modified.plannedArpRepeatBars = repeatBars;
+        modified.description = base.description + " -> Arp " + juce::String(seqLen) + " slices / "
+            + juce::String(totalSlices) + " grid / " + juce::String(repeatBars) + " cycles";
     }
     else if (base.type == ModifierType::BufferReverbOn)
     {

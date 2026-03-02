@@ -62,6 +62,7 @@ public:
     // Speed variants removed; Speed is randomized at runtime.
     addToggle(ModifierType::ResetAll, "Reset");
     addToggle(ModifierType::BeatSliceRandom, "Slice (rand)");
+    addToggle(ModifierType::ArpSlice, "Arp Slice");
     addToggle(ModifierType::SwitchPart, "Switch Part");
     }
 

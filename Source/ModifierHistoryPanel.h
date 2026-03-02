@@ -106,6 +106,7 @@ public:
             case ModifierType::Speed:           typeColour = Theme::accent(); break;
             case ModifierType::ResetAll:        typeColour = Theme::warn(); break;
             case ModifierType::BeatSliceRandom: typeColour = Theme::good(); break;
+            case ModifierType::ArpSlice:        typeColour = Theme::good(); break;
             default:                            typeColour = Theme::textSubtle(); break;
         }
 

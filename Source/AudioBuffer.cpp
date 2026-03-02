@@ -641,6 +641,40 @@ void AudioBuffer::processWithRepitching(juce::AudioBuffer<float>& outputBuffer)
                     currentPos = newPos;
                 }
             }
+            else if (params.arpSliceActive && !params.arpSequence.empty())
+            {
+                bool atBoundary = (spd > 0.0 && currentPos >= sliceEnd - 1.0)
+                               || (spd < 0.0 && currentPos <= sliceStart);
+                if (atBoundary)
+                {
+                    // Advance position in the arp sequence
+                    params.arpSequencePos++;
+                    if (params.arpSequencePos >= (int)params.arpSequence.size())
+                    {
+                        params.arpSequencePos = 0;
+                        params.arpCycleCount++;
+                        // Refresh the sequence after N full cycles
+                        if (params.arpCycleCount >= params.arpTotalCyclesPerRefresh)
+                        {
+                            params.arpCycleCount = 0;
+                            int seqLen = (int)params.arpSequence.size();
+                            params.arpSequence.clear();
+                            for (int si = 0; si < seqLen; ++si)
+                                params.arpSequence.push_back(random.nextInt(params.numSlices));
+                        }
+                    }
+                    const int nextSlice = params.arpSequence[(size_t)params.arpSequencePos];
+                    double newPos = (spd > 0.0)
+                        ? getSliceStartPosition(nextSlice, fileLengthSamples)
+                        : getSliceEndPosition(nextSlice, fileLengthSamples) - 1.0;
+                    previousSliceIndex = activeSlice;
+                    previousSlicePlayheadPos = currentPos;
+                    isInCrossfade = true;
+                    crossfadePosition = 0;
+                    activeSlice = nextSlice;
+                    currentPos = newPos;
+                }
+            }
             else
             {
                 if (spd > 0.0 && currentPos >= sliceEnd - 1.0)
@@ -1489,6 +1523,51 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                     currentPos = newPos;
                 }
             }
+            else if (params.arpSliceActive && !params.arpSequence.empty())
+            {
+                const double sliceStart = getSliceStartPosition (localActiveSlice, fileLengthSamples);
+                const double sliceEnd   = getSliceEndPosition (localActiveSlice, fileLengthSamples);
+
+                bool shouldTriggerNext = false;
+                const double speed = getEffectiveSpeed();
+
+                if (speed > 0.0)
+                    shouldTriggerNext = (currentPos >= sliceEnd - 1.0);
+                else if (speed < 0.0)
+                    shouldTriggerNext = (currentPos <= sliceStart);
+
+                if (shouldTriggerNext)
+                {
+                    params.arpSequencePos++;
+                    if (params.arpSequencePos >= (int)params.arpSequence.size())
+                    {
+                        params.arpSequencePos = 0;
+                        params.arpCycleCount++;
+                        if (params.arpCycleCount >= params.arpTotalCyclesPerRefresh)
+                        {
+                            params.arpCycleCount = 0;
+                            int seqLen = (int)params.arpSequence.size();
+                            params.arpSequence.clear();
+                            for (int si = 0; si < seqLen; ++si)
+                                params.arpSequence.push_back(random.nextInt(params.numSlices));
+                        }
+                    }
+                    const int nextSlice = params.arpSequence[(size_t)params.arpSequencePos];
+
+                    double newPos = 0.0;
+                    if (speed > 0.0)
+                        newPos = getSliceStartPosition (nextSlice, fileLengthSamples);
+                    else
+                        newPos = getSliceEndPosition (nextSlice, fileLengthSamples) - 1.0;
+
+                    previousSliceIndex = localActiveSlice;
+                    previousSlicePlayheadPos = currentPos;
+                    isInCrossfade = true;
+                    crossfadePosition = 0;
+                    localActiveSlice = nextSlice;
+                    currentPos = newPos;
+                }
+            }
             else
             {
                 const double sliceStart = getSliceStartPosition (localActiveSlice, fileLengthSamples);
@@ -1977,10 +2056,56 @@ void AudioBuffer::stopContinuousRandomSlicing()
     params.continuousRandomSlicing = false;
 }
 
+void AudioBuffer::startArpSlicing(int totalSlices, int sequenceLength, int repeatBars)
+{
+    // Set up the slice grid
+    int slices = juce::jlimit(4, 64, totalSlices);
+    setNumSlices(slices);
+
+    // Build a random sequence of `sequenceLength` slice indices
+    sequenceLength = juce::jlimit(1, 8, sequenceLength);
+    repeatBars = juce::jmax(1, repeatBars);
+
+    params.arpSequence.clear();
+    for (int i = 0; i < sequenceLength; ++i)
+        params.arpSequence.push_back(random.nextInt(slices));
+
+    params.arpSequencePos = 0;
+    params.arpRepeatBars = repeatBars;
+    params.arpCycleCount = 0;
+    // How many full sequence cycles fit in repeatBars worth of slices?
+    // Each slice plays for (bufferDuration / numSlices) seconds.
+    // One full sequence cycle = sequenceLength slices.
+    // Total slices in repeatBars bars = repeatBars * numSlices (whole buffer = 1 bar approx).
+    // Actually, let's just count: the sequence repeats, and after repeatBars full cycles
+    // through the sequence, we pick a new sequence.
+    params.arpTotalCyclesPerRefresh = juce::jmax(1, repeatBars);
+    params.arpSliceActive = true;
+    params.continuousRandomSlicing = false; // disable random mode
+
+    // Trigger the first slice in the sequence
+    if (!params.arpSequence.empty())
+        triggerSlice(params.arpSequence[0]);
+
+    slicingModeActive.store(true);
+}
+
+void AudioBuffer::stopArpSlicing()
+{
+    params.arpSliceActive = false;
+    params.arpSequence.clear();
+    params.arpSequencePos = 0;
+    params.arpCycleCount = 0;
+}
+
 void AudioBuffer::exitSlicingMode()
 {
     slicingModeActive.store(false);
     params.continuousRandomSlicing = false;
+    params.arpSliceActive = false;
+    params.arpSequence.clear();
+    params.arpSequencePos = 0;
+    params.arpCycleCount = 0;
     sliceTriggered.store(false);
     currentActiveSlice.store(0);
     
@@ -2420,6 +2545,49 @@ void AudioBuffer::handleSlicePlayback(double& currentPos, int fileLengthSamples)
             }
             
             // Start crossfade transition to new random slice
+            startSliceCrossfade(nextSlice, newPos);
+            currentPos = newPos;
+            return;
+        }
+    }
+    else if (params.arpSliceActive && !params.arpSequence.empty())
+    {
+        int activeSlice = currentActiveSlice.load();
+        double sliceStart = getSliceStartPosition(activeSlice, fileLengthSamples);
+        double sliceEnd = getSliceEndPosition(activeSlice, fileLengthSamples);
+        
+        bool shouldTriggerNext = false;
+        double speed = getEffectiveSpeed();
+        
+        if (speed > 0.0)
+            shouldTriggerNext = (currentPos >= sliceEnd - 1.0);
+        else if (speed < 0.0)
+            shouldTriggerNext = (currentPos <= sliceStart);
+        
+        if (shouldTriggerNext)
+        {
+            params.arpSequencePos++;
+            if (params.arpSequencePos >= (int)params.arpSequence.size())
+            {
+                params.arpSequencePos = 0;
+                params.arpCycleCount++;
+                if (params.arpCycleCount >= params.arpTotalCyclesPerRefresh)
+                {
+                    params.arpCycleCount = 0;
+                    int seqLen = (int)params.arpSequence.size();
+                    params.arpSequence.clear();
+                    for (int si = 0; si < seqLen; ++si)
+                        params.arpSequence.push_back(random.nextInt(params.numSlices));
+                }
+            }
+            const int nextSlice = params.arpSequence[(size_t)params.arpSequencePos];
+            
+            double newPos;
+            if (speed > 0.0)
+                newPos = getSliceStartPosition(nextSlice, fileLengthSamples);
+            else
+                newPos = getSliceEndPosition(nextSlice, fileLengthSamples) - 1.0;
+            
             startSliceCrossfade(nextSlice, newPos);
             currentPos = newPos;
             return;

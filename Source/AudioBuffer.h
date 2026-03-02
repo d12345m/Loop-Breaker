@@ -50,6 +50,13 @@ struct AudioBufferParams
     int numSlices = 1;
     bool continuousRandomSlicing = false;
     double crossfadeLengthMs = 20.0;
+    // Arp slice state
+    bool arpSliceActive = false;
+    std::vector<int> arpSequence;           // fixed sequence of slice indices
+    int arpSequencePos = 0;                  // current position within the sequence
+    int arpRepeatBars = 2;                   // bars before picking a new sequence
+    int arpCycleCount = 0;                   // how many full sequence cycles completed
+    int arpTotalCyclesPerRefresh = 0;        // total cycles before refresh (derived from bars)
     
     // Reset to default values
     void reset()
@@ -60,6 +67,12 @@ struct AudioBufferParams
         numSlices = 1;
         continuousRandomSlicing = false;
         crossfadeLengthMs = 20.0;
+        arpSliceActive = false;
+        arpSequence.clear();
+        arpSequencePos = 0;
+        arpRepeatBars = 2;
+        arpCycleCount = 0;
+        arpTotalCyclesPerRefresh = 0;
     }
 };
 
@@ -204,6 +217,11 @@ public:
     void startContinuousRandomSlicing();
     void stopContinuousRandomSlicing();
     void exitSlicingMode();
+
+    // Arp slice: play a fixed sequence of slices, refreshing after N bars
+    void startArpSlicing(int totalSlices, int sequenceLength, int repeatBars);
+    void stopArpSlicing();
+    bool isInArpSliceMode() const { return params.arpSliceActive; }
     
     //==============================================================================
     // State queries

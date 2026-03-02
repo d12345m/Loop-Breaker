@@ -16,7 +16,7 @@ set -euo pipefail
 PLUGIN_NAME="Loop Breaker"
 PLUGIN_FILENAME="LoopBreaker"                      # .vst3 bundle name
 BUNDLE_ID="com.glowmachineaudio.LoopBreaker"
-COMPANY="Glow Machine Audio"
+COMPANY="GlowMachineAudio"
 VERSION="1.0.0"
 
 # Paths (relative to project root)

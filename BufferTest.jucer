@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <JUCERPROJECT id="vFjAY7" name="LoopBreaker" projectType="audioplug" useAppConfig="0"
-              addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1" companyName="Glow Machine Audio"
+              addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1" companyName="GlowMachineAudio"
               pluginName="Loop Breaker"
-              pluginDesc="Loop Breaker" pluginManufacturer="Glow Machine Audio"
+              pluginDesc="Loop Breaker" pluginManufacturer="GlowMachineAudio"
               pluginManufacturerCode="GloM" pluginCode="TsPl" pluginIsSynth="1"
               pluginWantsMidiIn="1" pluginProducesMidiOut="0" pluginIsMidiEffectPlugin="0"
               pluginEditorRequiresKeys="0" pluginAUExportPrefix="LoopBreakerAU"

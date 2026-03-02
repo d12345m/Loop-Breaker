@@ -61,8 +61,11 @@ public:
         }
         partsCombo.onChange = [this]
         {
-            settings.parts.numParts = juce::jlimit (1, 4, partsCombo.getSelectedId());
-            if (onPartsChanged) onPartsChanged (settings.parts.numParts);
+            int newParts = juce::jlimit (1, 4, partsCombo.getSelectedId());
+            if (onPartsChanged)
+                onPartsChanged (newParts);
+            else
+                settings.parts.numParts = newParts;  // fallback if no callback wired
         };
 
         // ── Bars per modifier slider ────────────────────────────────────

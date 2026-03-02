@@ -322,6 +322,41 @@ public:
         padGrid.setBounds(area);
     }
 
+    /** Called by the Settings tab when the parts dropdown changes.
+        Applies loop braces immediately if transport is stopped,
+        or defers until the next modifier trigger if transport is running. */
+    void handlePartsChanged (int numParts)
+    {
+        const int n = juce::jlimit (1, 4, numParts);
+
+        // Keep the internal (hidden) combo in sync
+        partsCountBox.setSelectedId (n, juce::dontSendNotification);
+
+        // If the DAW transport is stopped, apply immediately.
+        if (processor.getLastHostTransportState() == BufferTestAudioProcessor::HostTransportState::Stopped)
+        {
+            app.settings.parts.numParts = n;
+            app.setActivePart (app.getActivePart());
+            pendingPartsCount = -1;
+            refreshStatus();
+            return;
+        }
+
+        // If transport is running (host or internal playback), defer until next modifier trigger.
+        if (isTransportRunning())
+        {
+            pendingPartsCount = n;
+            refreshStatus();
+            return;
+        }
+
+        // Not running: store the setting; loop windows recomputed on playback start
+        // or on the next modifier trigger.
+        app.settings.parts.numParts = n;
+        pendingPartsCount = -1;
+        refreshStatus();
+    }
+
     // ModifierSchedulerListener
     void upcomingModifierChanged(const ModifierDescriptor& desc) override
     {
@@ -866,11 +901,11 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
 
     settingsPanel = std::make_unique<SettingsPanelContent>(processor.getAppState().settings);
 
-    // Wire up parts-changed callback so loop braces actually update
+    // Wire up parts-changed callback — delegates to PluginEditorContent which
+    // handles the transport-aware deferred logic (pendingPartsCount).
     settingsPanel->onPartsChanged = [this](int numParts)
     {
-        auto& app = processor.getAppState();
-        app.setActivePart(app.getActivePart());
+        static_cast<PluginEditorContent*>(content.get())->handlePartsChanged(numParts);
     };
 
     // Wire up bars-per-modifier callback (keeps PluginEditorContent in sync)

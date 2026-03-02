@@ -276,6 +276,10 @@ public:
     {
         if (slot < 0 || slot >= 4) return;
 
+        // Stop any one-shot highlight that mouseDown may have started,
+        // so its completion callback can't reset the glow alpha to 0.
+        highlightAnimators[static_cast<size_t>(slot)].stop();
+
         pendingGlowSlot = slot;
         highlightedSlot = slot;
         highlightType = HighlightType::Recall;

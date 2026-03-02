@@ -44,6 +44,44 @@ public:
             ThemeEngine::getInstance().setTheme (name);
         };
 
+        // ── Parts dropdown ──────────────────────────────────────────────
+        addAndMakeVisible (partsLabel);
+        partsLabel.setText ("Parts", juce::dontSendNotification);
+        partsLabel.setJustificationType (juce::Justification::centredRight);
+        partsLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
+
+        addAndMakeVisible (partsCombo);
+        partsCombo.addItem ("1 part",  1);
+        partsCombo.addItem ("2 parts", 2);
+        partsCombo.addItem ("3 parts", 3);
+        partsCombo.addItem ("4 parts", 4);
+        {
+            int p = juce::jlimit (1, 4, settings.parts.getNumParts());
+            partsCombo.setSelectedId (p, juce::dontSendNotification);
+        }
+        partsCombo.onChange = [this]
+        {
+            settings.parts.numParts = juce::jlimit (1, 4, partsCombo.getSelectedId());
+            if (onPartsChanged) onPartsChanged (settings.parts.numParts);
+        };
+
+        // ── Bars per modifier slider ────────────────────────────────────
+        addAndMakeVisible (barsLabel);
+        barsLabel.setText ("Bars / Modifier", juce::dontSendNotification);
+        barsLabel.setJustificationType (juce::Justification::centredRight);
+        barsLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
+
+        addAndMakeVisible (barsSlider);
+        barsSlider.setRange (1.0, 16.0, 1.0);
+        barsSlider.setValue (settings.barsBetweenModifiers, juce::dontSendNotification);
+        barsSlider.setSliderStyle (juce::Slider::LinearHorizontal);
+        barsSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 44, 22);
+        barsSlider.onValueChange = [this]
+        {
+            settings.barsBetweenModifiers = juce::jlimit (1, 16, (int) barsSlider.getValue());
+            if (onBarsChanged) onBarsChanged (settings.barsBetweenModifiers);
+        };
+
         // ── Animation controls (hidden for now — kept for future use) ──
         // All animation widgets are created but not made visible.
         animToggle.setButtonText ("Enable Animations");
@@ -108,6 +146,10 @@ public:
         // Refresh label colours / fonts for the new theme
         themeLabel.setColour (juce::Label::textColourId, Theme::text());
         themeLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
+        partsLabel.setColour (juce::Label::textColourId, Theme::text());
+        partsLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
+        barsLabel.setColour (juce::Label::textColourId, Theme::text());
+        barsLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
         speedLabel.setColour (juce::Label::textColourId, Theme::text());
         speedLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
         bgModeLabel.setColour (juce::Label::textColourId, Theme::text());
@@ -119,6 +161,18 @@ public:
         themeCombo.setColour (juce::ComboBox::textColourId,       Theme::text());
         themeCombo.setColour (juce::ComboBox::arrowColourId,      Theme::textSubtle());
 
+        partsCombo.setColour (juce::ComboBox::backgroundColourId, Theme::panel());
+        partsCombo.setColour (juce::ComboBox::outlineColourId,    Theme::border());
+        partsCombo.setColour (juce::ComboBox::textColourId,       Theme::text());
+        partsCombo.setColour (juce::ComboBox::arrowColourId,      Theme::textSubtle());
+
+        barsSlider.setColour (juce::Slider::backgroundColourId,     Theme::panelAlt());
+        barsSlider.setColour (juce::Slider::trackColourId,          Theme::accent());
+        barsSlider.setColour (juce::Slider::thumbColourId,          Theme::accent().brighter (0.2f));
+        barsSlider.setColour (juce::Slider::textBoxBackgroundColourId, Theme::panelAlt());
+        barsSlider.setColour (juce::Slider::textBoxTextColourId,    Theme::text());
+        barsSlider.setColour (juce::Slider::textBoxOutlineColourId, Theme::border());
+
         repaint();
     }
 
@@ -129,12 +183,24 @@ public:
 
         auto bounds = getLocalBounds().reduced (20, 16);
 
-        // Section header
+        // Section header: Appearance
         g.setColour (palette.accent1);
-        g.setFont (ThemeFonts::getInstance().headingFont (17.0f));
+        g.setFont (ThemeFonts::getInstance().headingFont (18.0f));
         g.drawText ("Appearance", bounds.removeFromTop (28), juce::Justification::centredLeft);
 
         // Divider
+        g.setColour (palette.border);
+        g.fillRect (bounds.removeFromTop (1));
+
+        // Skip theme row
+        bounds.removeFromTop (34);
+
+        // Section header: Session
+        bounds.removeFromTop (12);
+        g.setColour (palette.accent1);
+        g.setFont (ThemeFonts::getInstance().headingFont (18.0f));
+        g.drawText ("Session", bounds.removeFromTop (28), juce::Justification::centredLeft);
+
         g.setColour (palette.border);
         g.fillRect (bounds.removeFromTop (1));
     }
@@ -146,8 +212,6 @@ public:
 
         const int rowH = 34;
         const int labelW = 140;
-        const int toggleIndent = labelW + 20;
-        const int toggleWidth = 250;
 
         // Theme row
         {
@@ -157,7 +221,26 @@ public:
             themeCombo.setBounds (row.removeFromLeft (200));
         }
 
-        // Animation controls are hidden — layout only contains the theme row above.
+        // Session section header gap
+        area.removeFromTop (12 + 28 + 1);  // spacing + "Session" heading + divider
+
+        // Parts row
+        {
+            auto row = area.removeFromTop (rowH);
+            partsLabel.setBounds (row.removeFromLeft (labelW));
+            row.removeFromLeft (10);
+            partsCombo.setBounds (row.removeFromLeft (160));
+        }
+
+        // Bars per modifier row
+        {
+            auto row = area.removeFromTop (rowH);
+            barsLabel.setBounds (row.removeFromLeft (labelW));
+            row.removeFromLeft (10);
+            barsSlider.setBounds (row.removeFromLeft (200));
+        }
+
+        // Animation controls are hidden — layout only contains the rows above.
         // When re-enabling, restore the resized() layout for animation toggles,
         // speed slider, and background mode radio buttons here.
     }
@@ -211,9 +294,21 @@ private:
 
     SessionSettings& settings;
 
+    // Callbacks (set by parent to integrate with session logic)
+    std::function<void(int)> onPartsChanged;
+    std::function<void(int)> onBarsChanged;
+
     // Theme
     juce::Label    themeLabel;
     juce::ComboBox themeCombo;
+
+    // Parts
+    juce::Label    partsLabel;
+    juce::ComboBox partsCombo;
+
+    // Bars per modifier
+    juce::Label  barsLabel;
+    juce::Slider barsSlider;
 
     // Animation toggles
     juce::ToggleButton animToggle;

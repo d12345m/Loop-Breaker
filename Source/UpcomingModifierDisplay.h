@@ -137,19 +137,19 @@ public:
 
         // "NEXT" badge
         {
-            auto badgeRect = juce::Rectangle<float>(topRow.getX(), topRow.getY() + 2.0f, 44.0f, 18.0f);
+            auto badgeRect = juce::Rectangle<float>(topRow.getX(), topRow.getY() + 2.0f, 52.0f, 22.0f);
             g.setColour(palette.accent1.withAlpha(0.18f));
             g.fillRoundedRectangle(badgeRect, 3.0f);
             g.setColour(palette.accent1);
-            g.setFont(ThemeFonts::getInstance().monoBoldFont(11.0f));
+            g.setFont(ThemeFonts::getInstance().monoBoldFont(13.0f));
             g.drawText("NEXT", badgeRect, juce::Justification::centred);
         }
 
         // Modifier name (accent1-tinted, bold)
         {
-            auto nameArea = topRow.withTrimmedLeft(50.0f).withTrimmedRight(170.0f);
+            auto nameArea = topRow.withTrimmedLeft(58.0f).withTrimmedRight(170.0f);
             g.setColour(palette.accent1);
-            auto nameFont = ThemeFonts::getInstance().modifierNameFont(20.0f);
+            auto nameFont = ThemeFonts::getInstance().modifierNameFont(26.0f);
             g.setFont(nameFont);
             g.drawText(upcomingName, nameArea, juce::Justification::centredLeft, true);
         }
@@ -157,14 +157,14 @@ public:
         // Variant (secondary text)
         if (upcomingVariant.isNotEmpty())
         {
-            auto variantArea = topRow.withTrimmedLeft(50.0f).withTrimmedRight(170.0f);
+            auto variantArea = topRow.withTrimmedLeft(58.0f).withTrimmedRight(170.0f);
             // Compute name width to offset the variant text
             juce::GlyphArrangement nameGlyphs;
             nameGlyphs.addLineOfText(g.getCurrentFont(), upcomingName, 0.0f, 0.0f);
             float nameWidth = nameGlyphs.getBoundingBox(0, -1, false).getWidth();
             variantArea.removeFromLeft(nameWidth + 10.0f);
             g.setColour(palette.textSecondary);
-            g.setFont(ThemeFonts::getInstance().monoFont(14.0f));
+            g.setFont(ThemeFonts::getInstance().monoFont(16.0f));
             g.drawText(upcomingVariant, variantArea, juce::Justification::centredLeft, true);
         }
 
@@ -235,7 +235,7 @@ public:
 
         // Description
         g.setColour(palette.textSecondary);
-        g.setFont(ThemeFonts::getInstance().bodyFont(14.0f));
+        g.setFont(ThemeFonts::getInstance().bodyFont(16.0f));
         auto descArea = bottomRow.withTrimmedRight(160.0f);
         g.drawFittedText(upcomingDescription, descArea.toNearestInt(), juce::Justification::centredLeft, 1);
 
@@ -243,7 +243,7 @@ public:
         {
             auto countArea = bottomRow.removeFromRight(160.0f);
             g.setColour(palette.textSecondary);
-            g.setFont(ThemeFonts::getInstance().monoFont(14.0f));
+            g.setFont(ThemeFonts::getInstance().monoFont(16.0f));
             juce::String timeStr = juce::String(secondsRemaining, 1) + "s  |  "
                                  + juce::String(barsRemaining, 2) + " bars";
             juce::String suffix = suppressed ? "  [OFF]" : "";

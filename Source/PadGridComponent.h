@@ -52,7 +52,7 @@ public:
 
             auto* label = padFileLabels.add(new juce::Label());
             label->setJustificationType(juce::Justification::centred);
-            label->setFont(ThemeFonts::getInstance().controlLabelFont(12.0f));
+            label->setFont(ThemeFonts::getInstance().controlLabelFont(14.0f));
             label->setInterceptsMouseClicks(false, false);
             label->setColour(juce::Label::textColourId, Theme::textSubtle());
             addAndMakeVisible(label);
@@ -583,22 +583,22 @@ private:
 
                 // ── Pad number badge (top-left) ──
                 {
-                    auto badgeRect = juce::Rectangle<float>(r.getX() + 4.0f, r.getY() + 4.0f, 18.0f, 16.0f);
+                    auto badgeRect = juce::Rectangle<float>(r.getX() + 4.0f, r.getY() + 4.0f, 20.0f, 18.0f);
                     g.setColour(palette.accent1.withAlpha(0.30f));
                     g.fillRoundedRectangle(badgeRect, 3.0f);
                     g.setColour(palette.textPrimary);
-                    g.setFont(ThemeFonts::getInstance().monoBoldFont(10.0f));
+                    g.setFont(ThemeFonts::getInstance().monoBoldFont(12.0f));
                     g.drawText(juce::String(i + 1), badgeRect, juce::Justification::centred);
                 }
 
                 // ── MIDI note badge (top-right) ──
                 if (!midiLearnActive[(size_t)i] && midiNotes[(size_t)i] >= 0)
                 {
-                    auto noteRect = juce::Rectangle<float>(r.getRight() - 38.0f, r.getY() + 4.0f, 34.0f, 16.0f);
+                    auto noteRect = juce::Rectangle<float>(r.getRight() - 40.0f, r.getY() + 4.0f, 36.0f, 18.0f);
                     g.setColour(palette.panelAlt);
                     g.fillRoundedRectangle(noteRect, 3.0f);
                     g.setColour(palette.textSecondary);
-                    g.setFont(ThemeFonts::getInstance().monoFont(10.0f));
+                    g.setFont(ThemeFonts::getInstance().monoFont(12.0f));
                     g.drawText(juce::String(midiNotes[(size_t)i]), noteRect, juce::Justification::centred);
                 }
 
@@ -634,7 +634,7 @@ private:
                     g.setColour(palette.warn);
                     g.fillRoundedRectangle(learnRect, 3.0f);
                     g.setColour(palette.bg);
-                    g.setFont(ThemeFonts::getInstance().monoBoldFont(11.0f));
+                    g.setFont(ThemeFonts::getInstance().monoBoldFont(13.0f));
                     g.drawText("LEARN", learnRect, juce::Justification::centred);
                 }
 
@@ -697,7 +697,7 @@ private:
                             auto hintArea = r.reduced(10.f).toNearestInt();
                             hintArea.removeFromBottom(18);
                             g.setColour(palette.textPrimary.withAlpha(0.9f));
-                            g.setFont(ThemeFonts::getInstance().bodyFont(13.0f));
+                            g.setFont(ThemeFonts::getInstance().bodyFont(15.0f));
                             const auto hint = (count > 1) ? ("Drop to load " + juce::String(count))
                                                          : juce::String("Drop to load");
                             g.drawFittedText(hint, hintArea, juce::Justification::centred, 1);

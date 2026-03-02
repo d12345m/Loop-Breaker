@@ -43,8 +43,7 @@ public:
         modifiersToggle.setToggleState(app.settings.modifiersEnabled, juce::dontSendNotification);
         modifiersToggle.onClick = [this]{ modifiersToggleChanged(); };
 
-        // Parts count selector
-        addAndMakeVisible(partsCountBox);
+        // Parts count selector (lives in Settings tab; created here for state management)
         partsCountBox.addItem("1 part", 1);
         partsCountBox.addItem("2 parts", 2);
         partsCountBox.addItem("3 parts", 3);
@@ -56,16 +55,14 @@ public:
         }
         partsCountBox.onChange = [this]{ partsCountChanged(); };
 
-        // Bars between modifiers slider
-        addAndMakeVisible(barsBetweenModifiersSlider);
+        // Bars between modifiers slider (lives in Settings tab; created here for state management)
         barsBetweenModifiersSlider.setRange(1.0, 16.0, 1.0);
         barsBetweenModifiersSlider.setValue(app.settings.barsBetweenModifiers, juce::dontSendNotification);
         barsBetweenModifiersSlider.onValueChange = [this]{ barsBetweenModifiersChanged(); };
         barsBetweenModifiersSlider.setSliderStyle(juce::Slider::LinearBar);
         barsBetweenModifiersSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 44, 20);
-        addAndMakeVisible(barsBetweenModifiersLabel);
         barsBetweenModifiersLabel.setJustificationType(juce::Justification::centred);
-        barsBetweenModifiersLabel.setFont(ThemeFonts::getInstance().controlLabelFont(12.0f));
+        barsBetweenModifiersLabel.setFont(ThemeFonts::getInstance().controlLabelFont(14.0f));
 
         // Master volume knob
         addAndMakeVisible(masterVolumeSlider);
@@ -75,15 +72,11 @@ public:
             processor.getAPVTS(), "masterVolume", masterVolumeSlider);
         addAndMakeVisible(masterVolumeLabel);
         masterVolumeLabel.setJustificationType(juce::Justification::centred);
-        masterVolumeLabel.setFont(ThemeFonts::getInstance().controlLabelFont(13.0f));
+        masterVolumeLabel.setFont(ThemeFonts::getInstance().controlLabelFont(15.0f));
 
         addAndMakeVisible(statusLabel);
         statusLabel.setJustificationType(juce::Justification::centredLeft);
-        statusLabel.setFont(ThemeFonts::getInstance().monoFont(13.0f));
-
-        addAndMakeVisible(hostTransportLabel);
-        hostTransportLabel.setJustificationType(juce::Justification::centredRight);
-        hostTransportLabel.setFont(ThemeFonts::getInstance().monoFont(13.0f));
+        statusLabel.setFont(ThemeFonts::getInstance().monoFont(15.0f));
 
         padGrid.setAudioFormatManager(&processor.getFormatManager());
         attachPadCallbacks();
@@ -165,7 +158,6 @@ public:
             padGrid.setPadFilePaths(app.settings.padFilePaths);
 
         refreshStatus();
-        refreshHostTransportReadout();
         applyThemeColors();
         startTimerHz(20); // 50ms UI refresh - lower overhead
     }
@@ -194,27 +186,22 @@ public:
     void resized() override
     {
         auto area = getLocalBounds().reduced(8);
-        auto topBar = area.removeFromTop(80);
-        modifierDisplay.setBounds(topBar.removeFromLeft(topBar.getWidth() * 0.5f).reduced(4));
+
+        // ── Top bar: enlarged modifier display + compact controls ──
+        auto topBar = area.removeFromTop(110);
+        modifierDisplay.setBounds(topBar.removeFromLeft(topBar.getWidth() * 0.65f).reduced(4));
 
         auto controlBar = topBar;
-        modifiersToggle.setBounds(controlBar.removeFromLeft(130).reduced(2));
-        partsCountBox.setBounds(controlBar.removeFromLeft(130).reduced(2));
-
-        // Bars/Mod: label above, slider below
-        auto barsRegion = controlBar.removeFromLeft(160).reduced(2);
-        auto barsLabelArea = barsRegion.removeFromTop(16);
-        barsBetweenModifiersLabel.setBounds(barsLabelArea);
-        barsBetweenModifiersSlider.setBounds(barsRegion);
+        modifiersToggle.setBounds(controlBar.removeFromLeft(140).reduced(2));
 
         // Volume knob: place label above the knob within the same region
         auto volRegion = controlBar.removeFromRight(100).reduced(2);
-        auto volLabelArea = volRegion.removeFromTop(14);
+        auto volLabelArea = volRegion.removeFromTop(16);
         masterVolumeLabel.setBounds(volLabelArea);
         masterVolumeSlider.setBounds(volRegion);
 
-        auto row2 = area.removeFromTop(28).reduced(2);
-        hostTransportLabel.setBounds(row2.removeFromRight(240).reduced(2));
+        // ── Status row ──
+        auto row2 = area.removeFromTop(24).reduced(2);
         statusLabel.setBounds(row2.reduced(2));
 
         area.removeFromTop(6);
@@ -274,7 +261,6 @@ private:
     juce::Slider barsBetweenModifiersSlider;
     juce::Label barsBetweenModifiersLabel { {}, "Bars/Mod" };
     juce::Label statusLabel { {}, "Status: Idle" };
-    juce::Label hostTransportLabel { {}, "Host: Unknown" };
 
     juce::Slider masterVolumeSlider;
     juce::Label masterVolumeLabel { {}, "Vol" };
@@ -286,35 +272,6 @@ private:
 
     void applyThemeColors()
     {
-        // Parts combo box
-        partsCountBox.setColour(juce::ComboBox::backgroundColourId, Theme::panel());
-        partsCountBox.setColour(juce::ComboBox::outlineColourId,    Theme::border());
-        partsCountBox.setColour(juce::ComboBox::textColourId,       Theme::text());
-        partsCountBox.setColour(juce::ComboBox::arrowColourId,      Theme::textSubtle());
-        partsCountBox.repaint();
-
-        // Bars/Mod slider
-        barsBetweenModifiersSlider.setColour(juce::Slider::backgroundColourId,        Theme::panelAlt());
-        barsBetweenModifiersSlider.setColour(juce::Slider::trackColourId,             Theme::warn());
-        barsBetweenModifiersSlider.setColour(juce::Slider::thumbColourId,             Theme::warn().brighter(0.2f));
-        barsBetweenModifiersSlider.setColour(juce::Slider::textBoxBackgroundColourId, Theme::accent());
-        barsBetweenModifiersSlider.setColour(juce::Slider::textBoxTextColourId,       Theme::text());
-        barsBetweenModifiersSlider.setColour(juce::Slider::textBoxOutlineColourId,    Theme::accent().darker(0.35f));
-        for (int i = 0; i < barsBetweenModifiersSlider.getNumChildComponents(); ++i)
-        {
-            if (auto* label = dynamic_cast<juce::Label*>(barsBetweenModifiersSlider.getChildComponent(i)))
-            {
-                label->setColour(juce::Label::backgroundColourId, Theme::accent());
-                label->setColour(juce::Label::textColourId,       Theme::text());
-                label->setColour(juce::Label::outlineColourId,    Theme::accent().darker(0.35f));
-                label->setOpaque(true);
-                label->repaint();
-            }
-        }
-        barsBetweenModifiersSlider.repaint();
-
-        barsBetweenModifiersLabel.setColour(juce::Label::textColourId, Theme::textSubtle());
-
         // Master volume knob
         masterVolumeSlider.setColour(juce::Slider::rotarySliderFillColourId, Theme::accent());
         masterVolumeSlider.setColour(juce::Slider::rotarySliderOutlineColourId, Theme::panelAlt());
@@ -326,39 +283,8 @@ private:
 
         masterVolumeLabel.setColour(juce::Label::textColourId, Theme::textSubtle());
 
-        // Status / transport labels
+        // Status label
         statusLabel.setColour(juce::Label::textColourId, Theme::textSubtle());
-        hostTransportLabel.setColour(juce::Label::textColourId, Theme::textSubtle());
-    }
-
-    void refreshHostTransportReadout()
-    {
-        const auto state = processor.getLastHostTransportState();
-        const auto source = processor.getLastHostTransportSource();
-
-        juce::String s;
-        s << "Host: ";
-
-        switch (state)
-        {
-            case BufferTestAudioProcessor::HostTransportState::Playing: s << "Playing"; break;
-            case BufferTestAudioProcessor::HostTransportState::Stopped: s << "Stopped"; break;
-            default: s << "Unknown"; break;
-        }
-
-        s << " (";
-        switch (source)
-        {
-            case BufferTestAudioProcessor::HostTransportSource::Reported: s << "reported"; break;
-            case BufferTestAudioProcessor::HostTransportSource::Inferred: s << "inferred"; break;
-            default: s << "unknown"; break;
-        }
-        s << ")";
-
-        if (! processor.isPlaybackEnabled())
-            s << " | gated";
-
-        hostTransportLabel.setText(s, juce::dontSendNotification);
     }
 
     void ensurePadFilePathsSized()
@@ -404,7 +330,6 @@ private:
     {
         // Lightweight UI refresh only; timing is driven by the audio thread in the processor.
         refreshStatus();
-        refreshHostTransportReadout();
         padGrid.setPlayingStates(app.bufferManager.getPlayingBufferIndices());
 
         // Poll for MIDI pad toggle requests (from audio thread)

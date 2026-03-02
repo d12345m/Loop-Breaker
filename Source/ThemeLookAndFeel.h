@@ -304,7 +304,7 @@ public:
         const float textX = toggleX + toggleW + 6.0f;
         const float textW = bounds.getWidth() - textX;
         g.setColour (button.findColour (juce::ToggleButton::textColourId));
-        g.setFont (ThemeFonts::getInstance().controlLabelFont (13.0f));
+        g.setFont (ThemeFonts::getInstance().controlLabelFont (15.0f));
         g.drawText (button.getButtonText(),
                     juce::Rectangle<float> (textX, bounds.getY(), textW, bounds.getHeight()),
                     juce::Justification::centredLeft, true);
@@ -431,7 +431,7 @@ public:
             textCol = palette.textSecondary;
 
         g.setColour (textCol);
-        g.setFont (ThemeFonts::getInstance().tabFont (13.0f));
+        g.setFont (ThemeFonts::getInstance().tabFont (15.0f));
 
         auto textArea = bounds.reduced (4.0f, 0.0f).withTrimmedBottom (3.0f);
         g.drawText (button.getButtonText().toUpperCase(), textArea,
@@ -447,7 +447,7 @@ public:
 
     int getTabButtonBestWidth (juce::TabBarButton& button, int tabDepth) override
     {
-        auto f = ThemeFonts::getInstance().tabFont (13.0f);
+        auto f = ThemeFonts::getInstance().tabFont (15.0f);
         juce::GlyphArrangement glyphs;
         glyphs.addLineOfText (f, button.getButtonText().toUpperCase(), 0.0f, 0.0f);
         auto textWidth = (int) std::ceil (glyphs.getBoundingBox (0, -1, false).getWidth());
@@ -470,7 +470,7 @@ public:
 
     juce::Font getPopupMenuFont() override
     {
-        return ThemeFonts::getInstance().controlLabelFont (14.0f);
+        return ThemeFonts::getInstance().controlLabelFont (15.0f);
     }
 
     juce::Font getLabelFont (juce::Label& label) override
@@ -480,7 +480,7 @@ public:
 
     juce::Font getSliderPopupFont (juce::Slider&) override
     {
-        return ThemeFonts::getInstance().monoFont (13.0f);
+        return ThemeFonts::getInstance().monoFont (14.0f);
     }
 
     juce::Font getTextButtonFont (juce::TextButton&, int buttonHeight) override

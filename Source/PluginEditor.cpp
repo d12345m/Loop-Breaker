@@ -539,7 +539,10 @@ private:
             if (processor.checkAndClearPresetRecall(pi))
             {
                 if (app.presetBank.isSlotOccupied(pi))
+                {
+                    presetBar.triggerHighlight(pi, PresetBarComponent::HighlightType::Recall);
                     queuePresetRecall(pi);
+                }
             }
         }
 

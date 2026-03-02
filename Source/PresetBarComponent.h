@@ -270,12 +270,67 @@ public:
         repaint();
     }
 
+    /** Start a looping pulse glow on a preset slot, indicating the recall
+        is pending and will be applied at the next modifier point. */
+    void startPendingGlow(int slot)
+    {
+        if (slot < 0 || slot >= 4) return;
+
+        pendingGlowSlot = slot;
+        highlightedSlot = slot;
+        highlightType = HighlightType::Recall;
+
+        // Pulsing glow: sinusoidal 0.35→1.0 over 800ms cycle
+        pendingGlowAnimators[static_cast<size_t>(slot)].startLoop(
+            800, // cycle duration ms
+            [this, slot](float progress)
+            {
+                // Sine-based pulse between 0.35 and 1.0
+                float alpha = 0.35f + 0.65f * (0.5f + 0.5f * std::sin(progress * juce::MathConstants<float>::twoPi - juce::MathConstants<float>::halfPi));
+                highlightGlowAlpha[static_cast<size_t>(slot)] = alpha;
+                repaint();
+            },
+            Animator::Easing::Linear);
+
+        repaint();
+    }
+
+    /** Stop the pending glow on a slot (called when the preset is applied). */
+    void clearPendingGlow(int slot)
+    {
+        if (slot < 0 || slot >= 4) return;
+
+        pendingGlowAnimators[static_cast<size_t>(slot)].stop();
+
+        if (pendingGlowSlot == slot)
+            pendingGlowSlot = -1;
+
+        // Quick fade-out after application
+        triggerHighlight(slot, HighlightType::Recall);
+    }
+
+    /** Clear any pending glow regardless of slot. */
+    void clearAllPendingGlows()
+    {
+        for (int i = 0; i < 4; ++i)
+        {
+            pendingGlowAnimators[static_cast<size_t>(i)].stop();
+        }
+        pendingGlowSlot = -1;
+    }
+
+    /** Returns the slot currently showing a pending glow, or -1 if none. */
+    int getPendingGlowSlot() const { return pendingGlowSlot; }
+
 private:
     void timerCallback() override
     {
         const double dt = 1.0 / 30.0;
         for (int i = 0; i < 4; ++i)
+        {
             highlightAnimators[static_cast<size_t>(i)].tick(dt);
+            pendingGlowAnimators[static_cast<size_t>(i)].tick(dt);
+        }
     }
 
     std::unique_ptr<juce::Component> buttons[4];
@@ -288,6 +343,10 @@ private:
     HighlightType highlightType = HighlightType::None;
     std::array<float, 4> highlightGlowAlpha { 0.0f, 0.0f, 0.0f, 0.0f };
     std::array<Animator, 4> highlightAnimators;
+
+    // Pending recall glow state (looping pulse until applied)
+    int pendingGlowSlot = -1;
+    std::array<Animator, 4> pendingGlowAnimators;
 
     int getSlotAtPoint(juce::Point<int> point) const
     {

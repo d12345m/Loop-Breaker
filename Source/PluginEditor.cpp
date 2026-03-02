@@ -167,7 +167,16 @@ public:
 
         presetBar.onRecallPreset = [this](int slot)
         {
-            queuePresetRecall(slot);
+            if (isTransportRunning())
+            {
+                presetBar.startPendingGlow(slot);
+                queuePresetRecall(slot);
+            }
+            else
+            {
+                // Transport is stopped — apply immediately, no queue
+                app.restorePreset(slot);
+            }
         };
 
         presetBar.onClearPreset = [this](int slot)
@@ -384,12 +393,10 @@ public:
                 pendingPartsCount = -1;
             }
 
-            // If a preset was applied instead of the normal modifier (cleared in
-            // AppState::modifierTriggered), show it in the history and flash all pads.
-            // pendingPresetRecall was already consumed by AppState, so check desc
-            // isn't what actually ran — we detect this by the pending flag being -1
-            // after the atomic exchange.  To keep things simple, always log whatever
-            // the scheduler scheduled; the preset application is the audible result.
+            // Clear pending glow if a preset was queued
+            const int pendingSlot = presetBar.getPendingGlowSlot();
+            if (pendingSlot >= 0)
+                presetBar.clearPendingGlow(pendingSlot);
 
             if (externalModifierHistory != nullptr)
                 externalModifierHistory->addEntry(desc, targets);
@@ -540,8 +547,16 @@ private:
             {
                 if (app.presetBank.isSlotOccupied(pi))
                 {
-                    presetBar.triggerHighlight(pi, PresetBarComponent::HighlightType::Recall);
-                    queuePresetRecall(pi);
+                    if (isTransportRunning())
+                    {
+                        presetBar.startPendingGlow(pi);
+                        queuePresetRecall(pi);
+                    }
+                    else
+                    {
+                        presetBar.triggerHighlight(pi, PresetBarComponent::HighlightType::Recall);
+                        app.restorePreset(pi);
+                    }
                 }
             }
         }

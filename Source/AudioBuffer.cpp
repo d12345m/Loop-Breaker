@@ -1225,16 +1225,15 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
     const double clampedRate = juce::jlimit (0.25, 4.0, smoothedSpeedMag);
     // SoundTouch internally divides virtualTempo by virtualPitch to get effective tempo:
     //   effective_tempo = virtualTempo / virtualPitch
-    // So when pitch shifting is active we must pre-multiply the tempo we send by the pitch
-    // ratio, otherwise the speed component gets cancelled by the pitch factor.
+    // and sets effective_rate = virtualRate * virtualPitch.
+    // This internal division IS how SoundTouch preserves playback speed during pitch
+    // shifting.  We must NOT pre-multiply the tempo we send by the pitch ratio —
+    // doing so would cancel the compensation and cause the audio to speed up/slow
+    // down whenever a pitch modifier is active.
     //
-    // Use the SMOOTHED pitch value for the ratio computation so the tempo compensation
-    // ramps gradually when pitch is added/changed. The routing decision (useRate) is based
-    // on the TARGET pitch so we're in the correct mode, but the magnitude is smoothed.
-    const double smoothedPitchRatio = smoothedPitchActive ? std::pow (2.0, smoothedPitchSemis / 12.0) : 1.0;
-    // When the target says pitch-active, route speed through tempo (not rate) even while
-    // the smoother is still ramping. Use the smoothed pitch ratio for compensation.
-    const double tempoRatioForSt = pitchActive ? (smoothedRatio * clampedRate * smoothedPitchRatio) : smoothedRatio;
+    // When pitch is active, speed magnitude is routed through tempo (not rate) so
+    // that SoundTouch can keep pitch and speed independent.
+    const double tempoRatioForSt = pitchActive ? (smoothedRatio * clampedRate) : smoothedRatio;
     const double totalTempoRatioForIO = tempoRatioForSt * (useRate ? clampedRate : 1.0);
     // Feed chunks proportional to the output block.  The margin scales with the effective
     // consumption ratio so we don't starve SoundTouch when rate/tempo/pitch are high.

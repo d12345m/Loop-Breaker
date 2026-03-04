@@ -1328,11 +1328,6 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
     // This avoids the periodic underruns (silence tail) that sound like crackles.
     outputBuffer.clear();
 
-    // §11: Flag set by fillInputScratch when a slice jump occurs mid-chunk.
-    // The outer feed/pull loop checks this to flush SoundTouch's stale internal
-    // buffers and re-prime from the new playhead position.
-    bool sliceJumpOccurred = false;
-
     auto fillInputScratch = [&] (int framesToGenerate) -> int
     {
         jassert (framesToGenerate >= 0);
@@ -1494,7 +1489,11 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                 else
                     newPos = getSliceEndPosition (slice, fileLengthSamples) - 1.0;
 
-                // Inline startSliceCrossfade using locals
+                // Inline startSliceCrossfade using locals.
+                // §11 revised: No SoundTouch pipeline flush on slice jumps.
+                // The per-sample loop continues feeding from the new position,
+                // and §10.3 flags stretchOutputCrossfadePending to blend
+                // old/new SoundTouch output — avoiding expensive resets.
                 previousSliceIndex = localActiveSlice;
                 previousSlicePlayheadPos = currentPos;
                 isInCrossfade = true;
@@ -1502,7 +1501,6 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                 localActiveSlice = slice;
                 currentPos = newPos;
                 localSliceTrig = false;
-                sliceJumpOccurred = true;  // §11: signal outer loop to flush SoundTouch
                 return;
             }
 
@@ -1536,7 +1534,6 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                     crossfadePosition = 0;
                     localActiveSlice = nextSlice;
                     currentPos = newPos;
-                    sliceJumpOccurred = true;  // §11: signal outer loop to flush SoundTouch
                 }
             }
             else if (params.arpSliceActive && !params.arpSequence.empty())
@@ -1591,7 +1588,6 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                     crossfadePosition = 0;
                     localActiveSlice = nextSlice;
                     currentPos = newPos;
-                    sliceJumpOccurred = true;  // §11: signal outer loop to flush SoundTouch
                 }
             }
             else
@@ -1636,13 +1632,6 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
             // Keep slice behavior responsive using local snapshot.
             if (slicingOn || localSliceTrig)
                 handleSlicePlaybackLocal();
-
-            // §11: If a slice jump just occurred, stop filling this chunk immediately.
-            // The outer feed/pull loop will flush SoundTouch's stale internal buffers
-            // and re-prime from the new playhead position for a clean transition,
-            // eliminating overlap-add artifacts from mismatched audio regions.
-            if (sliceJumpOccurred)
-                break;
 
             // If no custom loop window is active, respect file boundaries + looping.
             if (! loopWindowOn && ! slicingOn)
@@ -1865,90 +1854,13 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                                                     (int) std::ceil (remaining * totalTempoRatioForIO) + marginFrames);
 
         const int framesFilled = fillInputScratch (inputChunkFrames);
-        if (framesFilled <= 0 && !sliceJumpOccurred)
+        if (framesFilled <= 0)
         {
 #if JUCE_DEBUG
             DBG ("[AudioBuffer " + juce::String(bufferIndex) + "] fillInputScratch returned 0, breaking. remaining=" 
                  + juce::String(remaining) + " inputChunkFrames=" + juce::String(inputChunkFrames));
 #endif
             break;
-        }
-
-        // §11: Slice jump detected — flush SoundTouch to purge stale audio from
-        // the old playhead position.  Without this, SoundTouch's overlap-add
-        // algorithm blends old-position and new-position audio internally,
-        // producing pops/cracks that the output-side crossfade alone cannot mask.
-        if (sliceJumpOccurred)
-        {
-            // Feed any pre-jump samples so they aren't lost.
-            if (framesFilled > 0)
-            {
-                for (int ch = 0; ch < numChannels; ++ch)
-                    inPtrs[ch] = stretchInScratch.getReadPointer (ch);
-                const int produced = stretcher.processNonInterleaved (
-                    inPtrs.data(), framesFilled, outPtrs.data(), remaining, false,
-                    stretchInterleavedIn, stretchInterleavedOut);
-                if (produced > 0)
-                {
-                    framesWritten += produced;
-                    // Update output ring with this last chunk of clean old-position audio.
-                    writeToStretchOutputRing (outputBuffer, framesWritten);
-                }
-            }
-
-            // Snapshot the output ring BEFORE clearing — this is the "old" audio
-            // that the output-side crossfade will blend from.
-            snapshotStretchOutputRing();
-            stretchOutputCrossfadeLen = crossfadeLengthSamples;
-            stretchOutputCrossfadePos = 0;
-            stretchOutputCrossfadeActive = (stretchCrossfadeSnapshotLen > 0);
-            stretchOutputCrossfadePending = false;  // handled directly
-
-            // Clear SoundTouch's internal pipeline (TDHS overlap-add buffers,
-            // rate transposer state, etc.) so no stale audio remains.
-            stretcher.reset();
-            stretcher.prepare (hostSampleRate, numChannels);
-            stretcher.setTempoRatio ((float) tempoRatioForSt);
-            stretcher.setRateRatio ((float) (useRate ? clampedRate : 1.0));
-            stretcher.setPitchSemiTones ((float) smoothedPitchSemis);
-            stretcher.setWindowsForReverse (direction < 0.0);
-
-            // Cancel the input-side crossfade state — the output-side crossfade
-            // handles the transition cleanly after the flush.
-            isInCrossfade = false;
-            crossfadePosition = 0;
-            previousSliceIndex = -1;
-
-            // Re-prime SoundTouch from the new playhead position so the drain
-            // loop doesn't starve on the next iteration.
-            const int rawLatency = juce::jmax (0, stretcher.getLatencySamples());
-            const int primeSamples = juce::jmax (rawLatency,
-                                                 (int) std::ceil (rawLatency * totalTempoRatioForIO * 2.0));
-            if (primeSamples > 0)
-            {
-                const int primed = fillInputScratch (primeSamples);
-                if (primed > 0)
-                {
-                    for (int ch = 0; ch < numChannels; ++ch)
-                        inPtrs[ch] = stretchInScratch.getReadPointer (ch);
-                    stretcher.processNonInterleaved (
-                        inPtrs.data(), primed, nullptr, 0, false,
-                        stretchInterleavedIn, stretchInterleavedOut);
-                }
-            }
-
-            // Schedule a brief fade-in to mask any SoundTouch startup transient.
-            stretchFadeInRemaining = juce::jmax (1, (int) (hostSampleRate * 0.01)); // 10ms
-
-            sliceJumpOccurred = false;
-
-#if JUCE_DEBUG
-            if (tearingDebugEnabled.load())
-                tearingStats.soundTouchResets.fetch_add (1, std::memory_order_relaxed);
-            DBG ("[AudioBuffer " + juce::String(bufferIndex)
-                 + "] §11 SoundTouch FLUSH on slice jump, re-primed " + juce::String(primeSamples) + " samples");
-#endif
-            continue;  // restart the feed/pull loop — next fill reads from new position
         }
 
         for (int ch = 0; ch < numChannels; ++ch)

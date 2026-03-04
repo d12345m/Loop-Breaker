@@ -614,7 +614,7 @@ private:
         int repeatBars = desc.plannedArpRepeatBars.value_or(2);
 
         seqLen = juce::jlimit(1, 8, seqLen);
-        totalSlices = juce::jlimit(4, 64, totalSlices);
+        totalSlices = juce::jlimit(16, 64, totalSlices);
         repeatBars = juce::jmax(1, repeatBars);
 
         for (int idx : targets)
@@ -634,7 +634,7 @@ private:
         int totalSlices = desc.plannedSliceRepeaterTotal.value_or(16);
 
         reps = juce::jlimit(4, 32, reps);
-        totalSlices = juce::jlimit(4, 64, totalSlices);
+        totalSlices = juce::jlimit(16, 64, totalSlices);
 
         const double secondsPerBar = settings.getSecondsPerBar();
 

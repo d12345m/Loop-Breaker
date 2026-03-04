@@ -603,8 +603,8 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
     {
         // Sequence lengths: {1,2,3,4,6,8}
         static const int seqLens[] { 1, 2, 3, 4, 6, 8 };
-        // Total slice counts for the grid: {4,8,16,32}
-        static const int sliceCounts[] { 4, 8, 16, 32 };
+        // Total slice counts for the grid: {16,32,64}
+        static const int sliceCounts[] { 16, 32, 64 };
         // Repeat cycles before refreshing: {1,2,4,8}
         static const int repeatOptions[] { 1, 2, 4, 8 };
         const juce::SpinLock::ScopedLockType lock(rngLock);
@@ -621,8 +621,8 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
     {
         // Repetitions per slice: {4,8,16,32}
         static const int repOptions[] { 4, 8, 16, 32 };
-        // Total slice grid: {4,8,16,32}
-        static const int sliceCounts[] { 4, 8, 16, 32 };
+        // Total slice grid: {16,32,64}
+        static const int sliceCounts[] { 16, 32, 64 };
         const juce::SpinLock::ScopedLockType lock(rngLock);
         int reps = repOptions[rng.nextInt((int)std::size(repOptions))];
         int totalSlices = sliceCounts[rng.nextInt((int)std::size(sliceCounts))];

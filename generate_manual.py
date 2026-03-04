@@ -79,14 +79,21 @@ class ManualPDF(FPDF):
         self.multi_cell(0, 5.5, text, new_x="LMARGIN", new_y="NEXT")
         self.ln(2)
 
-    def bullet(self, text, indent=10):
-        """Print a bullet point."""
+    def bullet(self, text, indent=5):
+        """Print a bullet point with a filled circle."""
         self.set_font("Helvetica", "", 10.5)
         self.set_text_color(50, 50, 50)
-        x = self.get_x()
-        self.set_x(x + indent)
-        self.cell(5, 5.5, "-")
-        self.multi_cell(0, 5.5, f"  {text}", new_x="LMARGIN", new_y="NEXT")
+        lm = self.l_margin
+        bullet_x = lm + indent
+        bullet_y = self.get_y() + 2.2  # vertically centre in first line
+        # draw small filled circle as bullet
+        self.set_fill_color(50, 50, 50)
+        self.ellipse(bullet_x, bullet_y, 1.5, 1.5, style="F")
+        # text starts after bullet
+        text_x = bullet_x + 5
+        self.set_x(text_x)
+        text_w = self.w - self.r_margin - text_x
+        self.multi_cell(text_w, 5.5, text, new_x="LMARGIN", new_y="NEXT")
         self.ln(1)
 
     def key_value_row(self, key, value):
@@ -108,38 +115,42 @@ class ManualPDF(FPDF):
     def note_box(self, text):
         """Print a note/tip box."""
         self.ln(2)
+        w = self.w - self.l_margin - self.r_margin
+        pad = 6
+        self.set_font("Helvetica", "I", 10)
+        # Measure the height the text will need
+        full_text = f"NOTE: {text}"
+        line_h = 5
+        h = self.multi_cell(w - pad * 2, line_h, full_text, dry_run=True, output="HEIGHT") + pad * 2
         y = self.get_y()
+        # Draw a single filled + bordered rectangle
         self.set_fill_color(240, 245, 255)
         self.set_draw_color(100, 140, 200)
-        w = self.w - self.l_margin - self.r_margin
-        # Calculate height needed
-        self.set_font("Helvetica", "I", 10)
-        # use a temporary cell to measure
-        self.rect(self.l_margin, y, w, 8, style="DF")
-        self.set_xy(self.l_margin + 6, y + 2)
+        self.rect(self.l_margin, y, w, h, style="DF")
+        # Write the text inside the box
+        self.set_xy(self.l_margin + pad, y + pad)
         self.set_text_color(40, 60, 100)
-        self.multi_cell(w - 12, 5, f"NOTE: {text}", new_x="LMARGIN", new_y="NEXT")
-        # Draw box around text
-        h = self.get_y() - y + 2
-        self.set_xy(self.l_margin, y)
-        self.rect(self.l_margin, y, w, h, style="D")
+        self.multi_cell(w - pad * 2, line_h, full_text, new_x="LMARGIN", new_y="NEXT")
         self.set_y(y + h + 4)
 
     def tip_box(self, text):
         """Print a tip box."""
         self.ln(2)
-        y = self.get_y()
         w = self.w - self.l_margin - self.r_margin
+        pad = 6
+        self.set_font("Helvetica", "I", 10)
+        full_text = f"TIP: {text}"
+        line_h = 5
+        h = self.multi_cell(w - pad * 2, line_h, full_text, dry_run=True, output="HEIGHT") + pad * 2
+        y = self.get_y()
+        # Draw a single filled + bordered rectangle
         self.set_fill_color(240, 255, 240)
         self.set_draw_color(80, 160, 80)
-        self.rect(self.l_margin, y, w, 8, style="DF")
-        self.set_xy(self.l_margin + 6, y + 2)
-        self.set_font("Helvetica", "I", 10)
+        self.rect(self.l_margin, y, w, h, style="DF")
+        # Write the text inside the box
+        self.set_xy(self.l_margin + pad, y + pad)
         self.set_text_color(30, 80, 30)
-        self.multi_cell(w - 12, 5, f"TIP: {text}", new_x="LMARGIN", new_y="NEXT")
-        h = self.get_y() - y + 2
-        self.set_xy(self.l_margin, y)
-        self.rect(self.l_margin, y, w, h, style="D")
+        self.multi_cell(w - pad * 2, line_h, full_text, new_x="LMARGIN", new_y="NEXT")
         self.set_y(y + h + 4)
 
     def table_header(self, cols, widths):
@@ -306,7 +317,7 @@ def build_manual():
 
     pdf.chapter_title("Uninstallation", level=2)
     pdf.body_text(
-        "To remove Loop Breaker, run the included uninstall script or manually delete the VST3 bundle "
+        "To remove Loop Breaker, manually delete the VST3 bundle "
         "from the above path."
     )
 
@@ -322,8 +333,8 @@ def build_manual():
 
     steps = [
         ("Load Samples", "Drag WAV, AIFF, FLAC, or MP3 files from Finder onto any pad in the 2x4 grid. "
-         "Alternatively, click an empty pad to open a file chooser dialog."),
-        ("Start the DAW Transport", "Loop Breaker follows the host timeline. Press Play in your DAW and "
+         "Alternatively, right-click an empty pad to open a file chooser dialog."),
+        ("Start the DAW Transport", "Loop Breaker follows the host timeline and tempo. Set the BPM and press Play in your DAW and "
          "all loaded buffers will begin looping. Each pad displays a waveform with a moving playhead."),
         ("Select Target Pads", "Click pads to toggle their selection on or off. Selected pads glow and will "
          "be targeted by the next modifier. If no pads are selected when the modifier timer fires, "

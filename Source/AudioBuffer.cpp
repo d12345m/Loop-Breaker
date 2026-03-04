@@ -1491,9 +1491,8 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
 
                 // Inline startSliceCrossfade using locals.
                 // §11 revised: No SoundTouch pipeline flush on slice jumps.
-                // The per-sample loop continues feeding from the new position,
-                // and §10.3 flags stretchOutputCrossfadePending to blend
-                // old/new SoundTouch output — avoiding expensive resets.
+                // The per-sample loop applies an input-side crossfade (§10.3
+                // revised) so SoundTouch receives smooth audio at transitions.
                 previousSliceIndex = localActiveSlice;
                 previousSlicePlayheadPos = currentPos;
                 isInCrossfade = true;
@@ -1719,13 +1718,30 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
 
             if (isInCrossfade)
             {
-                // §10.3  When SoundTouch is active, do NOT apply the crossfade on
-                // the input side — SoundTouch's overlap-add algorithm smears input-
-                // side crossfades unpredictably.  Instead, flag for output-side
-                // crossfade.  We still advance crossfadePosition so the input-side
-                // state machine completes normally.
-                if (!stretchOutputCrossfadePending && !stretchOutputCrossfadeActive)
-                    stretchOutputCrossfadePending = true;
+                // §10.3 revised: Apply input-side crossfade so SoundTouch
+                // receives a smooth transition instead of a hard discontinuity.
+                // The old §10.3 deferred to output-side crossfade, but that
+                // can't undo artifacts SoundTouch bakes in from processing
+                // a discontinuous input.  Feeding crossfaded (smooth) audio
+                // lets SoundTouch's overlap-add algorithm work normally.
+                const double fadeProgress = static_cast<double>(crossfadePosition)
+                                          / static_cast<double>(crossfadeLengthSamples);
+                const float fadeIn  = static_cast<float>(std::sin(fadeProgress * juce::MathConstants<double>::halfPi));
+                const float fadeOut = static_cast<float>(std::cos(fadeProgress * juce::MathConstants<double>::halfPi));
+
+                // Read from the old (pre-jump) position, advancing it in step.
+                const double prevPos = previousSlicePlayheadPos + crossfadePosition * step;
+                const double clampedPrevPos = juce::jlimit(0.0, static_cast<double>(fileLengthSamples - 1), prevPos);
+                const int prevP1 = static_cast<int>(clampedPrevPos);
+                const int prevP2 = juce::jmin(prevP1 + 1, fileLengthSamples - 1);
+                const float prevFrac = static_cast<float>(clampedPrevPos - static_cast<double>(prevP1));
+
+                for (int ch = 0; ch < numChannels; ++ch)
+                {
+                    const float prevSample = sourceRead[ch][prevP1]
+                                           + prevFrac * (sourceRead[ch][prevP2] - sourceRead[ch][prevP1]);
+                    scratchWrite[ch][sample] = scratchWrite[ch][sample] * fadeIn + prevSample * fadeOut;
+                }
 
                 crossfadePosition++;
                 if (crossfadePosition >= crossfadeLengthSamples)
@@ -1879,11 +1895,9 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
             framesWritten += produced;
     }
 
-    // §10.3  Output-side crossfade for slice/boundary transitions.
-    // When a transition was detected in fillInputScratch, we skipped the input-
-    // side crossfade and flagged stretchOutputCrossfadePending instead.  Now that
-    // SoundTouch has produced output, snapshot the ring buffer (old output) and
-    // start the output-side crossfade.
+    // §10.3  Output-side crossfade (legacy safety net).
+    // With input-side crossfading now active, this path is rarely triggered.
+    // Kept as a fallback in case other transition types flag it in the future.
     if (stretchOutputCrossfadePending)
     {
         snapshotStretchOutputRing();

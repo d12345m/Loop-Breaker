@@ -318,6 +318,10 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
 #if JUCE_DEBUG
     if (tearingDebugEnabled.load())
     {
+        // Decrement RMS blanking counter (set by slice transitions in stretch mode)
+        if (rmsBlankingBlocksLeft > 0)
+            --rmsBlankingBlocksLeft;
+
         const int numSamples = outputBuffer.getNumSamples();
         const int numChannels = outputBuffer.getNumChannels();
         
@@ -356,7 +360,10 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
             const float currentDc = TearingDebug::calculateDcOffset(data, numSamples);
             
             // Check for RMS jumps (only for first 2 channels to avoid spam)
-            if (ch < 2 && lastBlockRms[ch] > 1.0e-6f)
+            // Suppress during slice-transition blanking period — SoundTouch's
+            // latency means the output takes several blocks to reflect new
+            // content, causing legitimate RMS changes that aren't tearing.
+            if (ch < 2 && lastBlockRms[ch] > 1.0e-6f && rmsBlankingBlocksLeft <= 0)
             {
                 const float rmsRatio = juce::jmax(currentRms / lastBlockRms[ch], 
                                                    lastBlockRms[ch] / currentRms);
@@ -1497,6 +1504,7 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                 previousSlicePlayheadPos = currentPos;
                 isInCrossfade = true;
                 crossfadePosition = 0;
+                rmsBlankingBlocksLeft = 6;
                 localActiveSlice = slice;
                 currentPos = newPos;
                 localSliceTrig = false;
@@ -1531,6 +1539,7 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                     previousSlicePlayheadPos = currentPos;
                     isInCrossfade = true;
                     crossfadePosition = 0;
+                    rmsBlankingBlocksLeft = 6;
                     localActiveSlice = nextSlice;
                     currentPos = newPos;
                 }
@@ -1585,6 +1594,7 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                     previousSlicePlayheadPos = currentPos;
                     isInCrossfade = true;
                     crossfadePosition = 0;
+                    rmsBlankingBlocksLeft = 6;
                     localActiveSlice = nextSlice;
                     currentPos = newPos;
                 }

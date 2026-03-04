@@ -326,6 +326,7 @@ private:
     int consecutiveZeroSamples = 0;                  // Counter for zero sample runs
     float lastBlockRms[2] = { 0.0f, 0.0f };         // Track RMS from previous block
     float lastBlockDcOffset[2] = { 0.0f, 0.0f };    // Track DC offset from previous block
+    int rmsBlankingBlocksLeft = 0;                    // Suppress RMS jump checks after slice transitions
 
 
 

@@ -14,6 +14,7 @@
 
 #include <JuceHeader.h>
 #include "ModifierProbabilityManager.h"
+#include "PluginProcessor.h"
 #include "ThemeEngine.h"
 #include "ThemeFonts.h"
 #include <vector>
@@ -24,9 +25,11 @@ class ModifierProbabilityPanel : public juce::Component,
 public:
     // -------------------------------------------------------------------------
     ModifierProbabilityPanel (ModifierProbabilityManager& manager,
-                              juce::AudioProcessorValueTreeState& apvtsRef)
+                              juce::AudioProcessorValueTreeState& apvtsRef,
+                              BufferTestAudioProcessor& processorRef)
         : probManager (manager)
         , apvts (apvtsRef)
+        , processor (processorRef)
     {
         buildRows();
         buildPadRows();
@@ -42,7 +45,14 @@ public:
         startTimerHz (10);
     }
 
-    ~ModifierProbabilityPanel() override { stopTimer(); }
+    ~ModifierProbabilityPanel() override
+    {
+        stopTimer();
+        for (auto& row : rows)
+            if (row.slider) row.slider->removeMouseListener (this);
+        for (auto& pr : padRows)
+            if (pr.slider) pr.slider->removeMouseListener (this);
+    }
 
     void resized() override
     {
@@ -67,6 +77,27 @@ public:
 
 private:
     // -------------------------------------------------------------------------
+    // Slider subclass that ignores right-clicks so they only trigger the popup menu
+    struct ProbSlider : public juce::Slider
+    {
+        using juce::Slider::Slider;
+        void mouseDown (const juce::MouseEvent& e) override
+        {
+            if (e.mods.isPopupMenu()) return;
+            juce::Slider::mouseDown (e);
+        }
+        void mouseDrag (const juce::MouseEvent& e) override
+        {
+            if (e.mods.isPopupMenu()) return;
+            juce::Slider::mouseDrag (e);
+        }
+        void mouseUp (const juce::MouseEvent& e) override
+        {
+            if (e.mods.isPopupMenu()) return;
+            juce::Slider::mouseUp (e);
+        }
+    };
+
     struct Row
     {
         ModifierType type;
@@ -76,13 +107,15 @@ private:
 
         std::unique_ptr<juce::Label>   categoryLabel;
         std::unique_ptr<juce::Label>   nameLabel;
-        std::unique_ptr<juce::Slider>  slider;
+        std::unique_ptr<ProbSlider>    slider;
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> sliderAttachment;
         std::unique_ptr<juce::Label>   valueLabel;
+        std::unique_ptr<juce::Label>   ccLabel;
     };
 
     ModifierProbabilityManager&             probManager;
     juce::AudioProcessorValueTreeState&     apvts;
+    BufferTestAudioProcessor&               processor;
     juce::Viewport                          viewport;
     juce::Component                         content;
     std::vector<Row>                        rows;
@@ -93,9 +126,10 @@ private:
     {
         int padIndex = 0;
         std::unique_ptr<juce::Label>   nameLabel;
-        std::unique_ptr<juce::Slider>  slider;
+        std::unique_ptr<ProbSlider>    slider;
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> sliderAttachment;
         std::unique_ptr<juce::Label>   valueLabel;
+        std::unique_ptr<juce::Label>   ccLabel;
     };
     std::vector<PadRow> padRows;
     juce::Label padSectionLabel;
@@ -132,8 +166,8 @@ private:
             content.addAndMakeVisible (row.nameLabel.get());
 
             // -- Probability slider --
-            row.slider = std::make_unique<juce::Slider> (juce::Slider::LinearHorizontal,
-                                                          juce::Slider::NoTextBox);
+            row.slider = std::make_unique<ProbSlider> (juce::Slider::LinearHorizontal,
+                                                       juce::Slider::NoTextBox);
             row.slider->setRange (0.0, 1.0, 0.01);
             row.slider->setColour (juce::Slider::trackColourId,       Theme::accent());
             row.slider->setColour (juce::Slider::backgroundColourId,  Theme::panelAlt());
@@ -153,6 +187,17 @@ private:
             row.valueLabel->setJustificationType (juce::Justification::centredLeft);
             content.addAndMakeVisible (row.valueLabel.get());
             updateValueLabel (row);
+
+            // -- CC assignment label --
+            row.ccLabel = std::make_unique<juce::Label>();
+            row.ccLabel->setFont (ThemeFonts::getInstance().monoFont (11.0f));
+            row.ccLabel->setColour (juce::Label::textColourId, Theme::textSubtle());
+            row.ccLabel->setJustificationType (juce::Justification::centred);
+            content.addAndMakeVisible (row.ccLabel.get());
+            updateCCLabel (row);
+
+            // Right-click for MIDI CC learn
+            row.slider->addMouseListener (this, false);
 
             rows.push_back (std::move (row));
         }
@@ -176,8 +221,8 @@ private:
             pr.nameLabel->setColour (juce::Label::textColourId, Theme::textSubtle());
             content.addAndMakeVisible (pr.nameLabel.get());
 
-            pr.slider = std::make_unique<juce::Slider> (juce::Slider::LinearHorizontal,
-                                                         juce::Slider::NoTextBox);
+            pr.slider = std::make_unique<ProbSlider> (juce::Slider::LinearHorizontal,
+                                                        juce::Slider::NoTextBox);
             pr.slider->setRange (0.0, 1.0, 0.01);
             pr.slider->setColour (juce::Slider::trackColourId,       Theme::accent());
             pr.slider->setColour (juce::Slider::backgroundColourId,  Theme::panelAlt());
@@ -195,6 +240,17 @@ private:
             content.addAndMakeVisible (pr.valueLabel.get());
             updatePadValueLabel (pr);
 
+            // -- CC assignment label --
+            pr.ccLabel = std::make_unique<juce::Label>();
+            pr.ccLabel->setFont (ThemeFonts::getInstance().monoFont (11.0f));
+            pr.ccLabel->setColour (juce::Label::textColourId, Theme::textSubtle());
+            pr.ccLabel->setJustificationType (juce::Justification::centred);
+            content.addAndMakeVisible (pr.ccLabel.get());
+            updatePadCCLabel (pr);
+
+            // Right-click for MIDI CC learn
+            pr.slider->addMouseListener (this, false);
+
             padRows.push_back (std::move (pr));
         }
     }
@@ -209,6 +265,41 @@ private:
         // Refresh pad probability value labels
         for (auto& pr : padRows)
             updatePadValueLabel (pr);
+
+        // Poll for MIDI CC learn completion (modifier prob sliders)
+        {
+            const int learnedCC = processor.checkAndClearLearnedCC();
+            if (learnedCC >= 0)
+            {
+                const int paramIdx = processor.getMidiCCLearnParamIndex();
+                if (paramIdx >= 0 && paramIdx < static_cast<int> (rows.size()))
+                {
+                    auto& settings = processor.getAppState().settings;
+                    settings.midiProbCCMap[static_cast<size_t> (paramIdx)] = learnedCC;
+                    updateCCLabel (rows[static_cast<size_t> (paramIdx)]);
+                }
+                processor.setMidiCCLearnMode (-1);
+            }
+        }
+
+        // Poll for MIDI CC learn completion (pad target prob sliders)
+        {
+            const int learnedCC = processor.checkAndClearLearnedPadProbCC();
+            if (learnedCC >= 0)
+            {
+                const int padIdx = processor.getMidiPadProbCCLearnIndex();
+                if (padIdx >= 0 && padIdx < static_cast<int> (padRows.size()))
+                {
+                    auto& settings = processor.getAppState().settings;
+                    settings.midiPadProbCCMap[static_cast<size_t> (padIdx)] = learnedCC;
+                    updatePadCCLabel (padRows[static_cast<size_t> (padIdx)]);
+                }
+                processor.setMidiPadProbCCLearnMode (-1);
+            }
+        }
+
+        // Update LEARN indicator while learn mode is active
+        refreshLearnIndicators();
     }
 
     void updateValueLabel (Row& row)
@@ -221,6 +312,152 @@ private:
         row.valueLabel->setText (pct <= 0 ? "OFF"
                                           : juce::String (pct) + "%",
                                  juce::dontSendNotification);
+    }
+
+    void updateCCLabel (Row& row)
+    {
+        auto& settings = processor.getAppState().settings;
+        const auto idx = static_cast<size_t> (row.paramIndex);
+        if (idx < settings.midiProbCCMap.size())
+        {
+            const int cc = settings.midiProbCCMap[idx];
+            row.ccLabel->setText (cc >= 0 ? "CC" + juce::String (cc) : "",
+                                  juce::dontSendNotification);
+        }
+    }
+
+    void updatePadCCLabel (PadRow& pr)
+    {
+        auto& settings = processor.getAppState().settings;
+        const auto idx = static_cast<size_t> (pr.padIndex);
+        if (idx < settings.midiPadProbCCMap.size())
+        {
+            const int cc = settings.midiPadProbCCMap[idx];
+            pr.ccLabel->setText (cc >= 0 ? "CC" + juce::String (cc) : "",
+                                 juce::dontSendNotification);
+        }
+    }
+
+    // -- Right-click handling via mouseDown -------
+
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        if (! e.mods.isPopupMenu())
+            return;
+
+        for (size_t i = 0; i < rows.size(); ++i)
+        {
+            if (e.eventComponent == rows[i].slider.get())
+            {
+                showModifierCCMenu (static_cast<int> (i));
+                return;
+            }
+        }
+        for (size_t i = 0; i < padRows.size(); ++i)
+        {
+            if (e.eventComponent == padRows[i].slider.get())
+            {
+                showPadCCMenu (static_cast<int> (i));
+                return;
+            }
+        }
+    }
+
+    void refreshLearnIndicators()
+    {
+        const int learnParam = processor.getMidiCCLearnParamIndex();
+        for (auto& row : rows)
+        {
+            if (row.paramIndex == learnParam)
+            {
+                row.ccLabel->setText ("LEARN", juce::dontSendNotification);
+                row.ccLabel->setColour (juce::Label::textColourId, Theme::accent());
+            }
+            else
+            {
+                row.ccLabel->setColour (juce::Label::textColourId, Theme::textSubtle());
+                updateCCLabel (row);
+            }
+        }
+
+        const int learnPad = processor.getMidiPadProbCCLearnIndex();
+        for (auto& pr : padRows)
+        {
+            if (pr.padIndex == learnPad)
+            {
+                pr.ccLabel->setText ("LEARN", juce::dontSendNotification);
+                pr.ccLabel->setColour (juce::Label::textColourId, Theme::accent());
+            }
+            else
+            {
+                pr.ccLabel->setColour (juce::Label::textColourId, Theme::textSubtle());
+                updatePadCCLabel (pr);
+            }
+        }
+    }
+
+    // ── Right-click popup menus ──────────────────────────────────────────
+
+    void showModifierCCMenu (int paramIndex)
+    {
+        if (paramIndex < 0 || static_cast<size_t> (paramIndex) >= processor.getAppState().settings.midiProbCCMap.size())
+            return;
+
+        auto& settings = processor.getAppState().settings;
+        const int currentCC = settings.midiProbCCMap[static_cast<size_t> (paramIndex)];
+
+        juce::PopupMenu menu;
+        menu.addItem (1, "MIDI CC Learn", ! processor.isMidiCCLearnActive());
+        if (currentCC >= 0)
+            menu.addItem (2, "Clear CC (" + juce::String (currentCC) + ")");
+        else
+            menu.addItem (2, "Clear CC", false);
+
+        menu.showMenuAsync (juce::PopupMenu::Options(),
+            [this, paramIndex] (int result)
+            {
+                if (result == 1)
+                {
+                    processor.setMidiCCLearnMode (paramIndex);
+                }
+                else if (result == 2)
+                {
+                    processor.getAppState().settings.midiProbCCMap[static_cast<size_t> (paramIndex)] = -1;
+                    processor.setMidiCCLearnMode (-1);
+                    updateCCLabel (rows[static_cast<size_t> (paramIndex)]);
+                }
+            });
+    }
+
+    void showPadCCMenu (int padIndex)
+    {
+        if (padIndex < 0 || static_cast<size_t> (padIndex) >= processor.getAppState().settings.midiPadProbCCMap.size())
+            return;
+
+        auto& settings = processor.getAppState().settings;
+        const int currentCC = settings.midiPadProbCCMap[static_cast<size_t> (padIndex)];
+
+        juce::PopupMenu menu;
+        menu.addItem (1, "MIDI CC Learn", ! processor.isMidiPadProbCCLearnActive());
+        if (currentCC >= 0)
+            menu.addItem (2, "Clear CC (" + juce::String (currentCC) + ")");
+        else
+            menu.addItem (2, "Clear CC", false);
+
+        menu.showMenuAsync (juce::PopupMenu::Options(),
+            [this, padIndex] (int result)
+            {
+                if (result == 1)
+                {
+                    processor.setMidiPadProbCCLearnMode (padIndex);
+                }
+                else if (result == 2)
+                {
+                    processor.getAppState().settings.midiPadProbCCMap[static_cast<size_t> (padIndex)] = -1;
+                    processor.setMidiPadProbCCLearnMode (-1);
+                    updatePadCCLabel (padRows[static_cast<size_t> (padIndex)]);
+                }
+            });
     }
 
     void resetAllToDefault()
@@ -281,11 +518,15 @@ private:
             row.nameLabel->setBounds (x, y, labelWidth, rowHeight);
             x += labelWidth + 4;
 
-            const int sliderWidth = contentWidth - x - valueLabelWidth - padding - 8;
+            const int ccLabelWidth = 40;
+            const int sliderWidth = contentWidth - x - valueLabelWidth - ccLabelWidth - padding - 12;
             row.slider->setBounds (x, y, juce::jmax (20, sliderWidth), rowHeight);
             x += juce::jmax (20, sliderWidth) + 4;
 
             row.valueLabel->setBounds (x, y, valueLabelWidth, rowHeight);
+            x += valueLabelWidth + 4;
+
+            row.ccLabel->setBounds (x, y, ccLabelWidth, rowHeight);
             y += rowHeight;
         }
 
@@ -302,11 +543,15 @@ private:
                 pr.nameLabel->setBounds (x, y, labelWidth, rowHeight);
                 x += labelWidth + 4;
 
-                const int sliderWidth = contentWidth - x - valueLabelWidth - padding - 8;
+                const int ccLabelWidth = 40;
+                const int sliderWidth = contentWidth - x - valueLabelWidth - ccLabelWidth - padding - 12;
                 pr.slider->setBounds (x, y, juce::jmax (20, sliderWidth), rowHeight);
                 x += juce::jmax (20, sliderWidth) + 4;
 
                 pr.valueLabel->setBounds (x, y, valueLabelWidth, rowHeight);
+                x += valueLabelWidth + 4;
+
+                pr.ccLabel->setBounds (x, y, ccLabelWidth, rowHeight);
                 y += rowHeight;
             }
         }

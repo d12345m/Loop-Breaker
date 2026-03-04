@@ -919,7 +919,8 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
 
     probabilityPanel = std::make_unique<ModifierProbabilityPanel>(
         processor.getAppState().settings.modifierProbabilities,
-        processor.getAPVTS());
+        processor.getAPVTS(),
+        processor);
 
     settingsPanel = std::make_unique<SettingsPanelContent>(processor.getAppState().settings);
 

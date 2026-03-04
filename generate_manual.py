@@ -488,10 +488,19 @@ def build_manual():
 
     pdf.chapter_title("MIDI CC Control", level=2)
     pdf.body_text(
-        "Each probability slider can be mapped to a MIDI CC. Click the CC button beside "
-        "a slider to enter MIDI CC learn mode, then move any CC knob or fader on your "
-        "controller. The assignment is saved with the DAW session. This allows you to drive "
-        "modifier probabilities from external hardware or automation lanes."
+        "Each probability slider can be mapped to a MIDI CC for hands-on hardware control. "
+        "Right-click any slider to open a context menu with two options:"
+    )
+    pdf.bullet("MIDI CC Learn - enters learn mode (the label beside the slider shows \"LEARN\" "
+               "in the accent color). Move any CC knob or fader on your controller and the "
+               "assignment is made instantly.")
+    pdf.bullet("Clear CC - removes the current CC assignment (shows the current CC number "
+               "if one is assigned).")
+    pdf.body_text(
+        "Once mapped, the CC number appears beside the slider (e.g. \"CC74\"). "
+        "Assignments are saved with the DAW session. This works for both the modifier "
+        "probability sliders and the pad target probability sliders, allowing you to drive "
+        "any probability value from external hardware or automation lanes."
     )
 
     pdf.chapter_title("Pad Target Probability", level=2)

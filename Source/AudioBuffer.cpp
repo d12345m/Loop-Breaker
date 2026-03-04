@@ -1131,6 +1131,9 @@ void AudioBuffer::resetToDefaults()
     crossfadePosition = 0;
     previousSliceIndex = -1;
 
+    // §12: Reset lookahead state.
+    resetLookaheadState();
+
     // §10.3  Reset output-side crossfade state.
     stretchOutputRingWritePos = 0;
     stretchOutputRingValidSamples = 0;
@@ -1200,6 +1203,8 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         stretcherPrepared = false;
         stretcherPrimed = false;
         stretchFadeInRemaining = 0;
+        // §12: Reset lookahead state on pipeline reset.
+        resetLookaheadState();
         // §2.2A  Invalidate block-resampler state on pipeline resets so the
         // interpolators don't carry stale filter history across a seek/jump.
         blockResamplersValid = false;
@@ -1309,6 +1314,16 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         if (direction != lastStretchDirection)
         {
             stretcher.setWindowsForReverse (direction < 0.0);
+            // §12: Direction flip invalidates the lookahead — boundary is now on the opposite side.
+            if (isInLookaheadCrossfade)
+            {
+                isInLookaheadCrossfade = false;
+                lookaheadNextSlice = -1;
+#if JUCE_DEBUG
+                if (tearingDebugEnabled.load())
+                    tearingStats.lookaheadAborts.fetch_add(1, std::memory_order_relaxed);
+#endif
+            }
 #if JUCE_DEBUG
             DBG ("[AudioBuffer " + juce::String(bufferIndex) + "] direction flip " + juce::String(lastStretchDirection) 
                  + "->" + juce::String(direction) + " speed=" + juce::String(snap.speed)
@@ -1500,6 +1515,16 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                 // §11 revised: No SoundTouch pipeline flush on slice jumps.
                 // The per-sample loop applies an input-side crossfade (§10.3
                 // revised) so SoundTouch receives smooth audio at transitions.
+                // §12: External trigger always aborts any active lookahead.
+                if (isInLookaheadCrossfade)
+                {
+                    isInLookaheadCrossfade = false;
+                    lookaheadNextSlice = -1;
+#if JUCE_DEBUG
+                    if (tearingDebugEnabled.load())
+                        tearingStats.lookaheadAborts.fetch_add(1, std::memory_order_relaxed);
+#endif
+                }
                 previousSliceIndex = localActiveSlice;
                 previousSlicePlayheadPos = currentPos;
                 isInCrossfade = true;
@@ -1527,7 +1552,10 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
 
                 if (shouldTriggerNext)
                 {
-                    const int nextSlice = random.nextInt (params.numSlices);
+                    // §12: Use pre-computed next slice if available; otherwise roll the RNG.
+                    const int nextSlice = (precomputedNextRandomSlice >= 0)
+                                            ? precomputedNextRandomSlice
+                                            : random.nextInt(params.numSlices);
 
                     double newPos = 0.0;
                     if (speed > 0.0)
@@ -1535,13 +1563,33 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                     else
                         newPos = getSliceEndPosition (nextSlice, fileLengthSamples) - 1.0;
 
+                    // §12: Coordinate with lookahead pre-crossfade.
+                    const bool lookaheadPredictionCorrect =
+                        isInLookaheadCrossfade && (lookaheadNextSlice == nextSlice);
+                    if (isInLookaheadCrossfade && !lookaheadPredictionCorrect)
+                    {
+                        // Misprediction — abort and fall back to full post-jump crossfade
+                        isInLookaheadCrossfade = false;
+#if JUCE_DEBUG
+                        if (tearingDebugEnabled.load())
+                            tearingStats.lookaheadMispredictions.fetch_add(1, std::memory_order_relaxed);
+#endif
+                    }
+
                     previousSliceIndex = localActiveSlice;
                     previousSlicePlayheadPos = currentPos;
                     isInCrossfade = true;
                     crossfadePosition = 0;
+                    // §12: If prediction was correct, halve the post-jump crossfade length.
+                    if (lookaheadPredictionCorrect)
+                        crossfadeLengthSamples = juce::jmax(64, crossfadeLengthSamples / 2);
                     rmsBlankingBlocksLeft = 6;
                     localActiveSlice = nextSlice;
                     currentPos = newPos;
+
+                    // §12: Pre-compute the *following* random slice for the next lookahead cycle.
+                    precomputedNextRandomSlice = random.nextInt(params.numSlices);
+                    lookaheadNextSlice = -1;
                 }
             }
             else if (params.arpSliceActive && !params.arpSequence.empty())
@@ -1590,13 +1638,29 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                     else
                         newPos = getSliceEndPosition (nextSlice, fileLengthSamples) - 1.0;
 
+                    // §12: Coordinate with lookahead pre-crossfade.
+                    const bool lookaheadPredictionCorrect =
+                        isInLookaheadCrossfade && (lookaheadNextSlice == nextSlice);
+                    if (isInLookaheadCrossfade && !lookaheadPredictionCorrect)
+                    {
+                        isInLookaheadCrossfade = false;
+#if JUCE_DEBUG
+                        if (tearingDebugEnabled.load())
+                            tearingStats.lookaheadMispredictions.fetch_add(1, std::memory_order_relaxed);
+#endif
+                    }
+
                     previousSliceIndex = localActiveSlice;
                     previousSlicePlayheadPos = currentPos;
                     isInCrossfade = true;
                     crossfadePosition = 0;
+                    // §12: If prediction was correct, halve the post-jump crossfade length.
+                    if (lookaheadPredictionCorrect)
+                        crossfadeLengthSamples = juce::jmax(64, crossfadeLengthSamples / 2);
                     rmsBlankingBlocksLeft = 6;
                     localActiveSlice = nextSlice;
                     currentPos = newPos;
+                    lookaheadNextSlice = -1;
                 }
             }
             else
@@ -1635,12 +1699,77 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         double ppPhase         = ppEnabled ? pingPongPhasePosition.load() : 0.0;
         bool ppGoingForward    = ppEnabled ? pingPongGoingForward.load()  : true;
 
+        // §12  Lookahead pre-priming: compute the lookahead distance from
+        // SoundTouch's internal latency.  Only active when slicing AND stretcher
+        // are both in use — the repitch path doesn't benefit from this.
+        const bool lookaheadEnabled = slicingOn && snap.useStretcher();
+        const int lookaheadSamples = lookaheadEnabled
+            ? juce::jlimit(512, 4096, stretcher.getLatencySamples())
+            : 0;
+
+        // §12  Lambda: manage the lookahead pre-crossfade state.
+        // Called per-sample before the main interpolation to check whether we
+        // are approaching a slice boundary and should begin blending in the
+        // next slice's audio.
+        auto handleLookaheadLocal = [&] ()
+        {
+            if (! lookaheadEnabled)
+                return;
+
+            const double effectiveSpeed = getEffectiveSpeed();
+
+            // --- Already in a lookahead crossfade: nothing more to check ---
+            if (isInLookaheadCrossfade)
+                return;
+
+            // --- Check if we're inside the lookahead zone ---
+            const double distToBoundary = getDistanceToSliceBoundary(
+                currentPos, localActiveSlice, fileLengthSamples, effectiveSpeed);
+
+            // Convert from source-domain samples to the fillInputScratch domain.
+            // step = inputSpeed * (fileSampleRate / hostSampleRate), so distance
+            // in "fill iterations" ≈ distToBoundary / |step|.  But since lookaheadSamples
+            // is already in host-rate samples, we compare directly with the
+            // source-domain distance (which is what fills the SoundTouch FIFO).
+            if (distToBoundary > (double) lookaheadSamples || distToBoundary <= 0.0)
+                return; // not in the zone yet, or already past boundary
+
+            // --- Determine the next slice ---
+            const int nextSlice = getNextSliceIndex(localActiveSlice, fileLengthSamples);
+            if (nextSlice < 0)
+                return; // unpredictable — skip lookahead for this transition
+
+            // --- Start the lookahead crossfade ---
+            lookaheadNextSlice = nextSlice;
+            isInLookaheadCrossfade = true;
+            lookaheadCrossfadePosition = 0;
+            lookaheadCrossfadeSamples = juce::jlimit(1, lookaheadSamples,
+                                                      (int) distToBoundary);
+
+            // Compute the read position in the next slice.
+            if (effectiveSpeed >= 0.0)
+                lookaheadNextSliceReadPos = getSliceStartPosition(nextSlice, fileLengthSamples);
+            else
+                lookaheadNextSliceReadPos = getSliceEndPosition(nextSlice, fileLengthSamples) - 1.0;
+
+#if JUCE_DEBUG
+            DBG("[AudioBuffer " + juce::String(bufferIndex) + "] §12 LOOKAHEAD START: "
+                "nextSlice=" + juce::String(nextSlice) +
+                " dist=" + juce::String(distToBoundary, 0) +
+                " xfadeLen=" + juce::String(lookaheadCrossfadeSamples));
+#endif
+        };
+
         int framesFilled = 0;
         for (int sample = 0; sample < framesToGenerate; ++sample)
         {
             // Keep slice behavior responsive using local snapshot.
             if (slicingOn || localSliceTrig)
                 handleSlicePlaybackLocal();
+
+            // §12  Check whether to start a lookahead pre-crossfade.
+            if (lookaheadEnabled)
+                handleLookaheadLocal();
 
             // If no custom loop window is active, respect file boundaries + looping.
             if (! loopWindowOn && ! slicingOn)
@@ -1759,6 +1888,46 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                     isInCrossfade = false;
                     crossfadePosition = 0;
                     previousSliceIndex = -1;
+                }
+            }
+
+            // §12  Lookahead pre-crossfade: blend next-slice audio into SoundTouch's
+            // input *before* the boundary so the OLA algorithm transitions smoothly.
+            // The blend ramps from 0% to 50% of the next slice by the time the
+            // boundary arrives — the post-jump crossfade handles the remaining 50%.
+            if (isInLookaheadCrossfade)
+            {
+                const double progress = static_cast<double>(lookaheadCrossfadePosition)
+                                      / static_cast<double>(lookaheadCrossfadeSamples);
+                // Ramp from 0 → 0.5 using a smooth (sinusoidal) curve
+                const float blendFactor = static_cast<float>(
+                    0.5 * std::sin(progress * juce::MathConstants<double>::halfPi));
+
+                // Read from the next slice's position
+                const double nextPos = juce::jlimit(0.0, static_cast<double>(fileLengthSamples - 1),
+                                                     lookaheadNextSliceReadPos);
+                const int nextP1 = static_cast<int>(nextPos);
+                const int nextP2 = juce::jmin(nextP1 + 1, fileLengthSamples - 1);
+                const float nextFrac = static_cast<float>(nextPos - static_cast<double>(nextP1));
+
+                for (int ch = 0; ch < numChannels; ++ch)
+                {
+                    const float nextSample = sourceRead[ch][nextP1]
+                                           + nextFrac * (sourceRead[ch][nextP2] - sourceRead[ch][nextP1]);
+                    scratchWrite[ch][sample] = scratchWrite[ch][sample] * (1.0f - blendFactor)
+                                             + nextSample * blendFactor;
+                }
+
+                lookaheadNextSliceReadPos += step;
+                lookaheadCrossfadePosition++;
+
+                if (lookaheadCrossfadePosition >= lookaheadCrossfadeSamples)
+                {
+                    isInLookaheadCrossfade = false;
+#if JUCE_DEBUG
+                    if (tearingDebugEnabled.load())
+                        tearingStats.lookaheadPreCrossfades.fetch_add(1, std::memory_order_relaxed);
+#endif
                 }
             }
 
@@ -2085,6 +2254,8 @@ void AudioBuffer::triggerRandomSlice()
         int randomSlice = random.nextInt(params.numSlices);
         triggerSlice(randomSlice);
         params.continuousRandomSlicing = true;
+        // §12: Pre-compute the next random slice for lookahead.
+        precomputedNextRandomSlice = random.nextInt(params.numSlices);
     }
 }
 
@@ -2094,6 +2265,9 @@ void AudioBuffer::startContinuousRandomSlicing()
     {
         triggerRandomSlice();
         params.continuousRandomSlicing = true;
+        // §12: triggerRandomSlice already pre-computes, but ensure it's set.
+        if (precomputedNextRandomSlice < 0)
+            precomputedNextRandomSlice = random.nextInt(params.numSlices);
     }
 }
 
@@ -2190,6 +2364,9 @@ void AudioBuffer::exitSlicingMode()
     isInCrossfade = false;
     crossfadePosition = 0;
     previousSliceIndex = -1;
+
+    // §12: Reset lookahead state.
+    resetLookaheadState();
 }
 
 int AudioBuffer::getCurrentSlice() const
@@ -2327,6 +2504,74 @@ double AudioBuffer::getSliceEndPosition(int sliceIndex, int fileLengthSamples) c
     int64_t targetSample = start + offsetWithin;
     
     return static_cast<double>(juce::jlimit<int64_t>(0, (int64_t)fileLengthSamples, targetSample));
+}
+
+//==============================================================================
+// §12 Lookahead pre-priming helpers
+//==============================================================================
+
+int AudioBuffer::getNextSliceIndex(int currentSlice, int fileLengthSamples) const
+{
+    (void) fileLengthSamples; // may be used in future for validation
+
+    // Arp / slice repeater mode — sequence is pre-built and deterministic
+    if (params.arpSliceActive && !params.arpSequence.empty())
+    {
+        const int nextSeqPos = params.arpSequencePos + 1;
+
+        if (nextSeqPos >= (int) params.arpSequence.size())
+        {
+            // We're about to wrap around the sequence.
+            // If also at refresh boundary, the sequence will be regenerated — unpredictable.
+            if ((params.arpCycleCount + 1) >= params.arpTotalCyclesPerRefresh)
+                return -1; // new sequence will be randomised, can't predict
+
+            // Otherwise we just wrap to the start of the same sequence.
+            return params.arpSequence[0];
+        }
+
+        return params.arpSequence[(size_t) nextSeqPos];
+    }
+
+    // Continuous random slicing — use pre-computed next slice if available
+    if (params.continuousRandomSlicing)
+    {
+        return precomputedNextRandomSlice; // may be -1 if not yet pre-computed
+    }
+
+    // External trigger or single-slice mode — can't predict
+    return -1;
+}
+
+double AudioBuffer::getDistanceToSliceBoundary(double currentPos, int currentSlice,
+                                                int fileLengthSamples, double effectiveSpeed) const
+{
+    if (fileLengthSamples <= 0 || params.numSlices <= 1)
+        return 1.0e12; // effectively infinite — no boundary
+
+    const double sliceStart = getSliceStartPosition(currentSlice, fileLengthSamples);
+    const double sliceEnd   = getSliceEndPosition(currentSlice, fileLengthSamples);
+
+    if (effectiveSpeed >= 0.0)
+    {
+        // Forward: boundary is at sliceEnd - 1.0
+        return (sliceEnd - 1.0) - currentPos;
+    }
+    else
+    {
+        // Reverse: boundary is at sliceStart
+        return currentPos - sliceStart;
+    }
+}
+
+void AudioBuffer::resetLookaheadState()
+{
+    isInLookaheadCrossfade = false;
+    lookaheadCrossfadePosition = 0;
+    lookaheadCrossfadeSamples = 0;
+    lookaheadNextSlice = -1;
+    lookaheadNextSliceReadPos = 0.0;
+    precomputedNextRandomSlice = -1;
 }
 
 void AudioBuffer::startSliceCrossfade(int newSliceIndex, double newPlayheadPos)

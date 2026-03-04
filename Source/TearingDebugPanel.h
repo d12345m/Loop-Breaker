@@ -63,7 +63,10 @@ public:
         g.drawText("Jmp", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
         g.drawText("Trn", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
         g.drawText("Rst", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
-        g.drawText("DC", headerRow, juce::Justification::centredLeft);
+        g.drawText("DC", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
+        g.drawText("LaXF", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
+        g.drawText("LaMs", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
+        g.drawText("LaAb", headerRow, juce::Justification::centredLeft);
         
         area.removeFromTop(1);
         
@@ -113,7 +116,10 @@ public:
             g.drawText(juce::String(stats.sliceJumps.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
             g.drawText(juce::String(stats.modeTransitions.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
             g.drawText(juce::String(stats.soundTouchResets.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
-            g.drawText(juce::String(stats.dcOffsetDrifts.load()), row, juce::Justification::centredLeft);
+            g.drawText(juce::String(stats.dcOffsetDrifts.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(stats.lookaheadPreCrossfades.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(stats.lookaheadMispredictions.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(stats.lookaheadAborts.load()), row, juce::Justification::centredLeft);
         }
         
         // Summary at bottom

@@ -101,6 +101,11 @@ struct TearingDebugStats
     std::atomic<int> rmsJumps { 0 };                 // Sudden RMS level changes between blocks
     std::atomic<int> dcOffsetDrifts { 0 };           // DC offset drifting beyond threshold
     
+    // §12 Lookahead pre-priming counters
+    std::atomic<int> lookaheadPreCrossfades { 0 };   // Successful pre-crossfades completed
+    std::atomic<int> lookaheadMispredictions { 0 };  // Prediction didn't match actual jump
+    std::atomic<int> lookaheadAborts { 0 };          // Aborted due to external trigger/speed change
+    
     // Timing info
     std::atomic<double> lastTearingEventTime { 0.0 };
     std::atomic<double> lastPlayheadPos { 0.0 };
@@ -121,6 +126,9 @@ struct TearingDebugStats
         nanOrInfSamples.store(0);
         rmsJumps.store(0);
         dcOffsetDrifts.store(0);
+        lookaheadPreCrossfades.store(0);
+        lookaheadMispredictions.store(0);
+        lookaheadAborts.store(0);
         lastTearingEventTime.store(0.0);
         lastPlayheadPos.store(0.0);
     }
@@ -140,7 +148,10 @@ struct TearingDebugStats
              + " clipped=" + juce::String(clippedSamples.load())
              + " nanInf=" + juce::String(nanOrInfSamples.load())
              + " rmsJump=" + juce::String(rmsJumps.load())
-             + " dcDrift=" + juce::String(dcOffsetDrifts.load());
+             + " dcDrift=" + juce::String(dcOffsetDrifts.load())
+             + " laPreXF=" + juce::String(lookaheadPreCrossfades.load())
+             + " laMispredict=" + juce::String(lookaheadMispredictions.load())
+             + " laAbort=" + juce::String(lookaheadAborts.load());
     }
     
     int getTotalEvents() const
@@ -149,7 +160,8 @@ struct TearingDebugStats
              + mediumDiscontinuities.load() + minorDiscontinuities.load()
              + directionFlips.load() + sliceJumps.load() + modeTransitions.load()
              + soundTouchResets.load() + zeroSampleRuns.load() + clippedSamples.load()
-             + nanOrInfSamples.load() + rmsJumps.load() + dcOffsetDrifts.load();
+             + nanOrInfSamples.load() + rmsJumps.load() + dcOffsetDrifts.load()
+             + lookaheadPreCrossfades.load() + lookaheadMispredictions.load() + lookaheadAborts.load();
     }
 };
 
@@ -418,6 +430,16 @@ private:
     double previousSlicePlayheadPos = 0.0;
     int previousSliceIndex = -1;
     juce::AudioBuffer<float> crossfadeBuffer;
+
+    // §12 Lookahead pre-priming: gradually blend next-slice audio into
+    // SoundTouch's input *before* the slice boundary, so the OLA algorithm
+    // sees a smooth spectral transition instead of a hard discontinuity.
+    int   lookaheadNextSlice = -1;              // pre-computed next slice index (-1 = unknown)
+    bool  isInLookaheadCrossfade = false;        // currently in pre-boundary crossfade
+    int   lookaheadCrossfadePosition = 0;        // progress within lookahead crossfade
+    int   lookaheadCrossfadeSamples = 0;         // total length of lookahead crossfade
+    double lookaheadNextSliceReadPos = 0.0;       // read position in the next slice (advances with step)
+    int   precomputedNextRandomSlice = -1;       // pre-rolled RNG for continuous random mode
     
     // DSP parameters
     double hostSampleRate = 44100.0;
@@ -457,6 +479,11 @@ private:
     void applyStretchOutputCrossfade(juce::AudioBuffer<float>& outputBuffer, int numSamples);
     double getSliceStartPosition(int sliceIndex, int fileLengthSamples) const;
     double getSliceEndPosition(int sliceIndex, int fileLengthSamples) const;
+
+    // §12 Lookahead pre-priming helpers
+    int getNextSliceIndex(int currentSlice, int fileLengthSamples) const;
+    double getDistanceToSliceBoundary(double currentPos, int currentSlice, int fileLengthSamples, double effectiveSpeed) const;
+    void resetLookaheadState();
 
     LoadedAudioData::Ptr getAudioDataSnapshot() const;
 

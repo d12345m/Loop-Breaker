@@ -38,6 +38,9 @@ public:
         viewport.setScrollBarsShown (true, false);
         addAndMakeVisible (viewport);
 
+        // Catch clicks on empty areas to cancel learn mode
+        content.addMouseListener (this, true);
+
         resetButton.setButtonText ("Reset All to 100%");
         resetButton.onClick = [this] { resetAllToDefault(); };
         addAndMakeVisible (resetButton);
@@ -343,7 +346,14 @@ private:
     void mouseDown (const juce::MouseEvent& e) override
     {
         if (! e.mods.isPopupMenu())
+        {
+            // Any left-click cancels an active learn mode
+            if (processor.isMidiCCLearnActive())
+                processor.setMidiCCLearnMode (-1);
+            if (processor.isMidiPadProbCCLearnActive())
+                processor.setMidiPadProbCCLearnMode (-1);
             return;
+        }
 
         for (size_t i = 0; i < rows.size(); ++i)
         {

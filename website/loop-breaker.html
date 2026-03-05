@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>
+      Loop Breaker — Generative Loop-Mangling VST3 | Glow Machine Audio
+    </title>
+    <meta
+      name="description"
+      content="Loop Breaker is a generative loop-mangling VST3 plugin. 8 pads, 24 modifiers, full MIDI control, multi-output routing. Turn your loops into living performances."
+    />
+    <link rel="stylesheet" href="style.css" />
+    <link rel="icon" type="image/png" href="img/logo.png" />
+  </head>
+  <body>
+    <!-- ============================================================
+       NAV
+       ============================================================ -->
+    <nav class="site-nav">
+      <div class="container">
+        <a href="index.html" class="nav-logo">
+          <img src="img/logo.png" alt="Glow Machine" />
+        </a>
+        <button
+          class="nav-toggle"
+          aria-label="Toggle menu"
+          onclick="
+            document.querySelector('.nav-links').classList.toggle('open')
+          "
+        >
+          ☰
+        </button>
+        <ul class="nav-links">
+          <li><a href="index.html">Home</a></li>
+          <li><a href="loop-breaker.html" class="active">Loop Breaker</a></li>
+          <!--<li><a href="#">Support</a></li>-->
+        </ul>
+      </div>
+    </nav>
+
+    <!-- ============================================================
+       PRODUCT HERO
+       ============================================================ -->
+    <header class="product-hero">
+      <div class="container">
+        <span class="hero-badge">VST3 Instrument Plugin</span>
+        <h1><span class="gradient-text">Loop Breaker</span></h1>
+        <p class="tagline">
+          A generative loop-mangling instrument that turns your sample library
+          into an ever-evolving, beat-synced performance — without touching a
+          single knob.
+        </p>
+        <div class="hero-actions" style="justify-content: flex-start">
+          <a href="#download" class="btn btn-primary">Download Free</a>
+          <a href="#how-it-works" class="btn btn-secondary">See How It Works</a>
+        </div>
+      </div>
+    </header>
+
+    <!-- ============================================================
+       AT A GLANCE (stats)
+       ============================================================ -->
+    <section class="alt-bg">
+      <div class="container">
+        <div class="stats-row">
+          <div class="stat-item">
+            <div class="stat-number">8</div>
+            <div class="stat-label">Stereo pad buffers</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-number">24</div>
+            <div class="stat-label">Modifier types</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-number">4</div>
+            <div class="stat-label">Preset snapshot slots</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-number">18</div>
+            <div class="stat-label">Output channels</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+       HOW IT WORKS
+       ============================================================ -->
+    <section id="how-it-works">
+      <div class="container text-center">
+        <span class="section-label">How It Works</span>
+        <h2 class="section-title">Load. Select. Let go.</h2>
+        <p class="section-subtitle centered">
+          Loop Breaker's modifier engine does the creative heavy lifting. You
+          decide the boundaries — it fills in the surprises.
+        </p>
+        <div class="steps">
+          <div class="step">
+            <h3>Load Your Loops</h3>
+            <p>
+              Drag WAV, AIFF, FLAC, or MP3 files onto the 8-pad grid. Each pad
+              loops its sample in sync with your DAW's transport and tempo.
+            </p>
+          </div>
+          <div class="step">
+            <h3>Select Target Pads</h3>
+            <p>
+              Click or MIDI-trigger pads to mark them as targets. If you don't
+              select any, the engine picks 1–4 pads for you automatically.
+            </p>
+          </div>
+          <div class="step">
+            <h3>Modifiers Fire Automatically</h3>
+            <p>
+              Every N bars (you choose 1–16), a randomly selected modifier
+              transforms your targeted pads — effects, slicing, pitch shifts,
+              speed changes, and more.
+            </p>
+          </div>
+          <div class="step">
+            <h3>Shape the Probabilities</h3>
+            <p>
+              Use the Probability tab to dial in which modifiers appear and how
+              often. Automate them from your DAW or map them to MIDI CC
+              hardware.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+       FEATURES
+       ============================================================ -->
+    <section class="alt-bg" id="features">
+      <div class="container">
+        <div class="text-center">
+          <span class="section-label">Features</span>
+          <h2 class="section-title">Everything you need. Nothing you don't.</h2>
+          <p class="section-subtitle centered">
+            Built for live performance, sound design sessions, and creative
+            exploration.
+          </p>
+        </div>
+        <div class="feature-grid">
+          <div class="feature-card">
+            <div class="feature-icon">🎛</div>
+            <h3>Automatic Modifier Engine</h3>
+            <p>
+              24 modifier types across four categories — buffer transforms,
+              channel effects, master effects, and specials — applied on a
+              beat-synced timer you control.
+            </p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon teal">🎲</div>
+            <h3>Probability Control</h3>
+            <p>
+              Per-modifier and per-pad probability sliders let you shape the
+              randomness. Set a modifier to zero to disable it entirely, or
+              crank it up for chaos.
+            </p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon red">✂️</div>
+            <h3>Beat Slicing &amp; Glitch</h3>
+            <p>
+              Beat Slice, Arp Slice, and Slice Repeater chop your loops into
+              rhythmic subdivisions and reassemble them in randomized or
+              stuttered patterns.
+            </p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🔊</div>
+            <h3>Multi-Output Routing</h3>
+            <p>
+              8 independent stereo output buses plus a master mix. Route each
+              pad to its own DAW mixer channel for independent processing and
+              recording.
+            </p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon teal">🎹</div>
+            <h3>Full MIDI Integration</h3>
+            <p>
+              Map pads, the modifier toggle, and preset slots to MIDI notes. Map
+              probability sliders to MIDI CC. Compatible with Akai MPD,
+              Maschine, Launchpad, and more.
+            </p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon red">💾</div>
+            <h3>Modifier Presets (A–D)</h3>
+            <p>
+              Snapshot the complete modifier state across all 8 pads into four
+              preset slots. Recall them instantly via click or MIDI for
+              scene-based performances.
+            </p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">⏱</div>
+            <h3>Time-Stretch &amp; Pitch-Shift</h3>
+            <p>
+              Real-time SoundTouch-powered time-stretching and pitch-shifting.
+              Change speed without affecting pitch, or shift pitch
+              independently.
+            </p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon teal">🧩</div>
+            <h3>Parts System</h3>
+            <p>
+              Divide each loop into 1–4 equal sections (A–D) for structured
+              arrangements. The Switch Part modifier moves between sections
+              automatically.
+            </p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon red">🎨</div>
+            <h3>11 Visual Themes</h3>
+            <p>
+              From Neon Rave to Warm Paper — pick a theme that fits your studio
+              vibe. Smooth crossfade transitions between themes.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+       MODIFIER CATEGORIES
+       ============================================================ -->
+    <section id="modifiers">
+      <div class="container">
+        <div class="text-center">
+          <span class="section-label">The Modifier System</span>
+          <h2 class="section-title">24 ways to transform your loops</h2>
+          <p class="section-subtitle centered">
+            Modifiers are organized into four categories. Each one has its own
+            probability slider so you stay in control of the chaos.
+          </p>
+        </div>
+        <div class="mod-categories">
+          <div class="mod-category">
+            <h3><span class="dot purple"></span> Buffer Transforms</h3>
+            <ul class="mod-list">
+              <li>Reverse</li>
+              <li>Speed</li>
+              <li>Stretch</li>
+              <li>Pitch Up Octave</li>
+              <li>Pitch Down Octave</li>
+              <li>Beat Slice</li>
+              <li>Arp Slice</li>
+              <li>Slice Repeater</li>
+              <li>Ping Pong</li>
+            </ul>
+          </div>
+          <div class="mod-category">
+            <h3><span class="dot teal"></span> Channel Effects</h3>
+            <ul class="mod-list">
+              <li>Delay</li>
+              <li>Delay Dub Burst</li>
+              <li>Reverb</li>
+              <li>Low-Pass Filter</li>
+              <li>High-Pass Filter</li>
+              <li>Volume Ramp</li>
+              <li>Tremolo</li>
+              <li>Chorus</li>
+              <li>Auto-Pan</li>
+            </ul>
+          </div>
+          <div class="mod-category">
+            <h3><span class="dot amber"></span> Master Effects</h3>
+            <ul class="mod-list">
+              <li>Master High-Pass</li>
+              <li>Master Low-Pass</li>
+            </ul>
+          </div>
+          <div class="mod-category">
+            <h3><span class="dot red"></span> Special</h3>
+            <ul class="mod-list">
+              <li>Switch Part</li>
+              <li>Quarter-Note Burst</li>
+              <li>Reset All</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+       DAW INTEGRATION
+       ============================================================ -->
+    <section class="alt-bg">
+      <div class="container">
+        <div class="split">
+          <div>
+            <span class="section-label">DAW Integration</span>
+            <h2 class="section-title">Fits right into your workflow</h2>
+            <p class="text-muted" style="line-height: 1.7; margin-bottom: 20px">
+              Loop Breaker follows your DAW's transport and tempo automatically.
+              Every parameter that matters — master volume, all probability
+              sliders, pad target weights — is exposed for host automation. Draw
+              curves, use LFOs, or control everything from hardware.
+            </p>
+            <p class="text-muted" style="line-height: 1.7; margin-bottom: 20px">
+              Full state save and restore means your sessions reload exactly
+              where you left off: loaded samples, MIDI mappings, probability
+              settings, presets, theme, and timing configuration.
+            </p>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap">
+              <span class="tag">Ableton Live</span>
+              <span class="tag">Reaper</span>
+              <span class="tag">Bitwig</span>
+              <span class="tag">FL Studio</span>
+              <span class="tag">Logic Pro*</span>
+            </div>
+            <p class="text-muted" style="font-size: 0.78rem; margin-top: 8px">
+              * Logic Pro requires a VST3 wrapper or AU bridge.
+            </p>
+          </div>
+          <div>
+            <table class="spec-table">
+              <thead>
+                <tr>
+                  <th>Property</th>
+                  <th>Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Format</td>
+                  <td class="mono">VST3</td>
+                </tr>
+                <tr>
+                  <td>Category</td>
+                  <td>Instrument (Synth)</td>
+                </tr>
+                <tr>
+                  <td>MIDI Input</td>
+                  <td>Yes</td>
+                </tr>
+                <tr>
+                  <td>Outputs</td>
+                  <td>9 stereo buses (18 ch)</td>
+                </tr>
+                <tr>
+                  <td>Sample Formats</td>
+                  <td class="mono">WAV AIFF FLAC MP3</td>
+                </tr>
+                <tr>
+                  <td>Platform</td>
+                  <td>macOS 10.13+ (Intel &amp; Apple Silicon)</td>
+                </tr>
+                <tr>
+                  <td>Manufacturer</td>
+                  <td>Glow Machine Audio</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+       MIDI CONTROL
+       ============================================================ -->
+    <section>
+      <div class="container">
+        <div class="split reverse">
+          <div>
+            <span class="section-label">Hardware Control</span>
+            <h2 class="section-title">Hands-on MIDI mapping</h2>
+            <p class="text-muted" style="line-height: 1.7; margin-bottom: 20px">
+              Loop Breaker is designed to be played, not just watched. Map the 8
+              pads to your drum controller's note grid for tactile pad
+              selection. Assign the modifier toggle and preset recall slots to
+              dedicated buttons. Map probability sliders to CC faders for live
+              probability sculpting.
+            </p>
+            <p class="text-muted" style="line-height: 1.7; margin-bottom: 20px">
+              MIDI Learn is everywhere — Shift+Click or right-click any
+              assignable control, play a note or move a knob, and you're mapped.
+              Assignments persist across DAW sessions.
+            </p>
+          </div>
+          <div>
+            <div class="feature-card" style="margin-bottom: 16px">
+              <h3 style="margin-bottom: 12px">Default Pad Mapping</h3>
+              <table class="spec-table" style="margin-top: 0">
+                <thead>
+                  <tr>
+                    <th>Note</th>
+                    <th>Pad</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="mono">C1 (36)</td>
+                    <td>Pad 1</td>
+                  </tr>
+                  <tr>
+                    <td class="mono">C#1 (37)</td>
+                    <td>Pad 2</td>
+                  </tr>
+                  <tr>
+                    <td class="mono">D1 (38)</td>
+                    <td>Pad 3</td>
+                  </tr>
+                  <tr>
+                    <td class="mono">D#1 (39)</td>
+                    <td>Pad 4</td>
+                  </tr>
+                  <tr>
+                    <td class="mono">E1 (40)</td>
+                    <td>Pad 5</td>
+                  </tr>
+                  <tr>
+                    <td class="mono">F1 (41)</td>
+                    <td>Pad 6</td>
+                  </tr>
+                  <tr>
+                    <td class="mono">F#1 (42)</td>
+                    <td>Pad 7</td>
+                  </tr>
+                  <tr>
+                    <td class="mono">G1 (43)</td>
+                    <td>Pad 8</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+       DOWNLOAD / CTA
+       ============================================================ -->
+    <div class="cta-banner" id="download">
+      <div class="container">
+        <h2>Download Loop Breaker</h2>
+        <p>Free to use. macOS VST3. No sign-up required.</p>
+        <div
+          style="
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+          "
+        >
+          <a
+            href="#"
+            class="btn btn-teal"
+            onclick="
+              alert('Download link coming soon!');
+              return false;
+            "
+            >Download for macOS</a
+          >
+          <a
+            href="Loop_Breaker_User_Manual.pdf"
+            class="btn btn-secondary"
+            target="_blank"
+            >Read the Manual (PDF)</a
+          >
+        </div>
+        <p class="text-muted" style="font-size: 0.8rem; margin-top: 16px">
+          Requires macOS 10.13 or later. Compatible with any VST3 host.<br />
+          Set your DAW buffer size to 2048+ samples for best performance.
+        </p>
+      </div>
+    </div>
+
+    <!-- ============================================================
+       FOOTER
+       ============================================================ -->
+    <footer class="site-footer">
+      <div class="container">
+        <div class="footer-inner">
+          <div class="footer-brand">
+            <img src="img/logo.png" alt="Glow Machine" />
+            <span>Glow Machine Audio</span>
+          </div>
+          <ul class="footer-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="loop-breaker.html">Loop Breaker</a></li>
+            <!--<li><a href="#">Support</a></li>-->
+          </ul>
+        </div>
+        <div class="footer-copy">
+          &copy; 2025–2026 Glow Machine, LLC. All rights reserved.<br />
+          JUCE is a trademark of Raw Material Software Limited. SoundTouch is
+          copyright Olli Parviainen.
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

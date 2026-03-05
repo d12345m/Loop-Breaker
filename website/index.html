@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Glow Machine Audio — Creative Tools for Sound</title>
+    <meta
+      name="description"
+      content="Glow Machine Audio builds creative audio plugins for producers, sound designers, and performers. Home of Loop Breaker."
+    />
+    <link rel="stylesheet" href="style.css" />
+    <link rel="icon" type="image/png" href="img/logo.png" />
+  </head>
+  <body>
+    <!-- ============================================================
+       NAV
+       ============================================================ -->
+    <nav class="site-nav">
+      <div class="container">
+        <a href="index.html" class="nav-logo">
+          <img src="img/logo.png" alt="Glow Machine" />
+        </a>
+        <button
+          class="nav-toggle"
+          aria-label="Toggle menu"
+          onclick="
+            document.querySelector('.nav-links').classList.toggle('open')
+          "
+        >
+          ☰
+        </button>
+        <ul class="nav-links">
+          <li><a href="index.html" class="active">Home</a></li>
+          <li><a href="loop-breaker.html">Loop Breaker</a></li>
+          <!--<li><a href="#">Support</a></li>-->
+        </ul>
+      </div>
+    </nav>
+
+    <!-- ============================================================
+       HERO
+       ============================================================ -->
+    <header class="hero text-center">
+      <div class="container">
+        <img
+          src="img/logo.png"
+          alt="Glow Machine Audio"
+          style="height: 80px; margin: 0 auto 40px"
+        />
+        <h1>
+          Sound tools for<br /><span class="gradient-text"
+            >the unpredictable</span
+          >
+        </h1>
+        <p class="lead">
+          We build audio plugins that bring generative, game-like systems into
+          your DAW — turning static loops into living, evolving performances.
+        </p>
+        <div class="hero-actions">
+          <a href="loop-breaker.html" class="btn btn-primary"
+            >Explore Loop Breaker</a
+          >
+        </div>
+      </div>
+    </header>
+
+    <!-- ============================================================
+       ABOUT
+       ============================================================ -->
+    <section class="alt-bg">
+      <div class="container text-center">
+        <span class="section-label">Who We Are</span>
+        <h2 class="section-title">Built for the experimental</h2>
+        <p class="section-subtitle centered" style="margin-bottom: 48px">
+          Glow Machine Audio is a small studio focused on one thing: creative
+          software that makes music sessions more surprising, more fun, and more
+          alive. We draw inspiration from video games, generative art, and the
+          happy accidents that happen when you stop trying to control
+          everything.
+        </p>
+        <div class="stats-row">
+          <div class="stat-item">
+            <div class="stat-number">8</div>
+            <div class="stat-label">Simultaneous loop buffers</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-number">24</div>
+            <div class="stat-label">Modifier types</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-number">11</div>
+            <div class="stat-label">Visual themes</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-number">∞</div>
+            <div class="stat-label">Possible combinations</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+       FEATURED PRODUCT
+       ============================================================ -->
+    <section>
+      <div class="container">
+        <div class="split">
+          <div>
+            <span class="section-label">Featured Product</span>
+            <h2 class="section-title">Loop Breaker</h2>
+            <p class="text-muted" style="margin-bottom: 24px; line-height: 1.7">
+              A generative loop-mangling VST3 that combines an MPC-style sampler
+              pad bank with an automatic modifier engine. Load your loops,
+              select your pads, and let the plugin apply randomized effects,
+              slicing, pitch shifts, and more — on a beat-synced timer you
+              control.
+            </p>
+            <div
+              style="
+                display: flex;
+                gap: 8px;
+                flex-wrap: wrap;
+                margin-bottom: 28px;
+              "
+            >
+              <span class="tag">VST3</span>
+              <span class="tag teal">macOS</span>
+              <span class="tag">MIDI Control</span>
+              <span class="tag teal">Multi-Output</span>
+            </div>
+            <a href="loop-breaker.html" class="btn btn-primary">Learn More</a>
+          </div>
+          <div>
+            <div class="feature-grid" style="margin-top: 0">
+              <div class="feature-card">
+                <div class="feature-icon">🎛</div>
+                <h3>Automatic Modifiers</h3>
+                <p>
+                  24 modifier types fire on a configurable bar timer,
+                  transforming your loops without manual intervention.
+                </p>
+              </div>
+              <div class="feature-card">
+                <div class="feature-icon teal">🎹</div>
+                <h3>Full MIDI Control</h3>
+                <p>
+                  Map pads, presets, and probability sliders to your hardware.
+                  Plays nicely with any drum pad controller.
+                </p>
+              </div>
+              <div class="feature-card">
+                <div class="feature-icon red">🎲</div>
+                <h3>Probability Engine</h3>
+                <p>
+                  Fine-tune the likelihood of every modifier type and pad
+                  target. Automate probabilities from your DAW.
+                </p>
+              </div>
+              <div class="feature-card">
+                <div class="feature-icon">🔊</div>
+                <h3>Multi-Output Routing</h3>
+                <p>
+                  Route each of the 8 pads to its own stereo bus for independent
+                  processing in your DAW mixer.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+       CTA
+       ============================================================ -->
+    <div class="cta-banner">
+      <div class="container">
+        <h2>Ready to break some loops?</h2>
+        <p>
+          Download Loop Breaker and turn your sample library into a generative
+          instrument.
+        </p>
+        <a href="loop-breaker.html" class="btn btn-teal">Get Loop Breaker</a>
+      </div>
+    </div>
+
+    <!-- ============================================================
+       FOOTER
+       ============================================================ -->
+    <footer class="site-footer">
+      <div class="container">
+        <div class="footer-inner">
+          <div class="footer-brand">
+            <img src="img/logo.png" alt="Glow Machine" />
+            <span>Glow Machine Audio</span>
+          </div>
+          <ul class="footer-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="loop-breaker.html">Loop Breaker</a></li>
+            <!--<li><a href="#">Support</a></li>-->
+          </ul>
+        </div>
+        <div class="footer-copy">
+          &copy; 2025–2026 Glow Machine, LLC. All rights reserved.
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

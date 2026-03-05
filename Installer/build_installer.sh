@@ -135,7 +135,7 @@ DISTEOF
 fi
 
 # ─── Step 5: Build Product Archive ───────────────────────────────────────────
-FINAL_PKG="$OUTPUT_DIR/LoopBreaker-macOS.pkg"
+FINAL_PKG="$STAGING_DIR/LoopBreaker-macOS.pkg"
 
 info "Building product installer..."
 PRODUCTBUILD_ARGS=(
@@ -195,11 +195,9 @@ fi
 info "Created zip: $ZIP_FILE"
 
 # ─── Done ─────────────────────────────────────────────────────────────────────
-PKG_SIZE=$(du -sh "$FINAL_PKG" | cut -f1)
 ZIP_SIZE=$(du -sh "$ZIP_FILE" | cut -f1)
 info "Installer built successfully!"
 echo ""
-echo "  📦  $FINAL_PKG  ($PKG_SIZE)"
 echo "  🗜   $ZIP_FILE  ($ZIP_SIZE)"
 echo ""
 echo "  Install location: /Library/Audio/Plug-Ins/VST3/${PLUGIN_FILENAME}.vst3"

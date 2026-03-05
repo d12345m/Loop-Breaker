@@ -236,6 +236,10 @@ public:
     void startArpSlicing(int totalSlices, int sequenceLength, int repeatBars);
     void stopArpSlicing();
     bool isInArpSliceMode() const { return params.arpSliceActive; }
+    bool isInSliceRepeaterMode() const { return params.arpSliceActive && params.arpSliceRepeaterMode; }
+    int  getArpSequenceLength() const { return (int) params.arpSequence.size(); }
+    int  getArpRepeatBars() const { return params.arpRepeatBars; }
+    int  getArpTotalSlices() const { return params.numSlices; }
 
     // Slice repeater: play one random slice N times, then pick another random slice
     void startSliceRepeater(int totalSlices, int repetitions);

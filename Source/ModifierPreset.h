@@ -27,6 +27,11 @@ struct BufferModifierSnapshot
     int    numSlices           = 1;
     bool   pingPongEnabled     = false;
     double pingPongDivision    = 0.25;
+    bool   arpSliceActive      = false;
+    bool   arpSliceRepeaterMode = false;
+    int    arpSequenceLength   = 4;
+    int    arpRepeatBars       = 2;
+    int    arpTotalSlices      = 16;
 
     // ── ChannelStrip FX enable flags (EffectChainPlaceholder) ──
     bool delayEnabled          = false;
@@ -82,6 +87,11 @@ struct BufferModifierSnapshot
         o->setProperty("numSlices",    numSlices);
         o->setProperty("ppOn",         pingPongEnabled);
         o->setProperty("ppDiv",        pingPongDivision);
+        o->setProperty("arpOn",        arpSliceActive);
+        o->setProperty("arpRep",       arpSliceRepeaterMode);
+        o->setProperty("arpSeqLen",    arpSequenceLength);
+        o->setProperty("arpRepBars",   arpRepeatBars);
+        o->setProperty("arpTotal",     arpTotalSlices);
 
         o->setProperty("fxDelay",      delayEnabled);
         o->setProperty("fxReverb",     reverbEnabled);
@@ -146,6 +156,11 @@ struct BufferModifierSnapshot
         s.numSlices                = (int) getD("numSlices", 1.0);
         s.pingPongEnabled          = getB("ppOn",     false);
         s.pingPongDivision         = getD("ppDiv",    0.25);
+        s.arpSliceActive           = getB("arpOn",    false);
+        s.arpSliceRepeaterMode     = getB("arpRep",   false);
+        s.arpSequenceLength        = (int) getD("arpSeqLen",  4.0);
+        s.arpRepeatBars            = (int) getD("arpRepBars", 2.0);
+        s.arpTotalSlices           = (int) getD("arpTotal",   16.0);
 
         s.delayEnabled             = getB("fxDelay",  false);
         s.reverbEnabled            = getB("fxReverb", false);

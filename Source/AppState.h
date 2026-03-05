@@ -153,6 +153,11 @@ struct AppState : public ModifierSchedulerListener
             snap.pitchSemiTones          = buf->getPitchSemiTones();
             snap.continuousRandomSlicing = buf->isInContinuousRandomMode();
             snap.numSlices               = buf->getNumSlices();
+            snap.arpSliceActive          = buf->isInArpSliceMode() && !buf->isInSliceRepeaterMode();
+            snap.arpSliceRepeaterMode    = buf->isInSliceRepeaterMode();
+            snap.arpSequenceLength       = buf->getArpSequenceLength();
+            snap.arpRepeatBars           = buf->getArpRepeatBars();
+            snap.arpTotalSlices          = buf->getArpTotalSlices();
             snap.pingPongEnabled         = buf->isPingPongModeEnabled();
             snap.pingPongDivision        = buf->getPingPongDivision();
 
@@ -219,7 +224,15 @@ struct AppState : public ModifierSchedulerListener
             buf->setSpeed(snap.speed);
             buf->setStretchRatio(snap.stretchRatio);
             buf->setPitchSemiTones(snap.pitchSemiTones);
-            if (snap.continuousRandomSlicing)
+            if (snap.arpSliceRepeaterMode)
+            {
+                buf->startSliceRepeater(snap.arpTotalSlices, snap.arpSequenceLength);
+            }
+            else if (snap.arpSliceActive)
+            {
+                buf->startArpSlicing(snap.arpTotalSlices, snap.arpSequenceLength, snap.arpRepeatBars);
+            }
+            else if (snap.continuousRandomSlicing)
             {
                 buf->setNumSlices(snap.numSlices);
                 buf->startContinuousRandomSlicing();

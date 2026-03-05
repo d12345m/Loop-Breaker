@@ -583,10 +583,10 @@ def build_manual():
         ("Pitch Down Octave", "Lowers the pitch of the buffer by one octave (-12 semitones)."),
         ("Beat Slice", "Subdivides the buffer into note-length slices (1/4, 1/8, 1/8T, 1/16, 1/32, 1/64) "
          "and plays them in a randomized order, creating glitchy, rearranged patterns."),
-        ("Arp Slice", "Divides the buffer into a configurable number of slices and plays a short "
-         "repeating arpeggio-like sequence from those slices for a set number of bars."),
+        ("Arp Slice", "Divides the buffer into a variable number of slices and plays short, "
+         "repeating arpeggio-like sequences from those slices. The arpeggio changes every few bars."),
         ("Slice Repeater", "Selects a single slice from the buffer and stutters/repeats it "
-         "a configurable number of times (4, 8, 16, or 32 repetitions)."),
+         "a variable number of times before choosing a new slice to repeat."),
         ("Ping Pong", "Alternates playback direction on each loop cycle at a musical note division "
          "(whole note, half note, quarter note, eighth note, or sixteenth note)."),
     ]
@@ -608,21 +608,19 @@ def build_manual():
          "feedback amounts, optional ping-pong mode, and wow/flutter modulation."),
         ("Delay Dub Burst", "A special delay variant that creates an intense burst of delay feedback "
          "for a short duration, then fades back."),
-        ("Reverb", "Enables reverb on the channel strip with a configurable wet/dry mix "
+        ("Reverb", "Enables reverb on the channel strip with a varaiable wet/dry mix "
          "(25%, 50%, 75%, or 100%) and a fade-in duration (instant, 1 bar, 2 bars, etc.)."),
         ("Low-Pass Filter", "Enables a low-pass filter that gradually closes over the configured "
          "duration, darkening the sound."),
         ("High-Pass Filter", "Enables a high-pass filter that gradually opens over the configured "
          "duration, thinning the low end."),
-        ("Volume Ramp Down", "Gradually fades the buffer volume down over a number of bars."),
+        ("Volume Ramp Down", "Gradually fades the buffer volume down over a number of bars before returning to normal."),
         ("Tremolo", "Applies volume modulation (LFO) to the buffer, creating a rhythmic "
          "pulsing effect."),
         ("Chorus", "Enables a chorus effect with configurable depth, rate, and wet/dry mix "
          "for a thicker, wider sound."),
         ("Auto-Pan", "Modulates the stereo panning of the buffer with a configurable LFO rate "
          "and depth, creating movement in the stereo field."),
-        ("Ducking", "Enables sidechain-style ducking that reduces the buffer volume when "
-         "signal is present, creating a pumping effect."),
     ]
     for name, desc in channel_mods:
         pdf.set_font("Helvetica", "B", 10.5)
@@ -655,9 +653,9 @@ def build_manual():
         ("Switch Part", "Moves all targeted buffers to a different Part (A-D). Only available "
          "when Parts is set to more than 1 in the Settings tab."),
         ("Quarter-Note Burst", "Triggers rapid-fire modifier applications at quarter-note intervals "
-         "for a configurable number of bars (1, 2, or 4), creating intense bursts of change."),
+         "for a variable number of bars (1, 2, or 4), creating intense bursts of change."),
         ("Reset All", "Removes all active modifiers, turns off all effects, and returns playback "
-         "speed, pitch, and direction to their default state. This is your \"panic button.\""),
+         "speed, pitch, and direction to their default state."),
     ]
     for name, desc in special_mods:
         pdf.set_font("Helvetica", "B", 10.5)
@@ -858,13 +856,13 @@ def build_manual():
     pdf.body_text(
         "The Parts system allows you to divide each audio buffer into 1 to 4 equal-length "
         "sections, labeled A through D. This is useful when your loops have distinct musical "
-        "sections (e.g. verse, chorus, bridge, outro) that you want to navigate between."
+        "sections (e.g. verse, chorus, bridge, outro) that you want to switch between."
     )
 
     pdf.chapter_title("Configuring Parts", level=2)
     pdf.body_text(
         "In the Settings tab, use the Parts dropdown to select 1 part (default), 2 parts, 3 parts, "
-        "or 4 parts. The change takes effect on the next modifier trigger when the transport is running."
+        "or 4 parts. The change takes effect on the next modifier trigger when the transport is running or immediately if the transport is stopped."
     )
 
     pdf.chapter_title("Switching Parts", level=2)
@@ -925,7 +923,6 @@ def build_manual():
 
     pdf.chapter_title("Known Issues", level=2)
     issues = [
-        "Modifier display and scheduling are only active while the plugin editor window is open. Closing the window suspends modifiers; re-opening resumes them.",
         "Octave pitch-shifting may produce audible artifacts at extreme settings. Staying within +/-1 octave typically sounds cleanest.",
         "Small DAW buffer sizes (< 512 samples) may cause tearing or glitching with time-stretch effects. Use 2048+ for best results.",
     ]
@@ -937,22 +934,6 @@ def build_manual():
     # ═══════════════════════════════════════════════════════════════════════
     pdf.add_page()
     pdf.chapter_title("Technical Information")
-
-    pdf.chapter_title("Audio Engine", level=2)
-    pdf.body_text(
-        "Loop Breaker is built with the JUCE framework. The audio engine features:"
-    )
-    tech_items = [
-        "Linear interpolation for high-quality sample rate conversion",
-        "Smoothed parameter changes to prevent audio artifacts",
-        "Atomic variables for thread-safe real-time parameter updates",
-        "Crossfaded looping for seamless audio transitions",
-        "Real-time time-stretching via the SoundTouch library",
-        "Per-channel DSP: reverb, delay (with ping-pong and wow/flutter), low-pass filter, high-pass filter, tremolo, chorus, auto-pan, ducking, and limiter",
-        "Off-thread sample loading to avoid audio thread interruption",
-    ]
-    for item in tech_items:
-        pdf.bullet(item)
 
     pdf.chapter_title("Plugin Format", level=2)
     widths_tech = [50, effective_width - 50]

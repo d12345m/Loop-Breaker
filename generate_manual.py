@@ -576,7 +576,7 @@ def build_manual():
         ("Reverse", "Flips the playback direction of the buffer. If the buffer is already playing in reverse, "
          "it returns to forward playback."),
         ("Speed", "Changes the playback rate to one of four discrete values: 0.25x, 0.5x, 1.0x, or 2.0x. "
-         "Time-stretching is used to maintain the original pitch."),
+         "Speed changes also affect the buffer's pitch."),
         ("Stretch", "A time-stretching variant that changes tempo without affecting pitch. "
          "Available ratios include 0.25x, 0.5x, 1.0x, and 2.0x."),
         ("Pitch Up Octave", "Raises the pitch of the buffer by one octave (+12 semitones)."),

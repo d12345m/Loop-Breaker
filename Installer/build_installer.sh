@@ -135,7 +135,7 @@ DISTEOF
 fi
 
 # ─── Step 5: Build Product Archive ───────────────────────────────────────────
-FINAL_PKG="$OUTPUT_DIR/LoopBreaker-${VERSION}-macOS.pkg"
+FINAL_PKG="$OUTPUT_DIR/LoopBreaker-macOS.pkg"
 
 info "Building product installer..."
 PRODUCTBUILD_ARGS=(
@@ -165,11 +165,42 @@ if [ "$NOTARIZE" = true ]; then
     xcrun stapler staple "$FINAL_PKG"
 fi
 
+# ─── Step 7: Generate Manual ──────────────────────────────────────────────────
+info "Generating user manual PDF..."
+MANUAL_SCRIPT="$PROJECT_ROOT/generate_manual.py"
+MANUAL_PDF="$PROJECT_ROOT/Loop_Breaker_User_Manual.pdf"
+if [ -f "$MANUAL_SCRIPT" ]; then
+    python3 "$MANUAL_SCRIPT"
+    if [ ! -f "$MANUAL_PDF" ]; then
+        warn "Manual generation did not produce expected PDF at: $MANUAL_PDF"
+    fi
+else
+    warn "Manual script not found at: $MANUAL_SCRIPT — skipping manual"
+fi
+
+# ─── Step 8: Create Distribution Zip ─────────────────────────────────────────
+ZIP_STAGING="$STAGING_DIR/Loop Breaker"
+ZIP_FILE="$OUTPUT_DIR/LoopBreaker-macOS.zip"
+
+info "Creating distribution zip..."
+mkdir -p "$ZIP_STAGING"
+cp "$FINAL_PKG" "$ZIP_STAGING/"
+if [ -f "$MANUAL_PDF" ]; then
+    cp "$MANUAL_PDF" "$ZIP_STAGING/"
+    info "Included manual in zip"
+fi
+
+# Create zip from staging dir so it unzips to "Loop Breaker/"
+(cd "$STAGING_DIR" && zip -r "$ZIP_FILE" "Loop Breaker")
+info "Created zip: $ZIP_FILE"
+
 # ─── Done ─────────────────────────────────────────────────────────────────────
 PKG_SIZE=$(du -sh "$FINAL_PKG" | cut -f1)
+ZIP_SIZE=$(du -sh "$ZIP_FILE" | cut -f1)
 info "Installer built successfully!"
 echo ""
 echo "  📦  $FINAL_PKG  ($PKG_SIZE)"
+echo "  🗜   $ZIP_FILE  ($ZIP_SIZE)"
 echo ""
 echo "  Install location: /Library/Audio/Plug-Ins/VST3/${PLUGIN_FILENAME}.vst3"
 echo ""

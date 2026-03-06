@@ -324,7 +324,7 @@ LoopBreaker-macOS-Installer.zip package instead.
     and that your OS version is supported.
 
   - Need help?
-    Visit https://glowmachine.audio/support
+    Visit https://glowmachineaudio.com/support
 
 
 ==============================================================================

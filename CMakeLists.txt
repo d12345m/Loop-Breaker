@@ -55,10 +55,6 @@ juce_add_plugin(LoopBreaker
 
 juce_generate_juce_header(LoopBreaker)
 
-# Match Projucer's addUsingNamespaceToJuceHeader="0" —
-# prevents juce::AudioBuffer from colliding with project's AudioBuffer class.
-set_target_properties(LoopBreaker PROPERTIES JUCE_USING_NAMESPACE_JUCE FALSE)
-
 target_sources(LoopBreaker PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
@@ -77,7 +73,10 @@ target_include_directories(LoopBreaker PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/Submodules"
 )
 
+# Match Projucer's addUsingNamespaceToJuceHeader="0" —
+# prevents juce::AudioBuffer from colliding with project's AudioBuffer class.
 target_compile_definitions(LoopBreaker PUBLIC
+    DONT_SET_USING_JUCE_NAMESPACE=1
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_STRICT_REFCOUNTEDPOINTER=1
     JUCE_WEB_BROWSER=0

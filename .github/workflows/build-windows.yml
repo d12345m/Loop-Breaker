@@ -65,9 +65,9 @@ jobs:
         id: find-vst3
         shell: pwsh
         run: |
-          $vst3 = Get-ChildItem -Path build -Recurse -Filter "LoopBreaker.vst3" -Directory | Select-Object -First 1
+          $vst3 = Get-ChildItem -Path build -Recurse -Filter "Loop Breaker.vst3" -Directory | Select-Object -First 1
           if (!$vst3) {
-            Write-Error "LoopBreaker.vst3 bundle not found in build output"
+            Write-Error "Loop Breaker.vst3 bundle not found in build output"
             exit 1
           }
           Write-Host "Found VST3 at: $($vst3.FullName)"

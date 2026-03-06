@@ -55,6 +55,10 @@ juce_add_plugin(LoopBreaker
 
 juce_generate_juce_header(LoopBreaker)
 
+# Match Projucer's addUsingNamespaceToJuceHeader="0" —
+# prevents juce::AudioBuffer from colliding with project's AudioBuffer class.
+set_target_properties(LoopBreaker PROPERTIES JUCE_USING_NAMESPACE_JUCE FALSE)
+
 target_sources(LoopBreaker PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp

@@ -53,6 +53,8 @@ juce_add_plugin(LoopBreaker
     COPY_PLUGIN_AFTER_BUILD  FALSE
 )
 
+juce_generate_juce_header(LoopBreaker)
+
 target_sources(LoopBreaker PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp

@@ -4,7 +4,7 @@
               addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1" companyName="Glow Machine Audio"
               pluginName="Loop Breaker"
               pluginDesc="Loop Breaker" pluginManufacturer="Glow Machine Audio"
-              pluginManufacturerCode="GloM" pluginCode="TsPl" pluginIsSynth="1"
+              pluginManufacturerCode="GloM" pluginCode="LpBr" pluginIsSynth="1"
               pluginWantsMidiIn="1" pluginProducesMidiOut="0" pluginIsMidiEffectPlugin="0"
               pluginEditorRequiresKeys="0" pluginAUExportPrefix="LoopBreakerAU"
               pluginAAXIdentifier="com.glowmachineaudio.LoopBreaker" pluginRTASCategory=""

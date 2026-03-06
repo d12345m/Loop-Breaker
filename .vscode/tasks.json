@@ -18,7 +18,7 @@
       "isBackground": false
     },
     {
-      "label": "Build macOS Installer",
+      "label": "Build macOS Installer + VST3 Package",
       "type": "shell",
       "command": "bash Installer/build_installer.sh --skip-build",
       "group": "build",

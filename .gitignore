@@ -1,4 +1,5 @@
 Builds
+build*/
 Installer/output/
 Installer/staging/
 JuceLibraryCode

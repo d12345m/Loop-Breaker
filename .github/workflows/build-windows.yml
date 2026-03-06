@@ -1,0 +1,77 @@
+# ──────────────────────────────────────────────────────────────────────────────
+#  Build Loop Breaker VST3 — Windows (x64)
+#  Triggered manually or on push/tag to main
+# ──────────────────────────────────────────────────────────────────────────────
+name: Build Windows VST3
+
+on:
+  workflow_dispatch: # manual trigger from GitHub UI
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      # ── Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # ── Cache JUCE ────────────────────────────────────────────────────────
+      - name: Cache JUCE
+        id: cache-juce
+        uses: actions/cache@v4
+        with:
+          path: JUCE
+          key: juce-8.0.6
+
+      - name: Download JUCE 8.0.6
+        if: steps.cache-juce.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/juce-framework/JUCE/releases/download/8.0.6/juce-8.0.6-windows.zip" -OutFile juce.zip
+          Expand-Archive -Path juce.zip -DestinationPath .
+          Rename-Item -Path "JUCE" -NewName "JUCE_tmp" -ErrorAction SilentlyContinue
+          # The zip extracts into a JUCE/ folder already
+          if (Test-Path "JUCE_tmp") { Rename-Item "JUCE_tmp" "JUCE" }
+          if (!(Test-Path "JUCE")) {
+            # Some JUCE zips extract to juce-8.0.6/
+            $dir = Get-ChildItem -Directory -Filter "juce*" | Select-Object -First 1
+            if ($dir) { Rename-Item $dir.FullName "JUCE" }
+          }
+          Remove-Item juce.zip -ErrorAction SilentlyContinue
+
+      # ── Configure & Build ─────────────────────────────────────────────────
+      - name: Configure CMake
+        run: >
+          cmake -B build
+          -G "Visual Studio 17 2022"
+          -A x64
+          -DCMAKE_BUILD_TYPE=Release
+          -DJUCE_DIR="${{ github.workspace }}/JUCE"
+
+      - name: Build VST3
+        run: cmake --build build --config Release --target LoopBreaker_VST3
+
+      # ── Package ───────────────────────────────────────────────────────────
+      - name: Locate VST3 output
+        id: find-vst3
+        shell: pwsh
+        run: |
+          $vst3 = Get-ChildItem -Path build -Recurse -Filter "LoopBreaker.vst3" -Directory | Select-Object -First 1
+          if (!$vst3) {
+            Write-Error "LoopBreaker.vst3 bundle not found in build output"
+            exit 1
+          }
+          Write-Host "Found VST3 at: $($vst3.FullName)"
+          echo "VST3_PATH=$($vst3.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Upload VST3 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LoopBreaker-Windows-VST3
+          path: ${{ steps.find-vst3.outputs.VST3_PATH }}
+          if-no-files-found: error

@@ -1,0 +1,103 @@
+cmake_minimum_required(VERSION 3.22)
+project(LoopBreaker VERSION 1.0.0 LANGUAGES C CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# ─── JUCE ─────────────────────────────────────────────────────────────────────
+# CI sets JUCE_DIR; local dev falls back to a sibling JUCE checkout.
+if(NOT DEFINED JUCE_DIR)
+    if(DEFINED ENV{JUCE_DIR})
+        set(JUCE_DIR "$ENV{JUCE_DIR}")
+    else()
+        # Default: JUCE installed alongside this project's parent
+        set(JUCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../JUCE")
+    endif()
+endif()
+add_subdirectory("${JUCE_DIR}" "${CMAKE_BINARY_DIR}/JUCE" EXCLUDE_FROM_ALL)
+
+# ─── SoundTouch (header-only for us — sources are unity-included) ────────────
+set(SOUNDTOUCH_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/soundtouch/include")
+
+# ─── Moonbase JUCE Client module ─────────────────────────────────────────────
+juce_add_module("${CMAKE_CURRENT_SOURCE_DIR}/Submodules/moonbase_JUCEClient")
+
+# ─── Binary Resources ────────────────────────────────────────────────────────
+juce_add_binary_data(LoopBreakerBinaryData
+    HEADER_NAME "BinaryData.h"
+    NAMESPACE BinaryData
+    SOURCES
+        Resources/moonbase_api_config.json
+        Resources/Fonts/Rajdhani-Bold.ttf
+        Resources/Fonts/Rajdhani-Regular.ttf
+        Resources/Fonts/JetBrainsMono-Regular.ttf
+        Resources/Fonts/PressStart2P-Regular.ttf
+)
+
+# ─── Plugin Target ───────────────────────────────────────────────────────────
+juce_add_plugin(LoopBreaker
+    COMPANY_NAME             "Glow Machine Audio"
+    PLUGIN_NAME              "Loop Breaker"
+    PLUGIN_DESCRIPTION       "Loop Breaker"
+    PLUGIN_MANUFACTURER_CODE GloM
+    PLUGIN_CODE              TsPl
+    IS_SYNTH                 TRUE
+    NEEDS_MIDI_INPUT         TRUE
+    PRODUCES_MIDI_OUTPUT     FALSE
+    IS_MIDI_EFFECT           FALSE
+    EDITOR_WANTS_KEYBOARD_FOCUS FALSE
+    FORMATS                  VST3
+    VST3_CATEGORIES          Instrument
+    BUNDLE_ID                com.glowmachineaudio.LoopBreaker
+    PRODUCT_NAME             "Loop Breaker"
+    COPY_PLUGIN_AFTER_BUILD  FALSE
+)
+
+target_sources(LoopBreaker PRIVATE
+    Source/PluginProcessor.cpp
+    Source/PluginEditor.cpp
+    Source/AudioBuffer.cpp
+    Source/AudioBufferManager.cpp
+    Source/Modifier.cpp
+    Source/ModifierScheduler.cpp
+    Source/ProjectManager.cpp
+    Source/ModifierSchedulerTests.cpp
+    Source/ThemeEngine.cpp
+)
+
+target_include_directories(LoopBreaker PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/Source"
+    "${SOUNDTOUCH_INCLUDE_DIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Submodules"
+)
+
+target_compile_definitions(LoopBreaker PUBLIC
+    JUCE_VST3_CAN_REPLACE_VST2=0
+    JUCE_STRICT_REFCOUNTEDPOINTER=1
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+)
+
+target_link_libraries(LoopBreaker
+    PRIVATE
+        LoopBreakerBinaryData
+        juce::juce_audio_basics
+        juce::juce_audio_devices
+        juce::juce_audio_formats
+        juce::juce_audio_plugin_client
+        juce::juce_audio_processors
+        juce::juce_audio_utils
+        juce::juce_core
+        juce::juce_cryptography
+        juce::juce_data_structures
+        juce::juce_dsp
+        juce::juce_events
+        juce::juce_graphics
+        juce::juce_gui_basics
+        juce::juce_gui_extra
+        juce::juce_product_unlocking
+        moonbase_JUCEClient
+    PUBLIC
+        juce::juce_recommended_config_flags
+        juce::juce_recommended_warning_flags
+)

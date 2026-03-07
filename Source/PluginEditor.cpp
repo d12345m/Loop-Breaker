@@ -375,35 +375,41 @@ public:
             return;
 
         auto descCopy = desc;
-        juce::MessageManager::callAsync([this, descCopy]
+        auto safeThis = juce::Component::SafePointer<PluginEditorContent>(this);
+        juce::MessageManager::callAsync([safeThis, descCopy]
         {
-            modifierDisplay.setUpcoming(descCopy);
+            if (safeThis == nullptr) return;
+            safeThis->modifierDisplay.setUpcoming(descCopy);
         });
     }
 
     void modifierTriggered(const ModifierDescriptor& desc, const juce::Array<int>& targets) override
     {
-        juce::MessageManager::callAsync([this, desc, targets]
+        auto safeThis = juce::Component::SafePointer<PluginEditorContent>(this);
+        juce::MessageManager::callAsync([safeThis, desc, targets]
         {
+            if (safeThis == nullptr) return;
+            auto* self = safeThis.getComponent();
+
             // Apply pending parts count change exactly on the next modifier trigger.
-            if (pendingPartsCount >= 1 && pendingPartsCount <= 4)
+            if (self->pendingPartsCount >= 1 && self->pendingPartsCount <= 4)
             {
-                app.settings.parts.numParts = pendingPartsCount;
-                app.setActivePart(app.getActivePart());
-                pendingPartsCount = -1;
+                self->app.settings.parts.numParts = self->pendingPartsCount;
+                self->app.setActivePart(self->app.getActivePart());
+                self->pendingPartsCount = -1;
             }
 
-            if (externalModifierHistory != nullptr)
-                externalModifierHistory->addEntry(desc, targets);
-            padGrid.flashPads(targets);
+            if (self->externalModifierHistory != nullptr)
+                self->externalModifierHistory->addEntry(desc, targets);
+            self->padGrid.flashPads(targets);
             if (! targets.isEmpty())
-                padGrid.clearSelections();
+                self->padGrid.clearSelections();
 
             // Trigger reactive background pulse toward the theme accent
-            if (bgAnimator != nullptr)
-                bgAnimator->triggerReactivePulse (ThemeEngine::getInstance().getColor (ColorRole::Accent1));
+            if (self->bgAnimator != nullptr)
+                self->bgAnimator->triggerReactivePulse (ThemeEngine::getInstance().getColor (ColorRole::Accent1));
 
-            refreshStatus();
+            self->refreshStatus();
         });
     }
 
@@ -980,6 +986,15 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
 
 BufferTestAudioProcessorEditor::~BufferTestAudioProcessorEditor()
 {
+    // Tear down child components before editorLnf is destroyed, so they
+    // never reference a dangling LookAndFeel during their own destruction.
+    tabComponent.reset();
+    content.reset();
+    probabilityPanel.reset();
+    settingsPanel.reset();
+    debugPanel.reset();
+    helpPanel.reset();
+    backgroundAnimator.reset();
     setLookAndFeel(nullptr);
 }
 

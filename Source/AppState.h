@@ -13,6 +13,7 @@
 #include "AudioBufferManager.h"
 #include "ChannelStrip.h"
 #include "ModifierPreset.h"
+#include "NodeClipDetector.h"
 
 struct AppState : public ModifierSchedulerListener
 {
@@ -31,11 +32,21 @@ struct AppState : public ModifierSchedulerListener
     // Channel strips for FX placeholder wrapping existing buffers
     juce::OwnedArray<ChannelStrip> channelStrips;
 
+    // Per-node clip detection system (debug)
+    ClipDetectorSystem clipDetector;
+
     AppState()
     {
         // Initialize channel strips referencing underlying buffers
         for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
             channelStrips.add(new ChannelStrip(bufferManager.getBuffer(i)));
+
+        // Wire clip detector probe sets into each channel strip
+        for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
+            channelStrips[i]->setClipProbes(&clipDetector.padProbes[(size_t)i]);
+
+        // Wire clip detector into buffer manager for raw/pad/master probes
+        bufferManager.setClipDetector(&clipDetector);
 
         // Hook per-buffer processor into AudioBufferManager to apply strip DSP (e.g., reverb)
         bufferManager.setPerBufferProcessor([this](int idx, juce::AudioBuffer<float>& temp, double sampleRate){

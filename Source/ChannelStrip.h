@@ -11,6 +11,7 @@
 #include <JuceHeader.h>
 #include <vector>
 #include "AudioBuffer.h"
+#include "NodeClipDetector.h"
 
 struct EffectChainPlaceholder
 {
@@ -209,6 +210,9 @@ public:
                 }
                 if (++delayWritePos >= delayBufferSize) delayWritePos = 0;
             }
+
+            // Clip probe: after delay
+            if (clipProbes) (*clipProbes)[NodeId::Delay].inspect(tempBuffer, numSamples);
         }
 
         // --- Insert filters and tremolo prior to reverb ---
@@ -224,6 +228,9 @@ public:
                 for (int i = 0; i < numSamples; ++i)
                     data[i] = highPass[ch].processSample(data[i]);
             }
+
+            // Clip probe: after high-pass
+            if (clipProbes) (*clipProbes)[NodeId::HighPass].inspect(tempBuffer, numSamples);
         }
 
         // --- Low-pass filter (IIR, separate loop per channel) ---
@@ -236,6 +243,9 @@ public:
                 for (int i = 0; i < numSamples; ++i)
                     data[i] = lowPass[ch].processSample(data[i]);
             }
+
+            // Clip probe: after low-pass
+            if (clipProbes) (*clipProbes)[NodeId::LowPass].inspect(tempBuffer, numSamples);
         }
 
         // --- Tremolo (vectorizable gain modulation) ---
@@ -267,6 +277,9 @@ public:
                 juce::FloatVectorOperations::multiply(tempBuffer.getWritePointer(ch),
                                                       tremoloGainTable.data(),
                                                       numSamples);
+
+            // Clip probe: after tremolo
+            if (clipProbes) (*clipProbes)[NodeId::Tremolo].inspect(tempBuffer, numSamples);
         }
 
         // --- Reverb Processing ---
@@ -324,6 +337,9 @@ public:
                 if (++chorusDelayWritePos >= chorusDelayBufferSize)
                     chorusDelayWritePos = 0;
             }
+
+            // Clip probe: after chorus
+            if (clipProbes) (*clipProbes)[NodeId::Chorus].inspect(tempBuffer, numSamples);
         }
 
         // --- Auto-Pan Processing (LFO-driven L/R gain) ---
@@ -362,17 +378,28 @@ public:
                 if (panLfoPhase > juce::MathConstants<float>::twoPi)
                     panLfoPhase -= juce::MathConstants<float>::twoPi;
             }
+
+            // Clip probe: after auto-pan
+            if (clipProbes) (*clipProbes)[NodeId::AutoPan].inspect(tempBuffer, numSamples);
         }
 
         // Apply volume ramp gain (before reverb and limiter) if active
         if (chain.volumeRampEnabled && params.volumeGain < 0.9999f)
+        {
             tempBuffer.applyGain(params.volumeGain);
+
+            // Clip probe: after volume ramp
+            if (clipProbes) (*clipProbes)[NodeId::VolumeRamp].inspect(tempBuffer, numSamples);
+        }
 
         // Apply limiter before reverb to keep wet-path clean
         {
             juce::dsp::AudioBlock<float> preReverbBlock(tempBuffer);
             juce::dsp::ProcessContextReplacing<float> preReverbCtx(preReverbBlock);
             limiter.process(preReverbCtx);
+
+            // Clip probe: after pre-reverb limiter
+            if (clipProbes) (*clipProbes)[NodeId::PreReverbLimiter].inspect(tempBuffer, numSamples);
         }
 
         // --- Reverb Processing (continued) ---
@@ -450,14 +477,22 @@ public:
             }
         }
 
+        // Clip probe: after reverb mix
+        if (clipProbes) (*clipProbes)[NodeId::ReverbMix].inspect(tempBuffer, numSamples);
+
         // Apply limiter again post-reverb to catch any energy added by the wet mix
         juce::dsp::AudioBlock<float> block(tempBuffer);
         juce::dsp::ProcessContextReplacing<float> context(block);
         limiter.process(context);
+
+        // Clip probe: after post-reverb limiter
+        if (clipProbes) (*clipProbes)[NodeId::PostReverbLimiter].inspect(tempBuffer, numSamples);
     }
 
     void setAudioBuffer(AudioBuffer* b) { buffer = b; }
     AudioBuffer* getAudioBuffer() const { return buffer; }
+    void setClipProbes(PadProbeSet* probes) { clipProbes = probes; }
+    PadProbeSet* getClipProbes() const { return clipProbes; }
     EffectChainPlaceholder& effects() { return chain; }
     const EffectChainPlaceholder& effects() const { return chain; }
 
@@ -702,6 +737,7 @@ public:
 
 private:
     AudioBuffer* buffer = nullptr; // not owned
+    PadProbeSet* clipProbes = nullptr; // not owned; set from AppState
     EffectChainPlaceholder chain;
     FxParams params;
     EffectEnvelope reverbWetEnv;

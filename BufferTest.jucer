@@ -80,6 +80,10 @@
             resource="0" file="Source/SettingsPanelContent.h"/>
       <FILE id="themeFontsH" name="ThemeFonts.h" compile="0"
             resource="0" file="Source/ThemeFonts.h"/>
+      <FILE id="nodeClipDetectorH" name="NodeClipDetector.h" compile="0"
+            resource="0" file="Source/NodeClipDetector.h"/>
+      <FILE id="nodeClipDebugPanelH" name="NodeClipDebugPanel.h" compile="0"
+            resource="0" file="Source/NodeClipDebugPanel.h"/>
     </GROUP>
     <GROUP id="{MOONBASE_RES}" name="Resources">
       <FILE id="moonbaseConfig" name="moonbase_api_config.json" compile="0"

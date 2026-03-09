@@ -823,6 +823,9 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
         }
     }
 
+    // Clip probe: final mix bus (after all pads summed)
+    app.clipDetector.mixBusProbe.inspect(mix, numSamples);
+
     const double sr = getSampleRate();
     if (sr > 0.0)
     {

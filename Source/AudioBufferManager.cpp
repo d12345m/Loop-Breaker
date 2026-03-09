@@ -9,6 +9,7 @@
 */
 
 #include "AudioBufferManager.h"
+#include "NodeClipDetector.h"
 
 //==============================================================================
 // AudioBufferManager Implementation
@@ -104,15 +105,27 @@ void AudioBufferManager::processSingleBuffer(int bufferIndex, juce::AudioBuffer<
 
     buffer->processBlock(outputBuffer);
 
+    // Clip probe: raw playback output (before any FX)
+    if (clipDetector && isValidBufferIndex(bufferIndex))
+        clipDetector->padProbes[(size_t)bufferIndex][NodeId::RawPlayback].inspect(outputBuffer, outputBuffer.getNumSamples());
+
     if (perBufferProcessor)
         perBufferProcessor(bufferIndex, outputBuffer, hostSampleRate);
 
     // Apply -12dB reduction per channel (gain = 0.251189 for -12dB)
     outputBuffer.applyGain(0.251189f);
 
+    // Clip probe: after pad reduction
+    if (clipDetector && isValidBufferIndex(bufferIndex))
+        clipDetector->padProbes[(size_t)bufferIndex][NodeId::PadReduction].inspect(outputBuffer, outputBuffer.getNumSamples());
+
     const float masterVol = masterVolume.load();
     if (masterVol != 1.0f)
         outputBuffer.applyGain(masterVol);
+
+    // Clip probe: after master volume
+    if (clipDetector && isValidBufferIndex(bufferIndex))
+        clipDetector->padProbes[(size_t)bufferIndex][NodeId::MasterVolume].inspect(outputBuffer, outputBuffer.getNumSamples());
 
 }
 

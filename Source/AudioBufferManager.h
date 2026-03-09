@@ -21,6 +21,10 @@
 #include <array>
 #include <memory>
 
+struct ClipDetectorSystem;  // Forward declaration
+struct PadProbeSet;         // Forward declaration
+enum class NodeId;          // Forward declaration
+
 //==============================================================================
 /**
     Manager class for handling multiple AudioBuffer instances.
@@ -48,6 +52,9 @@ public:
       {
         perBufferProcessor = std::move(fn);
       }
+
+    // Clip detection system (optional, set from AppState)
+    void setClipDetector(ClipDetectorSystem* detector) { clipDetector = detector; }
     // Buffer management
     AudioBuffer* getBuffer(int bufferIndex);
     const AudioBuffer* getBuffer(int bufferIndex) const;
@@ -119,6 +126,7 @@ private:
     
     // Master controls
       std::function<void(int, juce::AudioBuffer<float>&, double)> perBufferProcessor;
+    ClipDetectorSystem* clipDetector = nullptr;  // not owned
     std::atomic<float> masterVolume { 1.0f };
     
     // Audio processing

@@ -74,24 +74,23 @@ public:
 
     void resized() override
     {
-        auto area = getLocalBounds();
-        const int spacing = 6;
-        const int totalSpacing = spacing * 3; // 3 gaps between 4 buttons
-        const int btnWidth = (area.getWidth() - totalSpacing) / 4;
+        // Match PadGridComponent column layout so buttons align with pads
+        auto area = getLocalBounds().reduced(4, 0);
+        const int cols = 4;
+        const int colW = area.getWidth() / cols;
 
         for (int i = 0; i < 4; ++i)
         {
-            auto btnArea = area.removeFromLeft(btnWidth);
-            buttons[i]->setBounds(btnArea);
-            if (i < 3)
-                area.removeFromLeft(spacing);
+            juce::Rectangle<int> btnRect(area.getX() + i * colW, area.getY(),
+                                          colW - 4, area.getHeight());
+            buttons[i]->setBounds(btnRect.reduced(4, 0));
         }
     }
 
     void paint(juce::Graphics& g) override
     {
         const auto& palette = ThemeEngine::getInstance().getCurrentPalette();
-        static const char* labels[] = { "A", "B", "C", "D" };
+        static const char* labels[] = { "Preset A", "Preset B", "Preset C", "Preset D" };
 
         for (int i = 0; i < 4; ++i)
         {

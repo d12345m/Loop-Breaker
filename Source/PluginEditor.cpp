@@ -325,7 +325,7 @@ public:
         // ── Preset bar (A–D) ──
         area.removeFromTop(4);
         auto presetRow = area.removeFromTop(38);
-        presetBar.setBounds(presetRow.reduced(4, 0));
+        presetBar.setBounds(presetRow);
 
         area.removeFromTop(6);
         padGrid.setBounds(area);

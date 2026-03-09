@@ -9,7 +9,9 @@
 #include "FxStatusPanel.h"
 #include "TearingDebugPanel.h"
 #include "ModifierProbabilityPanel.h"
+#if JUCE_DEBUG
 #include "DebugPanelContent.h"
+#endif
 #include "ThemeEngine.h"
 #include "ThemeFonts.h"
 #include "ThemeLookAndFeel.h"
@@ -917,11 +919,17 @@ private:
 BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioProcessor& p)
     : juce::AudioProcessorEditor (&p), processor (p)
 {
-    // Create debug panel first so we can pass its history panel to the session content
+   #if JUCE_DEBUG
     debugPanel = std::make_unique<DebugPanelContent>(processor.getAppState());
+   #endif
 
     content = std::make_unique<PluginEditorContent>(processor,
-                                                    &debugPanel->getModifierHistory());
+                                                   #if JUCE_DEBUG
+                                                    &debugPanel->getModifierHistory()
+                                                   #else
+                                                    nullptr
+                                                   #endif
+                                                    );
 
     probabilityPanel = std::make_unique<ModifierProbabilityPanel>(
         processor.getAppState().settings.modifierProbabilities,
@@ -952,7 +960,9 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
     tabComponent->addTab("Session",     tabBg, content.get(), false);
     tabComponent->addTab("Probability", tabBg, probabilityPanel.get(), false);
     tabComponent->addTab("Settings",    tabBg, settingsPanel.get(), false);
+   #if JUCE_DEBUG
     tabComponent->addTab("Debug",       tabBg, debugPanel.get(), false);
+   #endif
     tabComponent->addTab("Help",        tabBg, helpPanel.get(), false);
 
     // Style the tab bar
@@ -992,7 +1002,9 @@ BufferTestAudioProcessorEditor::~BufferTestAudioProcessorEditor()
     content.reset();
     probabilityPanel.reset();
     settingsPanel.reset();
+   #if JUCE_DEBUG
     debugPanel.reset();
+   #endif
     helpPanel.reset();
     backgroundAnimator.reset();
     setLookAndFeel(nullptr);

@@ -361,9 +361,9 @@ public:
             return;
         }
 
-        // Not running: store the setting; loop windows recomputed on playback start
-        // or on the next modifier trigger.
+        // Not running: apply immediately so loop braces update right away.
         app.settings.parts.numParts = n;
+        app.setActivePart (app.getActivePart());
         pendingPartsCount = -1;
         refreshStatus();
     }

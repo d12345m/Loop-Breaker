@@ -193,7 +193,7 @@ def build_manual():
     pdf.cell(0, 10, "User Manual", align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(8)
     pdf.set_font("Helvetica", "", 12)
-    pdf.cell(0, 8, "VST3 Audio Plugin", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 8, "VST3 & AU Audio Plugin", align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(30)
     pdf.set_draw_color(180, 180, 180)
     x_center = pdf.w / 2
@@ -228,7 +228,7 @@ def build_manual():
     pdf.chapter_title("Introduction")
 
     pdf.body_text(
-        "Welcome to Loop Breaker, a creative loop-mangling VST3 plugin from Glow Machine, LLC. "
+        "Welcome to Loop Breaker, a creative loop-mangling audio plugin from Glow Machine, LLC. "
         "Loop Breaker combines an MPC-style sampler pad bank with a game-like modifier system that "
         "automatically transforms your loops in musically interesting ways."
     )
@@ -270,11 +270,11 @@ def build_manual():
     pdf.chapter_title("System Requirements")
 
     pdf.chapter_title("Supported Formats", level=2)
-    pdf.body_text("Loop Breaker is distributed as a VST3 plugin.")
+    pdf.body_text("Loop Breaker is distributed as a VST3 plugin and an Audio Unit (AU) plugin on macOS.")
 
     pdf.chapter_title("Platform", level=2)
-    pdf.bullet("macOS 10.13 or later (Intel or Apple Silicon)")
-    pdf.bullet("A DAW that supports VST3 instruments (Ableton Live, Logic Pro via wrapper, Reaper, FL Studio, Bitwig, etc.)")
+    pdf.bullet("macOS 10.13 or later (Intel or Apple Silicon) - VST3 and AU")
+    pdf.bullet("A DAW that supports VST3 or AU instruments (Ableton Live, Logic Pro, Reaper, FL Studio, Bitwig, GarageBand, etc.)")
 
     pdf.chapter_title("Audio File Formats", level=2)
     pdf.body_text(
@@ -302,34 +302,20 @@ def build_manual():
     pdf.chapter_title("Installation")
 
     # ── macOS Installer ──────────────────────────────────────────────────
-    pdf.chapter_title("macOS (Installer)", level=2)
+    pdf.chapter_title("macOS", level=2)
     pdf.body_text(
-        "Run the Loop Breaker .pkg installer. The installer places the VST3 bundle into "
-        "the standard system plugin folder:"
+        "Run the Loop Breaker .pkg installer. The installer places the VST3 and AU bundles into "
+        "the standard system plugin folders:"
     )
     pdf.set_font("Courier", "", 10)
     pdf.set_text_color(50, 50, 50)
     pdf.cell(0, 6, "    /Library/Audio/Plug-Ins/VST3/LoopBreaker.vst3", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 6, "    /Library/Audio/Plug-Ins/Components/LoopBreaker.component", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(3)
     pdf.body_text(
         "After installation, relaunch your DAW and scan for new plugins. Loop Breaker will appear "
-        "in the Instrument category under \"Glow Machine Audio\"."
-    )
-
-    # ── macOS Manual ─────────────────────────────────────────────────────
-    pdf.chapter_title("macOS (Manual)", level=2)
-    pdf.body_text(
-        "If you prefer not to use the .pkg installer, copy the LoopBreaker.vst3 bundle "
-        "to one of the following locations:"
-    )
-    pdf.set_font("Courier", "", 10)
-    pdf.set_text_color(50, 50, 50)
-    pdf.cell(0, 6, "    /Library/Audio/Plug-Ins/VST3/          (all users)", new_x="LMARGIN", new_y="NEXT")
-    pdf.cell(0, 6, "    ~/Library/Audio/Plug-Ins/VST3/         (current user only)", new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(3)
-    pdf.body_text(
-        "The ~/Library folder is hidden by default. In Finder, press Cmd+Shift+G and paste the "
-        "path, or hold Option while clicking the Go menu to reveal Library."
+        "in the Instrument category under \"Glow Machine Audio\". The AU version is available natively "
+        "in Logic Pro and GarageBand without any additional configuration."
     )
 
     # ── macOS Gatekeeper ─────────────────────────────────────────────────
@@ -342,25 +328,27 @@ def build_manual():
         "macOS Sequoia 15 and later / Ventura 13 / Sonoma 14: When your DAW fails to load the "
         "plugin (or a dialog appears saying the file \"can't be opened\"), dismiss the dialog. "
         "Open System Settings > Privacy & Security. Scroll down and look for a message like: "
-        "\"LoopBreaker.vst3 was blocked from use because it is not from an identified developer.\" "
+        "\"LoopBreaker was blocked from use because it is not from an identified developer.\" "
         "Click \"Allow Anyway\" and authenticate with your password or Touch ID. Re-open your DAW "
-        "or rescan plugins and click \"Open\" when prompted."
+        "or rescan plugins and click \"Open\" when prompted. You may need to repeat this for both "
+        "the .vst3 and .component bundles."
     )
     pdf.body_text(
         "macOS Monterey 12 and earlier: Open System Preferences > Security & Privacy > General tab. "
-        "You should see \"LoopBreaker.vst3 was blocked...\" Click \"Allow Anyway\" and authenticate. "
+        "You should see \"LoopBreaker was blocked...\" Click \"Allow Anyway\" and authenticate. "
         "Re-open your DAW and confirm when prompted."
     )
     pdf.body_text(
         "If the above does not work, you can remove the quarantine flag manually by running the "
         "following command in Terminal:"
     )
-    pdf.set_font("Courier", "", 10)
+    pdf.set_font("Courier", "", 8)
     pdf.set_text_color(50, 50, 50)
-    pdf.cell(0, 6, "    xattr -dr com.apple.quarantine /Library/Audio/Plug-Ins/VST3/LoopBreaker.vst3", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 6, "  xattr -dr com.apple.quarantine /Library/Audio/Plug-Ins/VST3/LoopBreaker.vst3", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 6, "  xattr -dr com.apple.quarantine /Library/Audio/Plug-Ins/Components/LoopBreaker.component", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(3)
     pdf.body_text(
-        "Adjust the path if you installed to ~/Library/Audio/Plug-Ins/VST3/ instead."
+        "Adjust the paths if you installed to ~/Library/... instead."
     )
 
     # ── Windows ──────────────────────────────────────────────────────────
@@ -386,7 +374,9 @@ def build_manual():
     pdf.chapter_title("Uninstallation", level=2)
     pdf.body_text(
         "macOS: Delete the LoopBreaker.vst3 bundle from /Library/Audio/Plug-Ins/VST3/ "
-        "(or ~/Library/Audio/Plug-Ins/VST3/ if installed there)."
+        "and the LoopBreaker.component bundle from /Library/Audio/Plug-Ins/Components/ "
+        "(or the ~/Library/... equivalents if installed per-user). Alternatively, run the "
+        "included uninstall.sh script."
     )
     pdf.body_text(
         "Windows: Delete the LoopBreaker.vst3 file from "

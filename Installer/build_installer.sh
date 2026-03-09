@@ -228,161 +228,16 @@ fi
 (cd "$STAGING_DIR" && zip -r "$ZIP_FILE" "Loop Breaker")
 info "Created installer zip: $ZIP_FILE"
 
-# ─── Step 9: Create Standalone VST3 Distribution Zip ─────────────────────────
-VST3_ZIP_STAGING="$STAGING_DIR/Loop Breaker VST3"
-VST3_ZIP_FILE="$OUTPUT_DIR/LoopBreaker-VST3.zip"
-
-info "Creating standalone VST3 distribution zip..."
-mkdir -p "$VST3_ZIP_STAGING"
-
-# Copy the raw VST3 bundle
-cp -R "$VST3_BUNDLE" "$VST3_ZIP_STAGING/"
-info "Included VST3 bundle in standalone zip"
-
-# Copy the user manual
-if [ -f "$MANUAL_PDF" ]; then
-    cp "$MANUAL_PDF" "$VST3_ZIP_STAGING/"
-    info "Included manual in standalone zip"
-fi
-
-# Generate the installation instructions text file
-INSTALL_GUIDE="$VST3_ZIP_STAGING/INSTALLATION.txt"
-cat > "$INSTALL_GUIDE" <<'INSTALLEOF'
-==============================================================================
-  LOOP BREAKER — VST3 Manual Installation Guide
-==============================================================================
-
-This archive contains the Loop Breaker VST3 plugin for manual installation.
-If you are on macOS and prefer an automated install, use the separate
-LoopBreaker-macOS-Installer.zip package instead.
-
-
-------------------------------------------------------------------------------
-  CONTENTS
-------------------------------------------------------------------------------
-
-  LoopBreaker.vst3                  The VST3 plugin bundle
-  Loop_Breaker_User_Manual.pdf      User manual
-  INSTALLATION.txt                  This file
-
-
-==============================================================================
-  macOS INSTALLATION
-==============================================================================
-
-1. Copy the "LoopBreaker.vst3" bundle to one of these locations:
-
-   For all users (requires admin password):
-     /Library/Audio/Plug-Ins/VST3/
-
-   For your user account only:
-     ~/Library/Audio/Plug-Ins/VST3/
-
-   Tip: The ~/Library folder is hidden by default. In Finder, press
-   Cmd+Shift+G and paste the path above, or hold Option while clicking
-   the "Go" menu to reveal "Library".
-
-2. Open your DAW and rescan plugins if necessary. Loop Breaker should
-   appear in your plugin list under the manufacturer "Glow Machine".
-
-
-  ALLOWING AN UNSIGNED PLUGIN ON macOS
-  -------------------------------------
-
-  Because Loop Breaker is not currently code-signed or notarized by Apple,
-  macOS Gatekeeper will block it the first time you try to use it.
-  To allow it:
-
-  macOS Sequoia 15 and later:
-    1. When your DAW fails to load the plugin (or you see a dialog saying
-       the file "can't be opened"), dismiss the dialog.
-    2. Open System Settings > Privacy & Security.
-    3. Scroll down. You should see a message like:
-       "LoopBreaker.vst3 was blocked from use because it is not from an
-       identified developer."
-    4. Click "Allow Anyway" and authenticate with your password or
-       Touch ID.
-    5. Re-open your DAW or rescan plugins. When prompted again, click
-       "Open" to confirm.
-
-  macOS Ventura 13 / Sonoma 14:
-    Same steps as above — System Settings > Privacy & Security > Allow
-    Anyway.
-
-  macOS Monterey 12 and earlier:
-    1. Open System Preferences > Security & Privacy > General tab.
-    2. You should see "LoopBreaker.vst3 was blocked..."
-    3. Click "Allow Anyway" and authenticate.
-    4. Re-open your DAW and confirm when prompted.
-
-  Alternative (Terminal):
-    If the above does not work, you can remove the quarantine flag
-    manually. Open Terminal and run:
-
-      xattr -dr com.apple.quarantine /Library/Audio/Plug-Ins/VST3/LoopBreaker.vst3
-
-    (Adjust the path if you installed to ~/Library/... instead.)
-
-
-==============================================================================
-  WINDOWS INSTALLATION
-==============================================================================
-
-1. Copy the "LoopBreaker.vst3" file to:
-
-     C:\Program Files\Common Files\VST3\
-
-   You may need administrator privileges to copy files into this folder.
-
-2. Open your DAW and rescan plugins if necessary. Loop Breaker should
-   appear in your plugin list under the manufacturer "Glow Machine".
-
-   Note: Some DAWs also support a per-user VST3 folder. Check your
-   DAW's documentation if the system-wide folder does not work for
-   your setup.
-
-
-==============================================================================
-  TROUBLESHOOTING
-==============================================================================
-
-  - Plugin not showing up?
-    Make sure the .vst3 file/bundle is in the correct folder for your
-    OS (see above) and rescan plugins in your DAW.
-
-  - macOS still blocking the plugin?
-    Try the Terminal method described above (xattr -dr ...).
-
-  - DAW crashes on load?
-    Ensure you are using a compatible DAW that supports the VST3 format
-    and that your OS version is supported.
-
-  - Need help?
-    Visit https://glowmachineaudio.com/support
-
-
-==============================================================================
-  Copyright (c) Glow Machine, LLC. All rights reserved.
-==============================================================================
-INSTALLEOF
-info "Generated installation guide: INSTALLATION.txt"
-
-# Create the standalone VST3 zip
-(cd "$STAGING_DIR" && zip -r "$VST3_ZIP_FILE" "Loop Breaker VST3")
-info "Created standalone VST3 zip: $VST3_ZIP_FILE"
-
 # ─── Done ─────────────────────────────────────────────────────────────────────
 INSTALLER_SIZE=$(du -sh "$ZIP_FILE" | cut -f1)
-VST3_SIZE=$(du -sh "$VST3_ZIP_FILE" | cut -f1)
 info "Build complete!"
 echo ""
 echo "  📦  $ZIP_FILE  ($INSTALLER_SIZE)"
 echo "       macOS installer package + manual"
 echo ""
-echo "  🎛   $VST3_ZIP_FILE  ($VST3_SIZE)"
-echo "       Standalone VST3 + installation guide + manual"
-echo ""
-echo "  Install location: /Library/Audio/Plug-Ins/VST3/${PLUGIN_FILENAME}.vst3"
+echo "  Install locations:"
+echo "    /Library/Audio/Plug-Ins/VST3/${PLUGIN_FILENAME}.vst3"
+echo "    /Library/Audio/Plug-Ins/Components/${PLUGIN_FILENAME}.component"
 echo ""
 if [ -z "$SIGN_IDENTITY" ]; then
     warn "Package is unsigned. For distribution, re-run with:"

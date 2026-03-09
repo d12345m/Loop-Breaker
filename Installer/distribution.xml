@@ -25,9 +25,10 @@
     <readme     file="readme.html"/>
     <conclusion file="conclusion.html"/>
 
-    <!-- Single choice: install VST3 -->
+    <!-- Plugin choices -->
     <choices-outline>
         <line choice="vst3"/>
+        <line choice="au"/>
     </choices-outline>
 
     <choice
@@ -38,12 +39,29 @@
         enabled="true"
         selected="true"
     >
-        <pkg-ref id="com.glowmachineaudio.LoopBreaker"/>
+        <pkg-ref id="com.glowmachineaudio.LoopBreaker.vst3"/>
+    </choice>
+
+    <choice
+        id="au"
+        title="Loop Breaker AU"
+        description="Installs Loop Breaker Audio Unit plug-in to /Library/Audio/Plug-Ins/Components/"
+        visible="true"
+        enabled="true"
+        selected="true"
+    >
+        <pkg-ref id="com.glowmachineaudio.LoopBreaker.au"/>
     </choice>
 
     <pkg-ref
-        id="com.glowmachineaudio.LoopBreaker"
+        id="com.glowmachineaudio.LoopBreaker.vst3"
         version="1.0.0"
         onConclusion="none"
     >LoopBreakerVST3.pkg</pkg-ref>
+
+    <pkg-ref
+        id="com.glowmachineaudio.LoopBreaker.au"
+        version="1.0.0"
+        onConclusion="none"
+    >LoopBreakerAU.pkg</pkg-ref>
 </installer-gui-script>

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# build_installer.sh — Build a macOS .pkg installer for Loop Breaker VST3
+# build_installer.sh — Build a macOS .pkg installer for Loop Breaker (VST3 + AU)
 #
 # Usage:
 #   ./Installer/build_installer.sh [--skip-build] [--sign "Developer ID Installer: ..."]
@@ -25,12 +25,14 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 XCODE_PROJECT="$PROJECT_ROOT/Builds/MacOSX/${PLUGIN_FILENAME}.xcodeproj"
 BUILD_DIR="$PROJECT_ROOT/Builds/MacOSX/build/Release"
 VST3_BUNDLE="$BUILD_DIR/${PLUGIN_FILENAME}.vst3"
+AU_BUNDLE="$BUILD_DIR/${PLUGIN_FILENAME}.component"
 
 INSTALLER_DIR="$SCRIPT_DIR"
 RESOURCES_DIR="$INSTALLER_DIR/resources"
 STAGING_DIR="$INSTALLER_DIR/staging"
 OUTPUT_DIR="$INSTALLER_DIR/output"
-COMPONENT_PKG="$STAGING_DIR/LoopBreakerVST3.pkg"
+VST3_COMPONENT_PKG="$STAGING_DIR/LoopBreakerVST3.pkg"
+AU_COMPONENT_PKG="$STAGING_DIR/LoopBreakerAU.pkg"
 DISTRIBUTION_XML="$INSTALLER_DIR/distribution.xml"
 
 SKIP_BUILD=false
@@ -71,11 +73,19 @@ trap cleanup EXIT
 
 # ─── Step 1: Build Release ───────────────────────────────────────────────────
 if [ "$SKIP_BUILD" = false ]; then
-    info "Building ${PLUGIN_NAME} (Release)..."
+    info "Building ${PLUGIN_NAME} VST3 (Release)..."
     cd "$PROJECT_ROOT/Builds/MacOSX"
     xcodebuild \
         -project "${PLUGIN_FILENAME}.xcodeproj" \
         -scheme "${PLUGIN_FILENAME} - VST3" \
+        -configuration Release \
+        build \
+        2>&1 | tail -5
+
+    info "Building ${PLUGIN_NAME} AU (Release)..."
+    xcodebuild \
+        -project "${PLUGIN_FILENAME}.xcodeproj" \
+        -scheme "${PLUGIN_FILENAME} - AU" \
         -configuration Release \
         build \
         2>&1 | tail -5
@@ -90,24 +100,43 @@ if [ ! -d "$VST3_BUNDLE" ]; then
 fi
 info "Found VST3 bundle: $VST3_BUNDLE"
 
+# Verify the AU bundle exists
+if [ ! -d "$AU_BUNDLE" ]; then
+    fail "AU bundle not found at: $AU_BUNDLE"
+fi
+info "Found AU bundle: $AU_BUNDLE"
+
 # ─── Step 2: Prepare Staging Area ────────────────────────────────────────────
 info "Preparing staging area..."
 rm -rf "$STAGING_DIR" "$OUTPUT_DIR"
-mkdir -p "$STAGING_DIR/payload/Library/Audio/Plug-Ins/VST3"
+mkdir -p "$STAGING_DIR/vst3-payload/Library/Audio/Plug-Ins/VST3"
+mkdir -p "$STAGING_DIR/au-payload/Library/Audio/Plug-Ins/Components"
 mkdir -p "$OUTPUT_DIR"
 
 # Copy the VST3 bundle into the payload
-cp -R "$VST3_BUNDLE" "$STAGING_DIR/payload/Library/Audio/Plug-Ins/VST3/"
+cp -R "$VST3_BUNDLE" "$STAGING_DIR/vst3-payload/Library/Audio/Plug-Ins/VST3/"
 info "Staged VST3 to /Library/Audio/Plug-Ins/VST3/${PLUGIN_FILENAME}.vst3"
 
+# Copy the AU bundle into the payload
+cp -R "$AU_BUNDLE" "$STAGING_DIR/au-payload/Library/Audio/Plug-Ins/Components/"
+info "Staged AU to /Library/Audio/Plug-Ins/Components/${PLUGIN_FILENAME}.component"
+
 # ─── Step 3: Build Component Package ─────────────────────────────────────────
-info "Building component package..."
+info "Building VST3 component package..."
 pkgbuild \
-    --root "$STAGING_DIR/payload" \
-    --identifier "$BUNDLE_ID" \
+    --root "$STAGING_DIR/vst3-payload" \
+    --identifier "${BUNDLE_ID}.vst3" \
     --version "$VERSION" \
     --install-location "/" \
-    "$COMPONENT_PKG"
+    "$VST3_COMPONENT_PKG"
+
+info "Building AU component package..."
+pkgbuild \
+    --root "$STAGING_DIR/au-payload" \
+    --identifier "${BUNDLE_ID}.au" \
+    --version "$VERSION" \
+    --install-location "/" \
+    "$AU_COMPONENT_PKG"
 
 # ─── Step 4: Generate Distribution XML ───────────────────────────────────────
 # The distribution.xml is checked into the repo, but we regenerate a version-
@@ -124,12 +153,17 @@ if [ ! -f "$DISTRIBUTION_XML" ]; then
     <welcome    file="welcome.html"/>
     <conclusion file="conclusion.html"/>
     <choices-outline>
-        <line choice="default"/>
+        <line choice="vst3"/>
+        <line choice="au"/>
     </choices-outline>
-    <choice id="default" title="${PLUGIN_NAME} VST3">
-        <pkg-ref id="${BUNDLE_ID}"/>
+    <choice id="vst3" title="${PLUGIN_NAME} VST3">
+        <pkg-ref id="${BUNDLE_ID}.vst3"/>
     </choice>
-    <pkg-ref id="${BUNDLE_ID}" version="${VERSION}" onConclusion="none">LoopBreakerVST3.pkg</pkg-ref>
+    <choice id="au" title="${PLUGIN_NAME} AU">
+        <pkg-ref id="${BUNDLE_ID}.au"/>
+    </choice>
+    <pkg-ref id="${BUNDLE_ID}.vst3" version="${VERSION}" onConclusion="none">LoopBreakerVST3.pkg</pkg-ref>
+    <pkg-ref id="${BUNDLE_ID}.au" version="${VERSION}" onConclusion="none">LoopBreakerAU.pkg</pkg-ref>
 </installer-gui-script>
 DISTEOF
 fi

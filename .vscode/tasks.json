@@ -18,13 +18,45 @@
       "isBackground": false
     },
     {
-      "label": "Build macOS Installer + VST3 Package",
+      "label": "Build AU (Debug)",
+      "type": "shell",
+      "command": "cd Builds/MacOSX && xcodebuild -project LoopBreaker.xcodeproj -scheme \"LoopBreaker - AU\" -configuration Debug build",
+      "group": "build",
+      "problemMatcher": ["$gcc"],
+      "isBackground": false
+    },
+    {
+      "label": "Build AU (Release)",
+      "type": "shell",
+      "command": "cd Builds/MacOSX && xcodebuild -project LoopBreaker.xcodeproj -scheme \"LoopBreaker - AU\" -configuration Release build",
+      "group": "build",
+      "problemMatcher": ["$gcc"],
+      "isBackground": false
+    },
+    {
+      "label": "Build All (Debug)",
+      "type": "shell",
+      "command": "cd Builds/MacOSX && xcodebuild -project LoopBreaker.xcodeproj -scheme \"LoopBreaker - VST3\" -configuration Debug build && xcodebuild -project LoopBreaker.xcodeproj -scheme \"LoopBreaker - AU\" -configuration Debug build",
+      "group": "build",
+      "problemMatcher": ["$gcc"],
+      "isBackground": false
+    },
+    {
+      "label": "Build All (Release)",
+      "type": "shell",
+      "command": "cd Builds/MacOSX && xcodebuild -project LoopBreaker.xcodeproj -scheme \"LoopBreaker - VST3\" -configuration Release build && xcodebuild -project LoopBreaker.xcodeproj -scheme \"LoopBreaker - AU\" -configuration Release build",
+      "group": "build",
+      "problemMatcher": ["$gcc"],
+      "isBackground": false
+    },
+    {
+      "label": "Build macOS Installer + Package",
       "type": "shell",
       "command": "bash Installer/build_installer.sh --skip-build",
       "group": "build",
       "problemMatcher": [],
       "isBackground": false,
-      "dependsOn": "Build VST3 (Release)"
+      "dependsOn": "Build All (Release)"
     }
   ]
 }

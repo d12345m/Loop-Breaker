@@ -9,7 +9,7 @@
               pluginEditorRequiresKeys="0" pluginAUExportPrefix="LoopBreakerAU"
               pluginAAXIdentifier="com.glowmachineaudio.LoopBreaker" pluginRTASCategory=""
               pluginVSTCategory="kPlugCategSynth" pluginVST3Category="Instrument"
-              pluginFormats="buildVST3" pluginCharacteristicsValue="pluginIsSynth,pluginWantsMidiIn">
+              pluginFormats="buildAU,buildVST3" pluginCharacteristicsValue="pluginIsSynth,pluginWantsMidiIn">
   <MAINGROUP id="b0GUwa" name="BufferTest">
     <GROUP id="{7BFC662E-934B-675C-15EB-563C5EAA4BD7}" name="Source">
       <FILE id="DUFUk8" name="Main.cpp" compile="0" resource="0" file="Source/Main.cpp"/>

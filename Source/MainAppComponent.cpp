@@ -116,6 +116,9 @@ MainAppComponent::MainAppComponent()
     // Listen for scheduler callbacks
     app.scheduler.addListener(this);
 
+    if (auto up = app.scheduler.getUpcomingModifier())
+        modifierDisplay.setUpcoming(*up);
+
     setAudioChannels(0, 2);
     setSize(920, 600);
 

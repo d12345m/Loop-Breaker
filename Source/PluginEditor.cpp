@@ -199,6 +199,9 @@ public:
 
         app.scheduler.addListener(this);
 
+        if (auto up = app.scheduler.getUpcomingModifier())
+            modifierDisplay.setUpcoming(*up);
+
         app.scheduler.setQuantizationEnabled(app.settings.quantizeEnabled);
         app.scheduler.setQuantizationSubdivision(app.settings.quantizeSubdivision);
 

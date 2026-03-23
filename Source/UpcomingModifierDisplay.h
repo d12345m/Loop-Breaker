@@ -35,16 +35,16 @@ public:
             else if (desc->plannedStretch.has_value())
                 upcomingVariant = juce::String(desc->plannedStretch.value(), 2) + "x";
             else if (desc->plannedSliceDivision.isNotEmpty())
-                upcomingVariant = desc->plannedSliceDivision;
+                upcomingVariant = desc->plannedSliceDivision + " slices";
             else if (desc->plannedWet.has_value())
             {
                 juce::String fadeLabel;
                 if (desc->plannedFxFadeBars.has_value())
                 {
                     double fb = desc->plannedFxFadeBars.value();
-                    fadeLabel = fb <= 0.0 ? "instant" : (fb == 1.0 ? "1 bar" : juce::String((int)fb) + " bars");
+                    fadeLabel = fb <= 0.0 ? "Instant" : (fb == 1.0 ? "1 bar" : juce::String((int)fb) + " bars");
                 }
-                upcomingVariant = juce::String("Reverb ") + juce::String((int)std::round(desc->plannedWet.value() * 100.0)) + "%" + (fadeLabel.isNotEmpty() ? juce::String(" | ") + fadeLabel : juce::String());
+                upcomingVariant = juce::String("Wet ") + juce::String((int)std::round(desc->plannedWet.value() * 100.0)) + "%" + (fadeLabel.isNotEmpty() ? juce::String(" | Fade: ") + fadeLabel : juce::String());
             }
             else if (desc->plannedDelayDivision.isNotEmpty() || desc->plannedDelayWet.has_value())
             {
@@ -56,31 +56,71 @@ public:
                 if (desc->plannedDelayWet.has_value())
                 {
                     if (parts.isNotEmpty()) parts << " | ";
-                    parts << juce::String((int)std::round(desc->plannedDelayWet.value() * 100.0)) << "%";
+                    parts << "Wet " << juce::String((int)std::round(desc->plannedDelayWet.value() * 100.0)) << "%";
                 }
                 if (desc->plannedDelayFeedback.has_value())
                 {
                     if (parts.isNotEmpty()) parts << " | ";
-                    parts << "FB " << (int)std::round(desc->plannedDelayFeedback.value() * 100.0) << "%";
+                    parts << "Feedback " << (int)std::round(desc->plannedDelayFeedback.value() * 100.0) << "%";
                 }
                 if (desc->plannedFxFadeBars.has_value())
                 {
                     auto bars = desc->plannedFxFadeBars.value();
-                    juce::String fadeLabel = bars <= 0.0 ? "instant" : (bars == 1.0 ? "1 bar" : juce::String((int)bars) + " bars");
+                    juce::String fadeLabel = bars <= 0.0 ? "Instant" : (bars == 1.0 ? "1 bar" : juce::String((int)bars) + " bars");
                     if (parts.isNotEmpty()) parts << " | ";
-                    parts << fadeLabel;
+                    parts << "Fade: " << fadeLabel;
                 }
                 if (desc->plannedDelayPingPong.has_value() && desc->plannedDelayPingPong.value())
                 {
                     if (parts.isNotEmpty()) parts << " | ";
-                    parts << "PP";
+                    parts << "Ping-Pong";
                 }
                 if (desc->plannedWowFlutter.has_value() && desc->plannedWowFlutter.value())
                 {
                     if (parts.isNotEmpty()) parts << " | ";
-                    parts << "WowFlutter";
+                    parts << "Wow/Flutter";
                 }
-                upcomingVariant = juce::String("Delay ") + parts;
+                upcomingVariant = parts;
+            }
+            else if (desc->plannedChorusMix.has_value())
+            {
+                juce::String parts;
+                parts << "Mix " << (int)std::round(desc->plannedChorusMix.value() * 100.0) << "%";
+                if (desc->plannedChorusDepth.has_value())
+                    parts << " | Depth " << juce::String(desc->plannedChorusDepth.value(), 2);
+                if (desc->plannedChorusRateHz.has_value())
+                    parts << " | Rate " << juce::String(desc->plannedChorusRateHz.value(), 1) << " Hz";
+                upcomingVariant = parts;
+            }
+            else if (desc->plannedPanMix.has_value())
+            {
+                juce::String parts;
+                parts << "Mix " << (int)std::round(desc->plannedPanMix.value() * 100.0) << "%";
+                if (desc->plannedPanDepth.has_value())
+                    parts << " | Depth " << juce::String(desc->plannedPanDepth.value(), 2);
+                upcomingVariant = parts;
+            }
+            else if (desc->plannedPingPongDivision.has_value())
+            {
+                double div = desc->plannedPingPongDivision.value();
+                if (div >= 1.0)       upcomingVariant = "Whole note";
+                else if (div >= 0.5)  upcomingVariant = "Half note";
+                else if (div >= 0.25) upcomingVariant = "Quarter note";
+                else if (div >= 0.125) upcomingVariant = "1/8 note";
+                else                   upcomingVariant = "1/16 note";
+            }
+            else if (desc->plannedBurstBars.has_value())
+            {
+                int bars = desc->plannedBurstBars.value();
+                upcomingVariant = juce::String(bars) + (bars == 1 ? " bar" : " bars");
+            }
+            else if (desc->plannedImmediateJump.has_value())
+            {
+                juce::String parts;
+                if (desc->plannedFxFadeBars.has_value())
+                    parts << juce::String((int)desc->plannedFxFadeBars.value()) << " bars | ";
+                parts << (desc->plannedImmediateJump.value() ? "Jump to target then decay" : "Ramp up then ramp down");
+                upcomingVariant = parts;
             }
 
             // Show base description without any appended arrow details (UI will show variant separately)

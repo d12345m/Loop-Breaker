@@ -69,39 +69,39 @@ juce::OwnedArray<IModifier> ModifierFactory::createAllPrototypes()
 
     // Buffer modifiers
     add(ModifierType::Reverse, ModifierCategory::BufferTransform, "Reverse", "Reverse playback direction");
-    add(ModifierType::Speed, ModifierCategory::BufferTransform, "Speed", "Change playback speed (rate/pitch)");
-    add(ModifierType::Stretch, ModifierCategory::BufferTransform, "Stretch", "Time-stretch (tempo only)");
-    add(ModifierType::PitchUpOctave, ModifierCategory::BufferTransform, "+Oct", "Pitch up one octave");
-    add(ModifierType::PitchDownOctave, ModifierCategory::BufferTransform, "-Oct", "Pitch down one octave");
-    add(ModifierType::BeatSliceRandom, ModifierCategory::BufferTransform, "Slice", "Random beat slicing");
-    add(ModifierType::ArpSlice, ModifierCategory::BufferTransform, "Arp Slice", "Arpeggio-style beat slicing");
-    add(ModifierType::SliceRepeater, ModifierCategory::BufferTransform, "Slice Rpt", "Repeat one random slice N times, then pick another");
-    add(ModifierType::PingPong, ModifierCategory::BufferTransform, "PingPong", "Oscillate forward/backward playback");
+    add(ModifierType::Speed, ModifierCategory::BufferTransform, "Speed", "Randomize playback speed (0.25x, 0.5x, 1x, or 2x)");
+    add(ModifierType::Stretch, ModifierCategory::BufferTransform, "Stretch", "Randomize time-stretch ratio (0.25x, 0.5x, or 2x)");
+    add(ModifierType::PitchUpOctave, ModifierCategory::BufferTransform, "Pitch Up Octave", "Pitch up one octave (+12 semitones)");
+    add(ModifierType::PitchDownOctave, ModifierCategory::BufferTransform, "Pitch Down Octave", "Pitch down one octave (-12 semitones)");
+    add(ModifierType::BeatSliceRandom, ModifierCategory::BufferTransform, "Beat Slice", "Subdivide buffer into random slice count (4, 8, 16, 32, or 64 slices)");
+    add(ModifierType::ArpSlice, ModifierCategory::BufferTransform, "Arp Slice", "Arpeggio-style slicing with randomized sequence length, grid size, and repeat cycles");
+    add(ModifierType::SliceRepeater, ModifierCategory::BufferTransform, "Slice Repeater", "Repeat a random slice (4-32 repetitions) from a grid of 16-64 slices");
+    add(ModifierType::PingPong, ModifierCategory::BufferTransform, "Ping Pong", "Alternate forward/reverse playback at a randomized note division");
 
     // Buffer FX
-    add(ModifierType::BufferDelayOn, ModifierCategory::BufferEffect, "Delay On", "Enable delay wet signal (randomized params)");
+    add(ModifierType::BufferDelayOn, ModifierCategory::BufferEffect, "Delay", "Enable delay with randomized division, wet mix, feedback, and fade");
     add(ModifierType::BufferDelayDubBurst, ModifierCategory::BufferEffect, "Delay Dub Burst", "Dub-style temporary delay burst (rise then fall)");
     // Ducking is always on by default; no separate modifier prototype.
-    add(ModifierType::BufferReverbOn, ModifierCategory::BufferEffect, "Reverb On", "Enable reverb (random wet & fade)");
-    add(ModifierType::BufferLowPassOn, ModifierCategory::BufferEffect, "LPF On", "Enable low pass filter");
-    add(ModifierType::BufferHighPassOn, ModifierCategory::BufferEffect, "HPF On", "Enable high pass filter");
-    add(ModifierType::BufferVolumeRampDown, ModifierCategory::BufferEffect, "FadeDn", "Volume ramp down");
-    add(ModifierType::BufferTremolo, ModifierCategory::BufferEffect, "Trem On", "Tremolo modulation");
-    add(ModifierType::BufferChorusOn, ModifierCategory::BufferEffect, "Chorus On", "Chorus modulation (random depth/rate/mix)");
-    add(ModifierType::BufferAutoPan, ModifierCategory::BufferEffect, "Auto-Pan", "LFO-driven stereo panning");
+    add(ModifierType::BufferReverbOn, ModifierCategory::BufferEffect, "Reverb", "Enable reverb with randomized wet mix (25-100%) and fade (instant to 2 bars)");
+    add(ModifierType::BufferLowPassOn, ModifierCategory::BufferEffect, "Low-Pass Filter", "Enable low-pass filter (sweep cutoff to 4000 Hz over 1 bar)");
+    add(ModifierType::BufferHighPassOn, ModifierCategory::BufferEffect, "High-Pass Filter", "Enable high-pass filter (sweep cutoff to 120 Hz over 1 bar)");
+    add(ModifierType::BufferVolumeRampDown, ModifierCategory::BufferEffect, "Volume Ramp Down", "Fade volume to silence over 1-4 bars, hold, then ramp back up");
+    add(ModifierType::BufferTremolo, ModifierCategory::BufferEffect, "Tremolo", "Apply tremolo at 1/8-note rate, depth ramping to 50% over 2 bars");
+    add(ModifierType::BufferChorusOn, ModifierCategory::BufferEffect, "Chorus", "Enable chorus with randomized depth, rate, mix, and fade");
+    add(ModifierType::BufferAutoPan, ModifierCategory::BufferEffect, "Auto-Pan", "Stereo auto-pan with randomized rate, depth, mix, and fade");
 
     // Master FX
-    add(ModifierType::MasterHighPassOn, ModifierCategory::MasterEffect, "Master HPF", "Master high pass on");
-    add(ModifierType::MasterLowPassOn,  ModifierCategory::MasterEffect, "Master LPF", "Master low pass on");
+    add(ModifierType::MasterHighPassOn, ModifierCategory::MasterEffect, "Master High-Pass", "Temporary master high-pass filter (2-16 bars, ramp or jump mode)");
+    add(ModifierType::MasterLowPassOn,  ModifierCategory::MasterEffect, "Master Low-Pass", "Temporary master low-pass filter (2-16 bars, ramp or jump mode)");
 
     // Reset (pad-targeted: previously global, now treated as buffer transform)
-    add(ModifierType::ResetAll, ModifierCategory::BufferTransform, "Reset", "Reset selected buffers / FX state");
+    add(ModifierType::ResetAll, ModifierCategory::BufferTransform, "Reset", "Reset all modifiers and effects on targeted buffers");
 
     // Navigation
     add(ModifierType::SwitchPart, ModifierCategory::GlobalUtility, "Switch Part", "Switch to a different part");
 
     // Scheduler
-    add(ModifierType::QuarterNoteBurst, ModifierCategory::GlobalUtility, "Burst", "Trigger modifiers every quarter note for X bars");
+    add(ModifierType::QuarterNoteBurst, ModifierCategory::GlobalUtility, "Quarter-Note Burst", "Trigger modifiers every quarter note for 1-4 bars");
 
     return list;
 }

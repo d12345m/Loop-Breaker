@@ -37,31 +37,31 @@ public:
         };
 
         addToggle(ModifierType::Reverse, "Reverse");
-        addToggle(ModifierType::Speed, "Speed (rand)");
-        addToggle(ModifierType::Stretch, "Stretch (rand)");
-        addToggle(ModifierType::PitchUpOctave, "+Oct");
-        addToggle(ModifierType::PitchDownOctave, "-Oct");
-        addToggle(ModifierType::QuarterNoteBurst, "Burst (quarter)");
-        addToggle(ModifierType::PingPong, "PingPong");
+        addToggle(ModifierType::Speed, "Speed");
+        addToggle(ModifierType::Stretch, "Stretch");
+        addToggle(ModifierType::PitchUpOctave, "Pitch Up Octave");
+        addToggle(ModifierType::PitchDownOctave, "Pitch Down Octave");
+        addToggle(ModifierType::QuarterNoteBurst, "Quarter-Note Burst");
+        addToggle(ModifierType::PingPong, "Ping Pong");
     // Buffer FX (placeholders)
-    addToggle(ModifierType::BufferReverbOn, "Reverb On");
-    addToggle(ModifierType::BufferDelayOn, "Delay On");
+    addToggle(ModifierType::BufferReverbOn, "Reverb");
+    addToggle(ModifierType::BufferDelayOn, "Delay");
     addToggle(ModifierType::BufferDelayDubBurst, "Delay Dub Burst");
         // Removed granular delay division/wet/feedback toggles to simplify GUI; runtime randomization will choose values.
-    addToggle(ModifierType::BufferLowPassOn, "LPF On");
-    addToggle(ModifierType::BufferHighPassOn, "HPF On");
+    addToggle(ModifierType::BufferLowPassOn, "Low-Pass Filter");
+    addToggle(ModifierType::BufferHighPassOn, "High-Pass Filter");
     // Global (master) filters apply to all tracks under the hood
-    addToggle(ModifierType::MasterLowPassOn, "Master LPF");
-    addToggle(ModifierType::MasterHighPassOn, "Master HPF");
+    addToggle(ModifierType::MasterLowPassOn, "Master Low-Pass");
+    addToggle(ModifierType::MasterHighPassOn, "Master High-Pass");
     // PingPong and Wow/Flutter are randomized within Delay variants; no separate toggles.
-    addToggle(ModifierType::BufferTremolo, "Tremolo On");
-    addToggle(ModifierType::BufferChorusOn, "Chorus On");
+    addToggle(ModifierType::BufferTremolo, "Tremolo");
+    addToggle(ModifierType::BufferChorusOn, "Chorus");
     addToggle(ModifierType::BufferAutoPan, "Auto-Pan");
-    addToggle(ModifierType::BufferVolumeRampDown, "Vol Ramp Down");
+    addToggle(ModifierType::BufferVolumeRampDown, "Volume Ramp Down");
     // Ducking is enabled by default; GUI toggle removed.
     // Speed variants removed; Speed is randomized at runtime.
     addToggle(ModifierType::ResetAll, "Reset");
-    addToggle(ModifierType::BeatSliceRandom, "Slice (rand)");
+    addToggle(ModifierType::BeatSliceRandom, "Beat Slice");
     addToggle(ModifierType::ArpSlice, "Arp Slice");
     addToggle(ModifierType::SliceRepeater, "Slice Repeater");
     addToggle(ModifierType::SwitchPart, "Switch Part");

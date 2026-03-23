@@ -399,21 +399,21 @@ void ModifierScheduler::forceUpcomingVariant(ModifierType type, const juce::Stri
                 double wet = variant.getDoubleValue();
                 wet = juce::jlimit(0.0, 1.0, wet);
                 base.plannedWet = wet;
-                base.description = base.description + " -> Reverb " + juce::String((int)std::round(wet * 100.0)) + "%";
+                base.description = base.description + " -> Wet " + juce::String((int)std::round(wet * 100.0)) + "%";
             }
             else if (type == ModifierType::BufferChorusOn)
             {
                 double mix = variant.getDoubleValue();
                 mix = juce::jlimit(0.0, 1.0, mix);
                 base.plannedChorusMix = mix;
-                base.description = base.description + " -> Chorus " + juce::String((int)std::round(mix * 100.0)) + "%";
+                base.description = base.description + " -> Mix " + juce::String((int)std::round(mix * 100.0)) + "%";
             }
             else if (type == ModifierType::BufferAutoPan)
             {
                 double mix = variant.getDoubleValue();
                 mix = juce::jlimit(0.0, 1.0, mix);
                 base.plannedPanMix = mix;
-                base.description = base.description + " -> Pan " + juce::String((int)std::round(mix * 100.0)) + "%";
+                base.description = base.description + " -> Mix " + juce::String((int)std::round(mix * 100.0)) + "%";
             }
             else if (type == ModifierType::BeatSliceRandom)
             {
@@ -427,7 +427,7 @@ void ModifierScheduler::forceUpcomingVariant(ModifierType type, const juce::Stri
                 if (parts.size() >= 1) base.plannedArpSequenceLength = parts[0].getIntValue();
                 if (parts.size() >= 2) base.plannedArpTotalSlices = parts[1].getIntValue();
                 if (parts.size() >= 3) base.plannedArpRepeatBars = parts[2].getIntValue();
-                base.description = base.description + " -> Arp " + variant;
+                base.description = base.description + " -> " + variant;
             }
             else if (type == ModifierType::SliceRepeater)
             {
@@ -435,7 +435,7 @@ void ModifierScheduler::forceUpcomingVariant(ModifierType type, const juce::Stri
                 auto parts = juce::StringArray::fromTokens(variant, "|", "");
                 if (parts.size() >= 1) base.plannedSliceRepeaterReps = parts[0].getIntValue();
                 if (parts.size() >= 2) base.plannedSliceRepeaterTotal = parts[1].getIntValue();
-                base.description = base.description + " -> Rpt " + variant;
+                base.description = base.description + " -> Repeat " + variant;
             }
             else if (type == ModifierType::BufferDelayOn)
             {
@@ -473,19 +473,19 @@ void ModifierScheduler::forceUpcomingVariant(ModifierType type, const juce::Stri
                     base.plannedDelayFeedback = fb;
                 }
                 // Build description fragment
-                juce::String frag(" -> Delay ");
+                juce::String frag(" -> ");
                 juce::String combo;
                 if (! base.plannedDelayDivisions.isEmpty())
                     combo << base.plannedDelayDivisions.joinIntoString(",");
                 if (base.plannedDelayWet.has_value())
                 {
                     if (combo.isNotEmpty()) combo << " | ";
-                    combo << (int)std::round(base.plannedDelayWet.value() * 100.0) << "%";
+                    combo << "Wet " << (int)std::round(base.plannedDelayWet.value() * 100.0) << "%";
                 }
                 if (base.plannedDelayFeedback.has_value())
                 {
                     if (combo.isNotEmpty()) combo << " | ";
-                    combo << "FB " << (int)std::round(base.plannedDelayFeedback.value() * 100.0) << "%";
+                    combo << "Feedback " << (int)std::round(base.plannedDelayFeedback.value() * 100.0) << "%";
                 }
                 base.description = base.description + frag + combo;
             }
@@ -614,8 +614,8 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
         modified.plannedArpSequenceLength = seqLen;
         modified.plannedArpTotalSlices = totalSlices;
         modified.plannedArpRepeatBars = repeatBars;
-        modified.description = base.description + " -> Arp " + juce::String(seqLen) + " slices / "
-            + juce::String(totalSlices) + " grid / " + juce::String(repeatBars) + " cycles";
+        modified.description = base.description + " -> " + juce::String(seqLen) + " slice sequence / "
+            + juce::String(totalSlices) + " slice grid / " + juce::String(repeatBars) + (repeatBars == 1 ? " cycle" : " cycles");
     }
     else if (base.type == ModifierType::SliceRepeater)
     {
@@ -628,8 +628,8 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
         int totalSlices = sliceCounts[rng.nextInt((int)std::size(sliceCounts))];
         modified.plannedSliceRepeaterReps = reps;
         modified.plannedSliceRepeaterTotal = totalSlices;
-        modified.description = base.description + " -> Rpt x" + juce::String(reps) + " / "
-            + juce::String(totalSlices) + " grid";
+        modified.description = base.description + " -> Repeat x" + juce::String(reps) + " / "
+            + juce::String(totalSlices) + " slice grid";
     }
     else if (base.type == ModifierType::BufferReverbOn)
     {
@@ -641,7 +641,7 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
         modified.plannedWet = wet;
         modified.plannedFxFadeBars = fadeBars;
         juce::String fadeLabel = fadeBars <= 0.0 ? "instant" : (fadeBars == 1.0 ? "1 bar" : juce::String((int)fadeBars) + " bars");
-        modified.description = base.description + " -> Reverb " + juce::String((int)std::round(wet * 100.0)) + "% | " + fadeLabel;
+        modified.description = base.description + " -> Wet " + juce::String((int)std::round(wet * 100.0)) + "% | Fade: " + fadeLabel;
     }
     else if (base.type == ModifierType::BufferDelayOn)
     {
@@ -669,13 +669,13 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
       modified.plannedWowFlutter = wf;
       // Description: include division, wet, feedback, fade, and flags
       juce::String parts;
-      parts << label << " | "
-          << (int)std::round(wet * 100.0) << "%" << " | "
-          << "FB " << (int)std::round(fb * 100.0) << "%" << " | "
+      parts << label << " | Wet "
+          << (int)std::round(wet * 100.0) << "%" << " | Feedback "
+          << (int)std::round(fb * 100.0) << "%" << " | Fade: "
           << fadeLabel;
-      if (pp) parts << " | PP";
-      if (wf) parts << " | WowFlutter";
-        modified.description = base.description + " -> Delay " + parts;
+      if (pp) parts << " | Ping-Pong";
+      if (wf) parts << " | Wow/Flutter";
+        modified.description = base.description + " -> " + parts;
     }
     else if (base.type == ModifierType::SwitchPart)
     {
@@ -691,9 +691,8 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
         bool jump = rng.nextBool();
         modified.plannedFxFadeBars = dur;
         modified.plannedImmediateJump = jump;
-        juce::String mode = jump ? "jump->decay" : "ramp up/down";
-        juce::String name = (base.type == ModifierType::MasterLowPassOn ? "Master LPF" : "Master HPF");
-        modified.description = base.description + " -> " + name + " " + juce::String((int)dur) + " bars" + " | " + mode;
+        juce::String mode = jump ? "Jump to target then decay" : "Ramp up then ramp down";
+        modified.description = base.description + " -> " + juce::String((int)dur) + " bars | " + mode;
     }
         else if (base.type == ModifierType::QuarterNoteBurst)
         {
@@ -719,10 +718,9 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
         modified.plannedChorusMix = mix;
         modified.plannedFxFadeBars = fadeBars;
         juce::String fadeLabel = fadeBars <= 0.0 ? "instant" : (fadeBars == 1.0 ? "1 bar" : juce::String((int)fadeBars) + " bars");
-        modified.description = base.description + " -> Chorus "
-            + juce::String((int)std::round(mix * 100.0)) + "% | depth "
-            + juce::String(depth, 2) + " | "
-            + juce::String(rate, 1) + "Hz | " + fadeLabel;
+        modified.description = base.description + " -> Mix " + juce::String((int)std::round(mix * 100.0))
+            + "% | Depth " + juce::String(depth, 2)
+            + " | Rate " + juce::String(rate, 1) + " Hz | Fade: " + fadeLabel;
     }
     else if (base.type == ModifierType::BufferAutoPan)
     {
@@ -750,10 +748,23 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
         else if (divisionBars <= 1.0) divLabel = "1 bar";
         else divLabel = juce::String((int)divisionBars) + " bars";
         juce::String fadeLabel2 = fadeBars <= 0.0 ? "instant" : (fadeBars == 1.0 ? "1 bar" : juce::String((int)fadeBars) + " bars");
-        modified.description = base.description + " -> Pan "
-            + juce::String((int)std::round(mix * 100.0)) + "% | depth "
-            + juce::String(depth, 2) + " | "
-            + divLabel + " | " + fadeLabel2;
+        modified.description = base.description + " -> Mix " + juce::String((int)std::round(mix * 100.0))
+            + "% | Depth " + juce::String(depth, 2)
+            + " | Period: " + divLabel + " | Fade: " + fadeLabel2;
+    }
+    else if (base.type == ModifierType::PingPong)
+    {
+        static const double divisions[] { 1.0, 0.5, 0.25, 0.125, 0.0625 };
+        const juce::SpinLock::ScopedLockType lock(rngLock);
+        double div = divisions[rng.nextInt((int)std::size(divisions))];
+        modified.plannedPingPongDivision = div;
+        juce::String divLabel;
+        if (div >= 1.0)       divLabel = "Whole note";
+        else if (div >= 0.5)  divLabel = "Half note";
+        else if (div >= 0.25) divLabel = "Quarter note";
+        else if (div >= 0.125) divLabel = "1/8 note";
+        else                   divLabel = "1/16 note";
+        modified.description = base.description + " -> " + divLabel;
     }
     return modified;
 }

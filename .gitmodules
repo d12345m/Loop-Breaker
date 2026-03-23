@@ -4,3 +4,7 @@
 [submodule "Submodules/moonbase_JUCEClient"]
 	path = Submodules/moonbase_JUCEClient
 	url = https://github.com/Moonbase-sh/moonbase_JUCEClient.git
+[submodule "Submodules/pluginval"]
+	path = Submodules/pluginval
+	url = https://github.com/Tracktion/pluginval.git
+	branch = develop

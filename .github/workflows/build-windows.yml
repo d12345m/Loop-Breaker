@@ -56,9 +56,17 @@ jobs:
           -A x64
           -DCMAKE_BUILD_TYPE=Release
           -DJUCE_DIR="${{ github.workspace }}/JUCE"
+          -DPLUGINVAL_VST3_VALIDATOR=OFF
 
       - name: Build VST3
         run: cmake --build build --config Release --target LoopBreaker_VST3
+
+      # ── Validate ──────────────────────────────────────────────────────────
+      - name: Build pluginval
+        run: cmake --build build --config Release --target pluginval
+
+      - name: Run pluginval
+        run: cmake --build build --config Release --target validate
 
       # ── Package ───────────────────────────────────────────────────────────
       - name: Locate VST3 output

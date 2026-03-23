@@ -16,6 +16,9 @@ if(NOT DEFINED JUCE_DIR)
 endif()
 add_subdirectory("${JUCE_DIR}" "${CMAKE_BINARY_DIR}/JUCE" EXCLUDE_FROM_ALL)
 
+# ─── CLAP extensions ──────────────────────────────────────────────────────────
+add_subdirectory(Submodules/clap-juce-extensions EXCLUDE_FROM_ALL)
+
 # ─── SoundTouch (header-only for us — sources are unity-included) ────────────
 set(SOUNDTOUCH_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/soundtouch/include")
 
@@ -46,9 +49,10 @@ juce_add_plugin(LoopBreaker
     PRODUCES_MIDI_OUTPUT     FALSE
     IS_MIDI_EFFECT           FALSE
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
-    FORMATS                  VST3 AU
+    FORMATS                  VST3 AU AUv3
     VST3_CATEGORIES          Instrument
     AU_MAIN_TYPE             kAudioUnitType_MusicDevice
+    HARDENED_RUNTIME_ENABLED TRUE
     BUNDLE_ID                com.glowmachineaudio.LoopBreaker
     PRODUCT_NAME             "Loop Breaker"
     COPY_PLUGIN_AFTER_BUILD  FALSE
@@ -83,6 +87,11 @@ target_compile_definitions(LoopBreaker PUBLIC
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
 )
+
+# ─── CLAP target ──────────────────────────────────────────────────────────────
+clap_juce_extensions_plugin(TARGET LoopBreaker
+    CLAP_ID "com.glowmachineaudio.LoopBreaker"
+    CLAP_FEATURES instrument synthesizer)
 
 # ─── pluginval (plugin validation) ────────────────────────────────────────────
 add_subdirectory("Submodules/pluginval")

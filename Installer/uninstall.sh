@@ -6,8 +6,10 @@ set -euo pipefail
 
 VST3_PATH="/Library/Audio/Plug-Ins/VST3/LoopBreaker.vst3"
 AU_PATH="/Library/Audio/Plug-Ins/Components/LoopBreaker.component"
+CLAP_PATH="/Library/Audio/Plug-Ins/CLAP/Loop Breaker.clap"
 PKG_ID_VST3="com.glowmachineaudio.LoopBreaker.vst3"
 PKG_ID_AU="com.glowmachineaudio.LoopBreaker.au"
+PKG_ID_CLAP="com.glowmachineaudio.LoopBreaker.clap"
 
 echo "Loop Breaker Uninstaller"
 echo "========================"
@@ -16,6 +18,7 @@ echo ""
 FOUND=false
 if [ -d "$VST3_PATH" ]; then FOUND=true; fi
 if [ -d "$AU_PATH" ]; then FOUND=true; fi
+if [ -d "$CLAP_PATH" ]; then FOUND=true; fi
 
 if [ "$FOUND" = false ]; then
     echo "Loop Breaker not found at expected locations."
@@ -26,6 +29,7 @@ fi
 echo "This will remove:"
 [ -d "$VST3_PATH" ] && echo "  - $VST3_PATH"
 [ -d "$AU_PATH" ] && echo "  - $AU_PATH"
+[ -d "$CLAP_PATH" ] && echo "  - $CLAP_PATH"
 echo ""
 read -p "Continue? [y/N] " -n 1 -r
 echo ""
@@ -45,6 +49,11 @@ if [ -d "$AU_PATH" ]; then
     sudo rm -rf "$AU_PATH"
 fi
 
+if [ -d "$CLAP_PATH" ]; then
+    echo "Removing CLAP..."
+    sudo rm -rf "$CLAP_PATH"
+fi
+
 # Forget the package receipts
 if pkgutil --pkg-info "$PKG_ID_VST3" &>/dev/null; then
     echo "Removing VST3 package receipt..."
@@ -53,6 +62,10 @@ fi
 if pkgutil --pkg-info "$PKG_ID_AU" &>/dev/null; then
     echo "Removing AU package receipt..."
     sudo pkgutil --forget "$PKG_ID_AU"
+fi
+if pkgutil --pkg-info "$PKG_ID_CLAP" &>/dev/null; then
+    echo "Removing CLAP package receipt..."
+    sudo pkgutil --forget "$PKG_ID_CLAP"
 fi
 
 echo ""

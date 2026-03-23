@@ -8,12 +8,12 @@
         <os-version min="11.0"/>
     </allowed-os-versions>
     <options
-        customize="never"
+        customize="allow"
         require-scripts="false"
         hostArchitectures="x86_64,arm64"
     />
 
-    <!-- Install to system domain only (VST3 must go to /Library) -->
+    <!-- Install to system domain only (plugins must go to /Library) -->
     <domains
         enable_anywhere="false"
         enable_currentUserHome="false"
@@ -28,6 +28,7 @@
     <!-- Plugin choices -->
     <choices-outline>
         <line choice="vst3"/>
+        <line choice="clap"/>
         <line choice="au"/>
     </choices-outline>
 
@@ -40,6 +41,17 @@
         selected="true"
     >
         <pkg-ref id="com.glowmachineaudio.LoopBreaker.vst3"/>
+    </choice>
+
+    <choice
+        id="clap"
+        title="Loop Breaker CLAP"
+        description="Installs Loop Breaker CLAP plug-in to /Library/Audio/Plug-Ins/CLAP/"
+        visible="true"
+        enabled="true"
+        selected="true"
+    >
+        <pkg-ref id="com.glowmachineaudio.LoopBreaker.clap"/>
     </choice>
 
     <choice
@@ -58,6 +70,12 @@
         version="1.0.0"
         onConclusion="none"
     >LoopBreakerVST3.pkg</pkg-ref>
+
+    <pkg-ref
+        id="com.glowmachineaudio.LoopBreaker.clap"
+        version="1.0.0"
+        onConclusion="none"
+    >LoopBreakerCLAP.pkg</pkg-ref>
 
     <pkg-ref
         id="com.glowmachineaudio.LoopBreaker.au"

@@ -8,3 +8,7 @@
 	path = Submodules/pluginval
 	url = https://github.com/Tracktion/pluginval.git
 	branch = develop
+[submodule "Submodules/clap-juce-extensions"]
+	path = Submodules/clap-juce-extensions
+	url = https://github.com/free-audio/clap-juce-extensions.git
+	branch = main

@@ -246,8 +246,8 @@ private:
         void drawToggleButton(juce::Graphics&, juce::ToggleButton&, bool, bool) override {}
     };
 
+    InvisibleToggleLookAndFeel invisibleToggleLF;  // must be declared before padButtons so it outlives them
     juce::OwnedArray<juce::ToggleButton> padButtons;
-    InvisibleToggleLookAndFeel invisibleToggleLF;
     juce::OwnedArray<juce::Label> padFileLabels;
     juce::StringArray padFileNames { "", "", "", "", "", "", "", "" };
     std::array<int, numPads> flashCounters { {0,0,0,0,0,0,0,0} };

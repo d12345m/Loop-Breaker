@@ -150,7 +150,7 @@ private:
         if (typeface == nullptr)
             return juce::Font (juce::FontOptions().withHeight (height));
 
-        return juce::Font (typeface).withHeight (height);
+        return juce::Font (juce::FontOptions (typeface).withHeight (height));
     }
 
     /** Quick check: is the current theme "Pixel Grid"? */

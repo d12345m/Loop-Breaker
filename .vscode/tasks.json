@@ -57,6 +57,30 @@
       "problemMatcher": [],
       "isBackground": false,
       "dependsOn": "Build All (Release)"
+    },
+    {
+      "label": "Run pluginval (Debug)",
+      "type": "shell",
+      "command": "bash run_pluginval.sh --debug --strictness 5",
+      "group": "test",
+      "problemMatcher": [],
+      "isBackground": false
+    },
+    {
+      "label": "Run pluginval (Release)",
+      "type": "shell",
+      "command": "bash run_pluginval.sh --release --strictness 5",
+      "group": "test",
+      "problemMatcher": [],
+      "isBackground": false
+    },
+    {
+      "label": "Run pluginval (Strict)",
+      "type": "shell",
+      "command": "bash run_pluginval.sh --debug --strictness 10",
+      "group": "test",
+      "problemMatcher": [],
+      "isBackground": false
     }
   ]
 }

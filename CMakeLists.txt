@@ -46,8 +46,9 @@ juce_add_plugin(LoopBreaker
     PRODUCES_MIDI_OUTPUT     FALSE
     IS_MIDI_EFFECT           FALSE
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
-    FORMATS                  VST3
+    FORMATS                  VST3 AU
     VST3_CATEGORIES          Instrument
+    AU_MAIN_TYPE             kAudioUnitType_MusicDevice
     BUNDLE_ID                com.glowmachineaudio.LoopBreaker
     PRODUCT_NAME             "Loop Breaker"
     COPY_PLUGIN_AFTER_BUILD  FALSE
@@ -82,6 +83,19 @@ target_compile_definitions(LoopBreaker PUBLIC
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
 )
+
+# ─── pluginval (plugin validation) ────────────────────────────────────────────
+add_subdirectory("Submodules/pluginval")
+
+# Custom validation target using VST3 (AU requires system-level installation on macOS)
+set(PLUGINVAL_STRICTNESS 5 CACHE STRING "pluginval strictness level (1-10)")
+get_target_property(vst3_artefact LoopBreaker_VST3 JUCE_PLUGIN_ARTEFACT_FILE)
+add_custom_target(validate
+    COMMAND $<TARGET_FILE:pluginval>
+        --validate "${vst3_artefact}"
+        --strictness-level ${PLUGINVAL_STRICTNESS}
+    DEPENDS pluginval LoopBreaker_VST3
+    COMMENT "Running pluginval on VST3 (strictness ${PLUGINVAL_STRICTNESS})")
 
 target_link_libraries(LoopBreaker
     PRIVATE

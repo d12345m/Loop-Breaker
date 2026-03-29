@@ -781,6 +781,10 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
         else                    divLabel = "1/4 note";
         modified.description = base.description + " -> S&H rate: " + divLabel;
     }
+    else if (base.type == ModifierType::SwapModifierStack)
+    {
+        modified.description = base.description + " -> Rotate stacks";
+    }
     return modified;
 }
 

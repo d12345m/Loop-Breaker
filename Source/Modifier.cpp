@@ -105,6 +105,9 @@ juce::OwnedArray<IModifier> ModifierFactory::createAllPrototypes()
     // Scheduler
     add(ModifierType::QuarterNoteBurst, ModifierCategory::GlobalUtility, "Quarter-Note Burst", "Trigger modifiers every quarter note for 1-4 bars");
 
+    // Swap
+    add(ModifierType::SwapModifierStack, ModifierCategory::BufferTransform, "Swap Stack", "Swap the entire modifier stack between two or more buffers");
+
     return list;
 }
 

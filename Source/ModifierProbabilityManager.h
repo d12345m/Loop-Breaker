@@ -133,6 +133,7 @@ public:
             case ModifierType::MasterLowPassOn:     return "Master Low-Pass";
             case ModifierType::SwitchPart:          return "Switch Part";
             case ModifierType::QuarterNoteBurst:    return "Quarter-Note Burst";
+            case ModifierType::SwapModifierStack:   return "Swap Stack";
             case ModifierType::ResetAll:            return "Reset All";
             default:                                return "Unknown";
         }
@@ -174,6 +175,7 @@ public:
 
             case ModifierType::SwitchPart:
             case ModifierType::QuarterNoteBurst:
+            case ModifierType::SwapModifierStack:
             case ModifierType::ResetAll:
                 return "Special";
 
@@ -216,6 +218,7 @@ public:
             // Special
             ModifierType::SwitchPart,
             ModifierType::QuarterNoteBurst,
+            ModifierType::SwapModifierStack,
             ModifierType::ResetAll,
         };
         return types;

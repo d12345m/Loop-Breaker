@@ -66,6 +66,7 @@ public:
     addToggle(ModifierType::BeatSliceRandom, "Beat Slice");
     addToggle(ModifierType::ArpSlice, "Arp Slice");
     addToggle(ModifierType::SliceRepeater, "Slice Repeater");
+    addToggle(ModifierType::SwapModifierStack, "Swap Stack");
     addToggle(ModifierType::SwitchPart, "Switch Part");
     }
 

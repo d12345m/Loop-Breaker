@@ -60,6 +60,9 @@ enum class ModifierType
     // Scheduler modifiers
     QuarterNoteBurst,
 
+    // Swap
+    SwapModifierStack,
+
     // Global
     ResetAll,
 

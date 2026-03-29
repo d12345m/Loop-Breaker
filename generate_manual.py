@@ -727,6 +727,10 @@ def build_manual():
          "when Parts is set to more than 1 in the Settings tab."),
         ("Quarter-Note Burst", "Triggers rapid-fire modifier applications at quarter-note intervals "
          "for a variable number of bars (1, 2, or 4), creating intense bursts of change."),
+        ("Swap Modifier Stack", "Swaps the entire modifier stack (speed, pitch, effects, slicing, etc.) "
+         "between two or more targeted buffers. When two buffers are selected they swap directly; "
+         "with three or more the stacks rotate so each buffer receives another's settings. "
+         "If no buffers are selected, 2-4 are chosen at random."),
         ("Reset All", "Removes all active modifiers, turns off all effects, and returns playback "
          "speed, pitch, and direction to their default state."),
     ]

@@ -108,6 +108,7 @@ public:
             case ModifierType::BeatSliceRandom: typeColour = Theme::good(); break;
             case ModifierType::ArpSlice:        typeColour = Theme::good(); break;
             case ModifierType::SliceRepeater:   typeColour = Theme::good(); break;
+            case ModifierType::SwapModifierStack: typeColour = Theme::accent2(); break;
             default:                            typeColour = Theme::textSubtle(); break;
         }
 

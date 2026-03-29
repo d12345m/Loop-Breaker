@@ -103,6 +103,27 @@ public:
     {
         const int numSamples = tempBuffer.getNumSamples();
         const int numChannels = tempBuffer.getNumChannels();
+
+        // Declick fade-in: raised-cosine ramp from silence to unity
+        int fadeTotal = declickFadeInTotal.load(std::memory_order_relaxed);
+        if (fadeTotal > 0)
+        {
+            int progress = declickFadeInProgress.load(std::memory_order_relaxed);
+            for (int i = 0; i < numSamples; ++i)
+            {
+                if (progress < fadeTotal)
+                {
+                    float t = (float)(progress + 1) / (float)(fadeTotal + 1);
+                    float gain = 0.5f * (1.0f - std::cos(juce::MathConstants<float>::pi * t));
+                    for (int ch = 0; ch < numChannels; ++ch)
+                        tempBuffer.getWritePointer(ch)[i] *= gain;
+                    ++progress;
+                }
+            }
+            declickFadeInProgress.store(progress, std::memory_order_relaxed);
+            if (progress >= fadeTotal)
+                declickFadeInTotal.store(0, std::memory_order_relaxed);
+        }
         // Precompute per-sample ducking gains from incoming signal (before FX)
         if (params.duckingEnabled && numSamples > 0)
         {
@@ -528,6 +549,14 @@ public:
     EffectChainPlaceholder& effects() { return chain; }
     const EffectChainPlaceholder& effects() const { return chain; }
 
+    /** Request a raised-cosine fade-in ramp over the given number of samples.
+        Call after abruptly changing FX params to mask discontinuities. */
+    void requestDeclickFadeIn(int samples = 512)
+    {
+        declickFadeInProgress.store(0, std::memory_order_relaxed);
+        declickFadeInTotal.store(samples, std::memory_order_release);
+    }
+
     // Simple envelope describing a parameter change over musical bars
     struct EffectEnvelope
     {
@@ -874,6 +903,9 @@ private:
     static constexpr double kMaxChorusDelayMs = 30.0; // max modulated delay for chorus
     // Auto-pan LFO
     float panLfoPhase = 0.0f;
+    // Declick fade-in ramp (masks discontinuities from abrupt parameter swaps)
+    std::atomic<int> declickFadeInTotal{0};
+    std::atomic<int> declickFadeInProgress{0};
     // Ducking envelope state
     float duckEnv = 0.0f;
     float duckAttackCoeff = 0.0f;

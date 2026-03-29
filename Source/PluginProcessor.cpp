@@ -385,7 +385,6 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                     const auto& types = ModifierProbabilityManager::allModifierTypes();
                     const int numMapped = juce::jmin (static_cast<int> (types.size()),
                                                       SessionSettings::kNumModifierTypes);
-                    bool handled = false;
                     for (int idx = 0; idx < numMapped; ++idx)
                     {
                         if (app.settings.midiProbCCMap[idx] == cc)
@@ -393,23 +392,17 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                             const juce::String paramId = "prob_" + juce::String (static_cast<int> (types[idx]));
                             if (auto* param = apvts.getParameter (paramId))
                                 param->setValueNotifyingHost (normValue);
-                            handled = true;
-                            break;
                         }
                     }
 
                     // Also check pad target probability CC map
-                    if (!handled)
+                    for (int i = 0; i < 8; ++i)
                     {
-                        for (int i = 0; i < 8; ++i)
+                        if (app.settings.midiPadProbCCMap[static_cast<size_t>(i)] == cc)
                         {
-                            if (app.settings.midiPadProbCCMap[static_cast<size_t>(i)] == cc)
-                            {
-                                const juce::String paramId = "padProb_" + juce::String (i);
-                                if (auto* param = apvts.getParameter (paramId))
-                                    param->setValueNotifyingHost (normValue);
-                                break;
-                            }
+                            const juce::String paramId = "padProb_" + juce::String (i);
+                            if (auto* param = apvts.getParameter (paramId))
+                                param->setValueNotifyingHost (normValue);
                         }
                     }
                 }

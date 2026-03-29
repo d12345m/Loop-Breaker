@@ -527,6 +527,8 @@ ModifierDescriptor ModifierScheduler::pickRandomDescriptor() const
                 || t == ModifierType::BufferTremolo
                 || t == ModifierType::BufferChorusOn
                 || t == ModifierType::BufferAutoPan
+                || t == ModifierType::BufferSHLowPassOn
+                || t == ModifierType::BufferSHHighPassOn
                 || t == ModifierType::BufferVolumeRampDown
                     || t == ModifierType::SwitchPart
                     || t == ModifierType::QuarterNoteBurst);
@@ -765,6 +767,19 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
         else if (div >= 0.125) divLabel = "1/8 note";
         else                   divLabel = "1/16 note";
         modified.description = base.description + " -> " + divLabel;
+    }
+    else if (base.type == ModifierType::BufferSHLowPassOn || base.type == ModifierType::BufferSHHighPassOn)
+    {
+        // S&H rate: 1/16 = 0.0625to bars, 1/8 = 0.125 bars, 1/4 = 0.25 bars
+        static const double divs[] { 0.0625, 0.125, 0.25 };
+        const juce::SpinLock::ScopedLockType lock(rngLock);
+        double div = divs[rng.nextInt((int)std::size(divs))];
+        modified.plannedSHDivisionBars = div;
+        juce::String divLabel;
+        if (div <= 0.0625)      divLabel = "1/16 note";
+        else if (div <= 0.125)  divLabel = "1/8 note";
+        else                    divLabel = "1/4 note";
+        modified.description = base.description + " -> S&H rate: " + divLabel;
     }
     return modified;
 }

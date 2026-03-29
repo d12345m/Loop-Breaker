@@ -683,6 +683,17 @@ def build_manual():
          "for a thicker, wider sound."),
         ("Auto-Pan", "Modulates the stereo panning of the buffer with a configurable LFO rate "
          "and depth, creating movement in the stereo field."),
+        ("S&H Low-Pass", "A persistent low-pass filter with sample-and-hold modulation. "
+         "Unlike the standard low-pass filter which ramps up and back down, this filter stays "
+         "active until removed by the Reset modifier. The cutoff frequency and resonance (Q) "
+         "are randomly re-triggered at a musical rate — every 16th note, 8th note, or quarter "
+         "note — creating a rhythmic, stepped filtering effect. The cutoff range is 200 Hz to "
+         "8000 Hz and the Q range is 0.5 to 4.0."),
+        ("S&H High-Pass", "A persistent high-pass filter with sample-and-hold modulation. "
+         "Like the S&H Low-Pass, this filter stays active until removed by the Reset modifier. "
+         "The cutoff and Q are randomly re-triggered at a musical rate (16th, 8th, or quarter "
+         "note), producing a rhythmic, stepped thinning effect. The cutoff range is 60 Hz to "
+         "800 Hz and the Q range is 0.5 to 4.0."),
     ]
     for name, desc in channel_mods:
         pdf.set_font("Helvetica", "B", 10.5)

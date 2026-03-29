@@ -36,7 +36,9 @@ public:
                 + (fx.highPassEnabled ? "HPF " : "")
                 + (fx.tremoloEnabled ? "Trem " : "")
                 + (fx.chorusEnabled ? "Chorus " : "")
-                + (fx.autoPanEnabled ? "Pan " : "");
+                + (fx.autoPanEnabled ? "Pan " : "")
+                + (fx.shLowPassEnabled ? "S&H-LPF " : "")
+                + (fx.shHighPassEnabled ? "S&H-HPF " : "");
             auto row = area.removeFromTop(lineH);
             g.setColour(Theme::textSubtle());
             g.drawText(line, row, juce::Justification::centredLeft);

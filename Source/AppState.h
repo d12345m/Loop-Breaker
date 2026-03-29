@@ -182,6 +182,8 @@ struct AppState : public ModifierSchedulerListener
             snap.chorusEnabled     = fx.chorusEnabled;
             snap.autoPanEnabled    = fx.autoPanEnabled;
             snap.volumeRampEnabled = fx.volumeRampEnabled;
+            snap.shLowPassEnabled  = fx.shLowPassEnabled;
+            snap.shHighPassEnabled = fx.shHighPassEnabled;
 
             // ChannelStrip FxParams
             const auto& fp = strip->getFxParams();
@@ -216,6 +218,11 @@ struct AppState : public ModifierSchedulerListener
             snap.panMix                 = fp.panMix;
             snap.panPeriodBars          = fp.panPeriodBars;
             snap.volumeGain             = fp.volumeGain;
+            snap.shLpfCutoff            = fp.shLpfCutoff;
+            snap.shLpfQ                 = fp.shLpfQ;
+            snap.shHpfCutoff            = fp.shHpfCutoff;
+            snap.shHpfQ                 = fp.shHpfQ;
+            snap.shDivisionBars         = fp.shDivisionBars;
         }
     }
 
@@ -267,6 +274,8 @@ struct AppState : public ModifierSchedulerListener
             fx.chorusEnabled     = snap.chorusEnabled;
             fx.autoPanEnabled    = snap.autoPanEnabled;
             fx.volumeRampEnabled = snap.volumeRampEnabled;
+            fx.shLowPassEnabled  = snap.shLowPassEnabled;
+            fx.shHighPassEnabled = snap.shHighPassEnabled;
 
             auto& fp = strip->getMutableFxParams();
             fp.reverbWet              = snap.reverbWet;
@@ -300,6 +309,11 @@ struct AppState : public ModifierSchedulerListener
             fp.panMix                 = snap.panMix;
             fp.panPeriodBars          = snap.panPeriodBars;
             fp.volumeGain             = snap.volumeGain;
+            fp.shLpfCutoff            = snap.shLpfCutoff;
+            fp.shLpfQ                 = snap.shLpfQ;
+            fp.shHpfCutoff            = snap.shHpfCutoff;
+            fp.shHpfQ                 = snap.shHpfQ;
+            fp.shDivisionBars         = snap.shDivisionBars;
 
             // Reset playhead to the beginning of the file (or loop bracket start
             // if parts are active) so preset recall behaves like a fresh start,
@@ -389,6 +403,12 @@ struct AppState : public ModifierSchedulerListener
                 break;
             case ModifierType::BufferHighPassOn:
                 applyBufferHighPassOn(targets);
+                break;
+            case ModifierType::BufferSHLowPassOn:
+                applyBufferSHLowPassOn(desc, targets);
+                break;
+            case ModifierType::BufferSHHighPassOn:
+                applyBufferSHHighPassOn(desc, targets);
                 break;
             case ModifierType::MasterLowPassOn:
             {
@@ -977,6 +997,44 @@ private:
                 // Reset HPF cutoff down to default (20 Hz) over 1 bar
                 strip.setHighPassCutoffEnvelope(strip.getFxParams().highPassCutoff, 20.0f, 1.0f);
                 strip.effects().highPassEnabled = true; // keep on during ramp
+            }
+        }
+    }
+
+    void applyBufferSHLowPassOn(const ModifierDescriptor& desc, const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        float divBars = (float) desc.plannedSHDivisionBars.value_or(0.25);
+        for (int idx : targets)
+        {
+            if (juce::isPositiveAndBelow(idx, channelStrips.size()))
+            {
+                auto& strip = *channelStrips[idx];
+                strip.effects().shLowPassEnabled = true;
+                strip.getMutableFxParams().shDivisionBars = divBars;
+                // Immediately seed initial S&H values
+                juce::Random rng;
+                strip.getMutableFxParams().shLpfCutoff = 200.0f + rng.nextFloat() * (8000.0f - 200.0f);
+                strip.getMutableFxParams().shLpfQ = 0.5f + rng.nextFloat() * (4.0f - 0.5f);
+            }
+        }
+    }
+
+    void applyBufferSHHighPassOn(const ModifierDescriptor& desc, const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        float divBars = (float) desc.plannedSHDivisionBars.value_or(0.25);
+        for (int idx : targets)
+        {
+            if (juce::isPositiveAndBelow(idx, channelStrips.size()))
+            {
+                auto& strip = *channelStrips[idx];
+                strip.effects().shHighPassEnabled = true;
+                strip.getMutableFxParams().shDivisionBars = divBars;
+                // Immediately seed initial S&H values
+                juce::Random rng;
+                strip.getMutableFxParams().shHpfCutoff = 60.0f + rng.nextFloat() * (800.0f - 60.0f);
+                strip.getMutableFxParams().shHpfQ = 0.5f + rng.nextFloat() * (4.0f - 0.5f);
             }
         }
     }

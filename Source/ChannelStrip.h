@@ -24,8 +24,10 @@ struct EffectChainPlaceholder
     bool chorusEnabled = false;
     bool autoPanEnabled = false;
     bool volumeRampEnabled = false;
+    bool shLowPassEnabled = false;
+    bool shHighPassEnabled = false;
 
-    void reset() { delayEnabled = reverbEnabled = lowPassEnabled = highPassEnabled = tremoloEnabled = chorusEnabled = autoPanEnabled = volumeRampEnabled = false; }
+    void reset() { delayEnabled = reverbEnabled = lowPassEnabled = highPassEnabled = tremoloEnabled = chorusEnabled = autoPanEnabled = volumeRampEnabled = shLowPassEnabled = shHighPassEnabled = false; }
 };
 
 class ChannelStrip
@@ -72,10 +74,16 @@ public:
                 highPass[ch].prepare(filterSpec);
                 delayFbHighCut[ch].reset();
                 delayFbHighCut[ch].prepare(filterSpec);
+                shLowPass[ch].reset();
+                shLowPass[ch].prepare(filterSpec);
+                shHighPass[ch].reset();
+                shHighPass[ch].prepare(filterSpec);
             }
             updateLowPassCoeffs(params.lowPassCutoff);
             updateHighPassCoeffs(params.highPassCutoff);
             updateDelayHighCutCoeffs(params.delayFeedbackHighCutHz);
+            updateSHLowPassCoeffs(params.shLpfCutoff, params.shLpfQ);
+            updateSHHighPassCoeffs(params.shHpfCutoff, params.shHpfQ);
 
             // §6.3  Pre-allocate ducking gains buffer so processDSP never
             // calls resize() on the audio thread.
@@ -246,6 +254,30 @@ public:
 
             // Clip probe: after low-pass
             if (clipProbes) (*clipProbes)[NodeId::LowPass].inspect(tempBuffer, numSamples);
+        }
+
+        // --- S&H Low-pass filter (IIR with variable Q) ---
+        if (effects().shLowPassEnabled)
+        {
+            updateSHLowPassCoeffs(params.shLpfCutoff, params.shLpfQ);
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                auto* data = tempBuffer.getWritePointer(ch);
+                for (int i = 0; i < numSamples; ++i)
+                    data[i] = shLowPass[ch].processSample(data[i]);
+            }
+        }
+
+        // --- S&H High-pass filter (IIR with variable Q) ---
+        if (effects().shHighPassEnabled)
+        {
+            updateSHHighPassCoeffs(params.shHpfCutoff, params.shHpfQ);
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                auto* data = tempBuffer.getWritePointer(ch);
+                for (int i = 0; i < numSamples; ++i)
+                    data[i] = shHighPass[ch].processSample(data[i]);
+            }
         }
 
         // --- Tremolo (vectorizable gain modulation) ---
@@ -554,6 +586,12 @@ public:
         float panMix = 0.5f;         // 0..1 wet/dry (0 = bypass)
         float panPeriodBars = 0.0f;  // musical period in bars (for BPM resync)
         float volumeGain = 1.0f;      // 0..1 overall channel gain (used by volume ramp modifier)
+        // S&H filter parameters (persistent until reset)
+        float shLpfCutoff = 4000.0f;  // current held low-pass cutoff (200..8000 Hz)
+        float shLpfQ = 1.0f;          // current held low-pass Q (0.5..4.0)
+        float shHpfCutoff = 200.0f;   // current held high-pass cutoff (60..800 Hz)
+        float shHpfQ = 1.0f;          // current held high-pass Q (0.5..4.0)
+        float shDivisionBars = 0.25f; // S&H rate: 0.0625=1/16, 0.125=1/8, 0.25=1/4
     };
 
     void reset()
@@ -571,6 +609,7 @@ public:
         panMixEnv = {};
         volumeGainEnv = {};
         tempVolRamp = {};
+        shPhaseBars = 0.0f;
         if (buffer) buffer->resetToDefaults();
     }
 
@@ -730,6 +769,27 @@ public:
             chain.volumeRampEnabled = false;
             tempVolRamp.active = false;
         }
+        // S&H filter: advance phase and trigger new random cutoff/Q at each division
+        if (chain.shLowPassEnabled || chain.shHighPassEnabled)
+        {
+            shPhaseBars += barsDelta;
+            const float div = juce::jmax(0.001f, params.shDivisionBars);
+            if (shPhaseBars >= div)
+            {
+                shPhaseBars -= div;
+                if (shPhaseBars >= div) shPhaseBars = 0.0f; // safety for large jumps
+                if (chain.shLowPassEnabled)
+                {
+                    params.shLpfCutoff = 200.0f + shRng.nextFloat() * (8000.0f - 200.0f);
+                    params.shLpfQ = 0.5f + shRng.nextFloat() * (4.0f - 0.5f);
+                }
+                if (chain.shHighPassEnabled)
+                {
+                    params.shHpfCutoff = 60.0f + shRng.nextFloat() * (800.0f - 60.0f);
+                    params.shHpfQ = 0.5f + shRng.nextFloat() * (4.0f - 0.5f);
+                }
+            }
+        }
     }
 
     const FxParams& getFxParams() const { return params; }
@@ -791,6 +851,15 @@ private:
     juce::dsp::IIR::Filter<float> lowPass[2];
     juce::dsp::IIR::Filter<float> highPass[2];
     juce::dsp::IIR::Filter<float> delayFbHighCut[2];
+    // S&H filters (separate from envelope-based filters; persistent until reset)
+    juce::dsp::IIR::Filter<float> shLowPass[2];
+    juce::dsp::IIR::Filter<float> shHighPass[2];
+    float lastSHLpfCutoff = 0.0f;
+    float lastSHLpfQ = 0.0f;
+    float lastSHHpfCutoff = 0.0f;
+    float lastSHHpfQ = 0.0f;
+    float shPhaseBars = 0.0f;      // accumulated bars since last S&H trigger
+    juce::Random shRng;             // per-strip RNG for S&H randomization
     float lastLowPassCutoff = 0.0f;
     float lastHighPassCutoff = 0.0f;
     float lastDelayHighCut = 0.0f;
@@ -875,6 +944,26 @@ public:
         auto coeff = juce::dsp::IIR::Coefficients<float>::makeLowPass(lastSampleRate, cutoff);
         for (int ch = 0; ch < 2; ++ch) *delayFbHighCut[ch].coefficients = *coeff;
         lastDelayHighCut = cutoff;
+    }
+    void updateSHLowPassCoeffs(float cutoff, float q)
+    {
+        cutoff = juce::jlimit(20.0f, 20000.0f, cutoff);
+        q = juce::jlimit(0.1f, 10.0f, q);
+        if (std::abs(cutoff - lastSHLpfCutoff) < 1.0f && std::abs(q - lastSHLpfQ) < 0.01f) return;
+        auto coeff = juce::dsp::IIR::Coefficients<float>::makeLowPass(lastSampleRate, cutoff, q);
+        for (int ch = 0; ch < 2; ++ch) *shLowPass[ch].coefficients = *coeff;
+        lastSHLpfCutoff = cutoff;
+        lastSHLpfQ = q;
+    }
+    void updateSHHighPassCoeffs(float cutoff, float q)
+    {
+        cutoff = juce::jlimit(20.0f, 20000.0f, cutoff);
+        q = juce::jlimit(0.1f, 10.0f, q);
+        if (std::abs(cutoff - lastSHHpfCutoff) < 1.0f && std::abs(q - lastSHHpfQ) < 0.01f) return;
+        auto coeff = juce::dsp::IIR::Coefficients<float>::makeHighPass(lastSampleRate, cutoff, q);
+        for (int ch = 0; ch < 2; ++ch) *shHighPass[ch].coefficients = *coeff;
+        lastSHHpfCutoff = cutoff;
+        lastSHHpfQ = q;
     }
     struct DubBurstState { bool active = false; bool fallingStarted = false; float fallTarget = 0.0f; float fallDurationBars = 0.0f; } dubBurst;
 };

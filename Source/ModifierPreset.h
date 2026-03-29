@@ -42,6 +42,8 @@ struct BufferModifierSnapshot
     bool chorusEnabled         = false;
     bool autoPanEnabled        = false;
     bool volumeRampEnabled     = false;
+    bool shLowPassEnabled      = false;
+    bool shHighPassEnabled     = false;
 
     // ── ChannelStrip FxParams ──
     float reverbWet            = 0.0f;
@@ -75,6 +77,11 @@ struct BufferModifierSnapshot
     float panMix               = 0.5f;
     float panPeriodBars        = 0.0f;
     float volumeGain           = 1.0f;
+    float shLpfCutoff          = 4000.0f;
+    float shLpfQ               = 1.0f;
+    float shHpfCutoff          = 200.0f;
+    float shHpfQ               = 1.0f;
+    float shDivisionBars       = 0.25f;
 
     // ── Serialization ──
     juce::var toVar() const
@@ -101,6 +108,8 @@ struct BufferModifierSnapshot
         o->setProperty("fxChorus",     chorusEnabled);
         o->setProperty("fxPan",        autoPanEnabled);
         o->setProperty("fxVolRamp",    volumeRampEnabled);
+        o->setProperty("fxShLpf",      shLowPassEnabled);
+        o->setProperty("fxShHpf",      shHighPassEnabled);
 
         o->setProperty("revWet",       (double) reverbWet);
         o->setProperty("revPdMs",      (double) reverbPreDelayMs);
@@ -133,6 +142,11 @@ struct BufferModifierSnapshot
         o->setProperty("panMix",       (double) panMix);
         o->setProperty("panBars",      (double) panPeriodBars);
         o->setProperty("volGain",      (double) volumeGain);
+        o->setProperty("shLpfCut",     (double) shLpfCutoff);
+        o->setProperty("shLpfQ",       (double) shLpfQ);
+        o->setProperty("shHpfCut",     (double) shHpfCutoff);
+        o->setProperty("shHpfQ",       (double) shHpfQ);
+        o->setProperty("shDivBars",    (double) shDivisionBars);
 
         return juce::var(o);
     }
@@ -170,6 +184,8 @@ struct BufferModifierSnapshot
         s.chorusEnabled            = getB("fxChorus", false);
         s.autoPanEnabled           = getB("fxPan",    false);
         s.volumeRampEnabled        = getB("fxVolRamp",false);
+        s.shLowPassEnabled         = getB("fxShLpf",  false);
+        s.shHighPassEnabled        = getB("fxShHpf",  false);
 
         s.reverbWet                = getF("revWet",   0.0f);
         s.reverbPreDelayMs         = getF("revPdMs",  0.0f);
@@ -202,6 +218,11 @@ struct BufferModifierSnapshot
         s.panMix                   = getF("panMix",   0.5f);
         s.panPeriodBars            = getF("panBars",  0.0f);
         s.volumeGain               = getF("volGain",  1.0f);
+        s.shLpfCutoff              = getF("shLpfCut", 4000.0f);
+        s.shLpfQ                   = getF("shLpfQ",   1.0f);
+        s.shHpfCutoff              = getF("shHpfCut", 200.0f);
+        s.shHpfQ                   = getF("shHpfQ",   1.0f);
+        s.shDivisionBars           = getF("shDivBars",0.25f);
 
         return s;
     }

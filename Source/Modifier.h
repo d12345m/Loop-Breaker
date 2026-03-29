@@ -47,6 +47,8 @@ enum class ModifierType
     BufferDuckingOn,
     BufferChorusOn,
     BufferAutoPan,
+    BufferSHLowPassOn,
+    BufferSHHighPassOn,
 
     // Master FX modifiers
     MasterHighPassOn,
@@ -108,6 +110,8 @@ struct ModifierDescriptor
     std::optional<double> plannedPanMix;          // 0.0..1.0 wet/dry blend (0 = bypass)
     // For PingPong: musical note division for oscillation (e.g., 1.0=whole, 0.5=half, 0.25=quarter, 0.125=eighth, 0.0625=sixteenth)
     std::optional<double> plannedPingPongDivision; // Musical division in bars
+    // S&H Filter: musical division for sample-and-hold rate (0.0625=1/16, 0.125=1/8, 0.25=1/4)
+    std::optional<double> plannedSHDivisionBars;
 };
 
 // Execution context passed to modifiers when ultimately applied.

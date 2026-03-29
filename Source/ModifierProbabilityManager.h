@@ -127,6 +127,8 @@ public:
             case ModifierType::BufferChorusOn:       return "Chorus";
             case ModifierType::BufferAutoPan:         return "Auto-Pan";
             case ModifierType::BufferDuckingOn:     return "Ducking";
+            case ModifierType::BufferSHLowPassOn:   return "S&H Low-Pass";
+            case ModifierType::BufferSHHighPassOn:  return "S&H High-Pass";
             case ModifierType::MasterHighPassOn:    return "Master High-Pass";
             case ModifierType::MasterLowPassOn:     return "Master Low-Pass";
             case ModifierType::SwitchPart:          return "Switch Part";
@@ -162,6 +164,8 @@ public:
             case ModifierType::BufferChorusOn:
             case ModifierType::BufferAutoPan:
             case ModifierType::BufferDuckingOn:
+            case ModifierType::BufferSHLowPassOn:
+            case ModifierType::BufferSHHighPassOn:
                 return "Channel Effect";
 
             case ModifierType::MasterHighPassOn:
@@ -204,6 +208,8 @@ public:
             ModifierType::BufferChorusOn,
             ModifierType::BufferAutoPan,
             ModifierType::BufferDuckingOn,
+            ModifierType::BufferSHLowPassOn,
+            ModifierType::BufferSHHighPassOn,
             // Master FX
             ModifierType::MasterHighPassOn,
             ModifierType::MasterLowPassOn,

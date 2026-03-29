@@ -89,6 +89,8 @@ juce::OwnedArray<IModifier> ModifierFactory::createAllPrototypes()
     add(ModifierType::BufferTremolo, ModifierCategory::BufferEffect, "Tremolo", "Apply tremolo at 1/8-note rate, depth ramping to 50% over 2 bars");
     add(ModifierType::BufferChorusOn, ModifierCategory::BufferEffect, "Chorus", "Enable chorus with randomized depth, rate, mix, and fade");
     add(ModifierType::BufferAutoPan, ModifierCategory::BufferEffect, "Auto-Pan", "Stereo auto-pan with randomized rate, depth, mix, and fade");
+    add(ModifierType::BufferSHLowPassOn, ModifierCategory::BufferEffect, "S&H Low-Pass", "Persistent low-pass filter with sample-and-hold modulated cutoff and Q");
+    add(ModifierType::BufferSHHighPassOn, ModifierCategory::BufferEffect, "S&H High-Pass", "Persistent high-pass filter with sample-and-hold modulated cutoff and Q");
 
     // Master FX
     add(ModifierType::MasterHighPassOn, ModifierCategory::MasterEffect, "Master High-Pass", "Temporary master high-pass filter (2-16 bars, ramp or jump mode)");

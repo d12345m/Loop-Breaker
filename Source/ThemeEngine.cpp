@@ -513,6 +513,47 @@ static ThemePalette makeGruvbox()
     return p;
 }
 
+static ThemePalette makeMarathon()
+{
+    ThemePalette p;
+    p.name          = "Marathon (Dark)";
+
+    p.bg            = hex (0x08060E);
+    p.bgAlt         = hex (0x120E1C);
+    p.panel         = hex (0x1A1428);
+    p.panelAlt      = hex (0x221A32);
+
+    p.border        = hex (0x382E4E);
+    p.borderGlow    = hex (0x00DCFF);
+
+    p.textPrimary   = hex (0xF0F0FF);
+    p.textSecondary = hex (0x8878A8);
+    p.textOnAccent  = hex (0x08060E);
+
+    p.accent1       = hex (0x00DCFF);   // CMYK Cyan
+    p.accent2       = hex (0xFF00D4);   // CMYK Magenta
+    p.accent3       = hex (0xFFE500);   // CMYK Yellow
+
+    p.good          = hex (0xB8FF00);
+    p.warn          = hex (0xFFE500);
+    p.bad           = hex (0xFF0057);
+
+    p.knobFill      = hex (0x00DCFF);
+    p.knobTrack     = hex (0x221A32);
+    p.waveformFill  = hex (0xFF00D4);
+    p.playhead      = hex (0xFFE500);
+
+    p.padEmpty      = hex (0x120E1C);
+    p.padLoaded     = hex (0x221A32);
+    p.padSelected   = hexA (0x00DCFF, 0.15f);
+    p.padPlaying    = hex (0xFFE500);
+
+    p.glowIntensity = 0.9f;
+    p.borderRadius  = 5.0f;
+
+    return p;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  ThemeEngine implementation
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -524,6 +565,7 @@ ThemeEngine::ThemeEngine()
     builtInPalettes.push_back (makeDaylight());
     builtInPalettes.push_back (makeGruvbox());
     builtInPalettes.push_back (makeIvory());
+    builtInPalettes.push_back (makeMarathon());
     builtInPalettes.push_back (makeNeonRave());
     builtInPalettes.push_back (makePixelGrid());
     builtInPalettes.push_back (makeSilver());

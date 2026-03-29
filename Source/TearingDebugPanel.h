@@ -5,10 +5,36 @@
 #include "ThemeFonts.h"
 
 /**
+ * Custom LookAndFeel for tearing debug tooltips with high-contrast styling.
+ */
+class TearingTooltipLookAndFeel : public juce::LookAndFeel_V4
+{
+public:
+    void drawTooltip(juce::Graphics& g, const juce::String& text, int width, int height) override
+    {
+        g.fillAll(juce::Colour(0xFF1A1A2E));
+        g.setColour(juce::Colour(0xFF5599FF));
+        g.drawRect(0, 0, width, height, 1);
+        g.setColour(juce::Colour(0xFFE0E0E0));
+        g.setFont(12.0f);
+        g.drawFittedText(text, 4, 2, width - 8, height - 4, juce::Justification::centredLeft, 3);
+    }
+
+    juce::Rectangle<int> getTooltipBounds(const juce::String& text, juce::Point<int> screenPos, juce::Rectangle<int> parentArea) override
+    {
+        auto font = juce::Font(12.0f);
+        auto w = juce::jmin(400, (int)font.getStringWidthFloat(text) + 16);
+        auto h = 22;
+        return { screenPos.x > parentArea.getCentreX() ? screenPos.x - w - 4 : screenPos.x + 8,
+                 screenPos.y + 18, w, h };
+    }
+};
+
+/**
  * Debug panel that displays tearing detection statistics for all audio buffers.
  * Only shows meaningful data in JUCE_DEBUG builds.
  */
-class TearingDebugPanel : public juce::Component, private juce::Timer
+class TearingDebugPanel : public juce::Component, public juce::TooltipClient, private juce::Timer
 {
 public:
     explicit TearingDebugPanel(AppState& appState) : app(appState)
@@ -23,6 +49,14 @@ public:
         enableToggle.setToggleState(true, juce::dontSendNotification);
         enableToggle.onClick = [this]{ toggleDebugEnabled(); };
         addAndMakeVisible(enableToggle);
+        
+        tooltipWindow.setLookAndFeel(&tooltipLnf);
+        tooltipWindow.setMillisecondsBeforeTipAppears(400);
+    }
+    
+    ~TearingDebugPanel() override
+    {
+        tooltipWindow.setLookAndFeel(nullptr);
     }
 
     void paint(juce::Graphics& g) override
@@ -49,24 +83,33 @@ public:
         g.setColour(Theme::textSubtle());
         auto headerRow = area.removeFromTop(lineH);
         const int colW = 30; // Compact column width
-        g.drawText("P", headerRow.removeFromLeft(18), juce::Justification::centredLeft);
-        g.drawText("Emty", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
-        g.drawText("Undr", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
-        g.drawText("Maj", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
-        g.drawText("Med", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
-        g.drawText("Min", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
-        g.drawText("Zero", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
-        g.drawText("Clip", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
-        g.drawText("NaN", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
-        g.drawText("RMS", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
-        g.drawText("Dir", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
-        g.drawText("Jmp", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
-        g.drawText("Trn", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
-        g.drawText("Rst", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
-        g.drawText("DC", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
-        g.drawText("LaXF", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
-        g.drawText("LaMs", headerRow.removeFromLeft(colW), juce::Justification::centredLeft);
-        g.drawText("LaAb", headerRow, juce::Justification::centredLeft);
+        headerColumnBounds.clear();
+        
+        auto drawHeader = [&](const juce::String& label, int width, bool takeRemaining = false)
+        {
+            auto colRect = takeRemaining ? headerRow : headerRow.removeFromLeft(width);
+            g.drawText(label, colRect, juce::Justification::centredLeft);
+            headerColumnBounds.push_back(colRect);
+        };
+        
+        drawHeader("P", 18);
+        drawHeader("Emty", colW);
+        drawHeader("Undr", colW);
+        drawHeader("Maj", colW);
+        drawHeader("Med", colW);
+        drawHeader("Min", colW);
+        drawHeader("Zero", colW);
+        drawHeader("Clip", colW);
+        drawHeader("NaN", colW);
+        drawHeader("RMS", colW);
+        drawHeader("Dir", colW);
+        drawHeader("Jmp", colW);
+        drawHeader("Trn", colW);
+        drawHeader("Rst", colW);
+        drawHeader("DC", colW);
+        drawHeader("LaXF", colW);
+        drawHeader("LaMs", colW);
+        drawHeader("LaAb", colW, true);
         
         area.removeFromTop(1);
         
@@ -183,6 +226,37 @@ public:
 #endif
     }
     
+    juce::String getTooltip() override
+    {
+        static const juce::String descriptions[] = {
+            "Pad number",
+            "Empty output buffers - no audio data available",
+            "Partial underfills - buffer not completely filled",
+            "Major discontinuities - large sample jumps",
+            "Medium discontinuities - moderate sample jumps",
+            "Minor discontinuities - small sample jumps",
+            "Zero sample runs - consecutive zero-value samples",
+            "Clipped samples - values exceeding +/-1.0",
+            "NaN/Inf samples - invalid floating-point values",
+            "RMS jumps - sudden level changes",
+            "Direction flips - playback direction reversals",
+            "Slice jumps - non-contiguous slice transitions",
+            "Mode transitions - playback mode changes",
+            "SoundTouch resets - time-stretch engine resets",
+            "DC offset drifts - signal baseline shifts",
+            "Lookahead pre-crossfades - crossfade blends applied",
+            "Lookahead mispredictions - incorrect lookahead estimates",
+            "Lookahead aborts - cancelled lookahead operations"
+        };
+        
+        auto mousePos = getMouseXYRelative();
+        for (size_t i = 0; i < headerColumnBounds.size(); ++i)
+            if (headerColumnBounds[i].contains(mousePos))
+                return descriptions[i];
+        
+        return {};
+    }
+    
     void resized() override
     {
         auto area = getLocalBounds().reduced(4);
@@ -198,6 +272,9 @@ private:
     AppState& app;
     juce::TextButton resetButton;
     juce::ToggleButton enableToggle;
+    TearingTooltipLookAndFeel tooltipLnf;
+    juce::TooltipWindow tooltipWindow { this };
+    std::vector<juce::Rectangle<int>> headerColumnBounds;
     
     void timerCallback() override 
     { 

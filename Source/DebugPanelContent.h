@@ -2,7 +2,7 @@
  ==============================================================================
    DebugPanelContent.h
    --------------------------------------------------------------------------
-   Aggregates debug/dev panels: Modifier History, FX Status, Tearing Debug,
+   Aggregates debug/dev panels: Modifier History, Tearing Debug,
    and the Modifier Selection (force-pick) panel.  Lives in its own tab so
    the Session tab stays clean.
  ==============================================================================
@@ -13,7 +13,6 @@
 #include <JuceHeader.h>
 #include "ModifierHistoryPanel.h"
 #include "ModifierSelectionPanel.h"
-#include "FxStatusPanel.h"
 #include "TearingDebugPanel.h"
 #include "NodeClipDebugPanel.h"
 #include "ThemeEngine.h"
@@ -23,8 +22,7 @@ class DebugPanelContent : public juce::Component
 {
 public:
     explicit DebugPanelContent(AppState& appState)
-        : fxStatusPanel(appState),
-          tearingDebugPanel(appState),
+        : tearingDebugPanel(appState),
           nodeClipDebugPanel(appState)
     {
         addAndMakeVisible(modifierHistory);
@@ -32,28 +30,24 @@ public:
         modifierSelectionViewport.setViewedComponent(&modifierSelectionPanel, false);
         addAndMakeVisible(modifierSelectionViewport);
 
-        addAndMakeVisible(fxStatusPanel);
         addAndMakeVisible(tearingDebugPanel);
         addAndMakeVisible(nodeClipDebugPanel);
 
         // Resizer bars
         addAndMakeVisible(horizontalDivider);
         addAndMakeVisible(verticalDivider1);
-        addAndMakeVisible(verticalDivider2);
 
         // Horizontal: history (left) | divider | right stack
         horizontalLayout.setItemLayout(0, 200, -1.0, 400);
         horizontalLayout.setItemLayout(1, 8, 8, 8);
         horizontalLayout.setItemLayout(2, 200, -1.0, 400);
 
-        // Vertical (right column): modifier selection | fx status | tearing debug | node clip debug
+        // Vertical (right column): modifier selection | tearing debug | node clip debug
         verticalLayout.setItemLayout(0, 100, -1.0, 180);
         verticalLayout.setItemLayout(1, 8, 8, 8);
-        verticalLayout.setItemLayout(2, 60, -1.0, 100);
+        verticalLayout.setItemLayout(2, 80, -1.0, 180);
         verticalLayout.setItemLayout(3, 8, 8, 8);
-        verticalLayout.setItemLayout(4, 80, -1.0, 180);
-        verticalLayout.setItemLayout(5, 8, 8, 8);
-        verticalLayout.setItemLayout(6, 100, -1.0, -1.0);
+        verticalLayout.setItemLayout(4, 100, -1.0, -1.0);
 
         modifierSelectionPanel.setForceSelectionCallback([&appState](ModifierType type) {
             appState.scheduler.forceUpcomingModifier(type);
@@ -86,10 +80,9 @@ public:
 
         // Vertical split inside right panel
         juce::Component* vComps[] = { &modifierSelectionViewport, &verticalDivider1,
-                                      &fxStatusPanel, &verticalDivider2,
-                                      &tearingDebugPanel, &verticalDivider3,
+                                      &tearingDebugPanel, &verticalDivider2,
                                       &nodeClipDebugPanel };
-        verticalLayout.layOutComponents(vComps, 7,
+        verticalLayout.layOutComponents(vComps, 5,
                                         rightPanel.getX(), rightPanel.getY(),
                                         rightPanel.getWidth(), rightPanel.getHeight(),
                                         true, true);
@@ -109,7 +102,6 @@ private:
     ModifierSelectionPanel modifierSelectionPanel;
     juce::Viewport modifierSelectionViewport;
 
-    FxStatusPanel fxStatusPanel;
     TearingDebugPanel tearingDebugPanel;
     NodeClipDebugPanel nodeClipDebugPanel;
 
@@ -119,7 +111,6 @@ private:
     juce::StretchableLayoutManager verticalLayout;
     juce::StretchableLayoutResizerBar verticalDivider1 { &verticalLayout, 1, true };
     juce::StretchableLayoutResizerBar verticalDivider2 { &verticalLayout, 3, true };
-    juce::StretchableLayoutResizerBar verticalDivider3 { &verticalLayout, 5, true };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DebugPanelContent)
 };

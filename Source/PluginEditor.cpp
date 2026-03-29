@@ -6,7 +6,6 @@
 #include "PadGridComponent.h"
 #include "ModifierHistoryPanel.h"
 #include "ModifierSelectionPanel.h"
-#include "FxStatusPanel.h"
 #include "TearingDebugPanel.h"
 #include "ModifierProbabilityPanel.h"
 #if JUCE_DEBUG

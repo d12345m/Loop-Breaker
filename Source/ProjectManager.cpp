@@ -35,6 +35,11 @@ bool ProjectManager::loadProject(const juce::File& file)
     settings.timeSigNumerator    = (int)getOr("tsNum", settings.timeSigNumerator);
     settings.timeSigDenominator  = (int)getOr("tsDen", settings.timeSigDenominator);
     settings.barsBetweenModifiers= (int)getOr("barsBetweenModifiers", settings.barsBetweenModifiers);
+    settings.cadenceMode         = static_cast<CadenceMode>((int)getOr("cadenceMode", (int)settings.cadenceMode));
+    settings.barsRangeMin        = (int)getOr("barsRangeMin", settings.barsRangeMin);
+    settings.barsRangeMax        = (int)getOr("barsRangeMax", settings.barsRangeMax);
+    settings.timedIntervalMinSec = (double)getOr("timedIntervalMinSec", settings.timedIntervalMinSec);
+    settings.timedIntervalMaxSec = (double)getOr("timedIntervalMaxSec", settings.timedIntervalMaxSec);
     settings.quantizeEnabled     = (bool)getOr("quantizeEnabled", settings.quantizeEnabled);
     settings.quantizeSubdivision = (int)getOr("quantizeSubdivision", settings.quantizeSubdivision);
     // Parts
@@ -75,6 +80,11 @@ bool ProjectManager::saveProject(const juce::File& directory, bool overwrite) co
     obj->setProperty("tsNum", settings.timeSigNumerator);
     obj->setProperty("tsDen", settings.timeSigDenominator);
     obj->setProperty("barsBetweenModifiers", settings.barsBetweenModifiers);
+    obj->setProperty("cadenceMode", (int)settings.cadenceMode);
+    obj->setProperty("barsRangeMin", settings.barsRangeMin);
+    obj->setProperty("barsRangeMax", settings.barsRangeMax);
+    obj->setProperty("timedIntervalMinSec", settings.timedIntervalMinSec);
+    obj->setProperty("timedIntervalMaxSec", settings.timedIntervalMaxSec);
     obj->setProperty("quantizeEnabled", settings.quantizeEnabled);
     obj->setProperty("quantizeSubdivision", settings.quantizeSubdivision);
     // Parts

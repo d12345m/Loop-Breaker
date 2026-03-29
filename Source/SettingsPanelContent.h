@@ -85,6 +85,110 @@ public:
             if (onBarsChanged) onBarsChanged (settings.barsBetweenModifiers);
         };
 
+        // ── Cadence mode dropdown ───────────────────────────────────────
+        addAndMakeVisible (cadenceModeLabel);
+        cadenceModeLabel.setText ("Cadence Mode", juce::dontSendNotification);
+        cadenceModeLabel.setJustificationType (juce::Justification::centredRight);
+        cadenceModeLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
+
+        addAndMakeVisible (cadenceModeCombo);
+        cadenceModeCombo.addItem ("Fixed",    1);
+        cadenceModeCombo.addItem ("Variable", 2);
+        cadenceModeCombo.addItem ("Timed",    3);
+        cadenceModeCombo.setSelectedId ((int) settings.cadenceMode + 1, juce::dontSendNotification);
+        cadenceModeCombo.onChange = [this]
+        {
+            settings.cadenceMode = static_cast<CadenceMode> (cadenceModeCombo.getSelectedId() - 1);
+            updateCadenceVisibility();
+        };
+
+        // ── Variable cadence range (min/max bars) ──────────────────────
+        addAndMakeVisible (barsRangeMinLabel);
+        barsRangeMinLabel.setText ("Min Bars", juce::dontSendNotification);
+        barsRangeMinLabel.setJustificationType (juce::Justification::centredRight);
+        barsRangeMinLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
+
+        addAndMakeVisible (barsRangeMinSlider);
+        barsRangeMinSlider.setRange (1.0, 16.0, 1.0);
+        barsRangeMinSlider.setValue (settings.barsRangeMin, juce::dontSendNotification);
+        barsRangeMinSlider.setSliderStyle (juce::Slider::LinearHorizontal);
+        barsRangeMinSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 44, 22);
+        barsRangeMinSlider.onValueChange = [this]
+        {
+            settings.barsRangeMin = juce::jlimit (1, 16, (int) barsRangeMinSlider.getValue());
+            if (settings.barsRangeMax < settings.barsRangeMin)
+            {
+                settings.barsRangeMax = settings.barsRangeMin;
+                barsRangeMaxSlider.setValue (settings.barsRangeMax, juce::dontSendNotification);
+            }
+        };
+
+        addAndMakeVisible (barsRangeMaxLabel);
+        barsRangeMaxLabel.setText ("Max Bars", juce::dontSendNotification);
+        barsRangeMaxLabel.setJustificationType (juce::Justification::centredRight);
+        barsRangeMaxLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
+
+        addAndMakeVisible (barsRangeMaxSlider);
+        barsRangeMaxSlider.setRange (1.0, 16.0, 1.0);
+        barsRangeMaxSlider.setValue (settings.barsRangeMax, juce::dontSendNotification);
+        barsRangeMaxSlider.setSliderStyle (juce::Slider::LinearHorizontal);
+        barsRangeMaxSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 44, 22);
+        barsRangeMaxSlider.onValueChange = [this]
+        {
+            settings.barsRangeMax = juce::jlimit (1, 16, (int) barsRangeMaxSlider.getValue());
+            if (settings.barsRangeMin > settings.barsRangeMax)
+            {
+                settings.barsRangeMin = settings.barsRangeMax;
+                barsRangeMinSlider.setValue (settings.barsRangeMin, juce::dontSendNotification);
+            }
+        };
+
+        // ── Timed cadence range (min/max seconds) ──────────────────────
+        addAndMakeVisible (timedMinLabel);
+        timedMinLabel.setText ("Min Time", juce::dontSendNotification);
+        timedMinLabel.setJustificationType (juce::Justification::centredRight);
+        timedMinLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
+
+        addAndMakeVisible (timedMinSlider);
+        timedMinSlider.setRange (5.0, 300.0, 1.0);
+        timedMinSlider.setValue (settings.timedIntervalMinSec, juce::dontSendNotification);
+        timedMinSlider.setSliderStyle (juce::Slider::LinearHorizontal);
+        timedMinSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 52, 22);
+        timedMinSlider.setTextValueSuffix ("s");
+        timedMinSlider.onValueChange = [this]
+        {
+            settings.timedIntervalMinSec = timedMinSlider.getValue();
+            if (settings.timedIntervalMaxSec < settings.timedIntervalMinSec)
+            {
+                settings.timedIntervalMaxSec = settings.timedIntervalMinSec;
+                timedMaxSlider.setValue (settings.timedIntervalMaxSec, juce::dontSendNotification);
+            }
+        };
+
+        addAndMakeVisible (timedMaxLabel);
+        timedMaxLabel.setText ("Max Time", juce::dontSendNotification);
+        timedMaxLabel.setJustificationType (juce::Justification::centredRight);
+        timedMaxLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
+
+        addAndMakeVisible (timedMaxSlider);
+        timedMaxSlider.setRange (5.0, 300.0, 1.0);
+        timedMaxSlider.setValue (settings.timedIntervalMaxSec, juce::dontSendNotification);
+        timedMaxSlider.setSliderStyle (juce::Slider::LinearHorizontal);
+        timedMaxSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 52, 22);
+        timedMaxSlider.setTextValueSuffix ("s");
+        timedMaxSlider.onValueChange = [this]
+        {
+            settings.timedIntervalMaxSec = timedMaxSlider.getValue();
+            if (settings.timedIntervalMinSec > settings.timedIntervalMaxSec)
+            {
+                settings.timedIntervalMinSec = settings.timedIntervalMaxSec;
+                timedMinSlider.setValue (settings.timedIntervalMinSec, juce::dontSendNotification);
+            }
+        };
+
+        // Set initial visibility based on current cadence mode
+        updateCadenceVisibility();
+
         // ── Animation controls (hidden for now — kept for future use) ──
         // All animation widgets are created but not made visible.
         animToggle.setButtonText ("Enable Animations");
@@ -153,6 +257,16 @@ public:
         partsLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
         barsLabel.setColour (juce::Label::textColourId, Theme::text());
         barsLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
+        cadenceModeLabel.setColour (juce::Label::textColourId, Theme::text());
+        cadenceModeLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
+        barsRangeMinLabel.setColour (juce::Label::textColourId, Theme::text());
+        barsRangeMinLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
+        barsRangeMaxLabel.setColour (juce::Label::textColourId, Theme::text());
+        barsRangeMaxLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
+        timedMinLabel.setColour (juce::Label::textColourId, Theme::text());
+        timedMinLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
+        timedMaxLabel.setColour (juce::Label::textColourId, Theme::text());
+        timedMaxLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
         speedLabel.setColour (juce::Label::textColourId, Theme::text());
         speedLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
         bgModeLabel.setColour (juce::Label::textColourId, Theme::text());
@@ -168,6 +282,11 @@ public:
         partsCombo.setColour (juce::ComboBox::outlineColourId,    Theme::border());
         partsCombo.setColour (juce::ComboBox::textColourId,       Theme::text());
         partsCombo.setColour (juce::ComboBox::arrowColourId,      Theme::textSubtle());
+
+        cadenceModeCombo.setColour (juce::ComboBox::backgroundColourId, Theme::panel());
+        cadenceModeCombo.setColour (juce::ComboBox::outlineColourId,    Theme::border());
+        cadenceModeCombo.setColour (juce::ComboBox::textColourId,       Theme::text());
+        cadenceModeCombo.setColour (juce::ComboBox::arrowColourId,      Theme::textSubtle());
 
         barsSlider.setColour (juce::Slider::backgroundColourId,     Theme::panelAlt());
         barsSlider.setColour (juce::Slider::trackColourId,          Theme::accent());
@@ -235,12 +354,48 @@ public:
             partsCombo.setBounds (row.removeFromLeft (160));
         }
 
-        // Bars per modifier row
+        // Cadence mode row
+        {
+            auto row = area.removeFromTop (rowH);
+            cadenceModeLabel.setBounds (row.removeFromLeft (labelW));
+            row.removeFromLeft (10);
+            cadenceModeCombo.setBounds (row.removeFromLeft (160));
+        }
+
+        // Bars per modifier row (Fixed mode)
         {
             auto row = area.removeFromTop (rowH);
             barsLabel.setBounds (row.removeFromLeft (labelW));
             row.removeFromLeft (10);
             barsSlider.setBounds (row.removeFromLeft (200));
+        }
+
+        // Variable cadence range rows
+        {
+            auto row = area.removeFromTop (rowH);
+            barsRangeMinLabel.setBounds (row.removeFromLeft (labelW));
+            row.removeFromLeft (10);
+            barsRangeMinSlider.setBounds (row.removeFromLeft (200));
+        }
+        {
+            auto row = area.removeFromTop (rowH);
+            barsRangeMaxLabel.setBounds (row.removeFromLeft (labelW));
+            row.removeFromLeft (10);
+            barsRangeMaxSlider.setBounds (row.removeFromLeft (200));
+        }
+
+        // Timed cadence range rows
+        {
+            auto row = area.removeFromTop (rowH);
+            timedMinLabel.setBounds (row.removeFromLeft (labelW));
+            row.removeFromLeft (10);
+            timedMinSlider.setBounds (row.removeFromLeft (200));
+        }
+        {
+            auto row = area.removeFromTop (rowH);
+            timedMaxLabel.setBounds (row.removeFromLeft (labelW));
+            row.removeFromLeft (10);
+            timedMaxSlider.setBounds (row.removeFromLeft (200));
         }
 
         // Animation controls are hidden — layout only contains the rows above.
@@ -295,6 +450,29 @@ private:
             topLevel->repaint();
     }
 
+    void updateCadenceVisibility()
+    {
+        const bool isFixed    = (settings.cadenceMode == CadenceMode::Fixed);
+        const bool isVariable = (settings.cadenceMode == CadenceMode::Variable);
+        const bool isTimed    = (settings.cadenceMode == CadenceMode::Timed);
+
+        barsLabel.setVisible (isFixed);
+        barsSlider.setVisible (isFixed);
+
+        barsRangeMinLabel.setVisible (isVariable);
+        barsRangeMinSlider.setVisible (isVariable);
+        barsRangeMaxLabel.setVisible (isVariable);
+        barsRangeMaxSlider.setVisible (isVariable);
+
+        timedMinLabel.setVisible (isTimed);
+        timedMinSlider.setVisible (isTimed);
+        timedMaxLabel.setVisible (isTimed);
+        timedMaxSlider.setVisible (isTimed);
+
+        resized();
+        repaint();
+    }
+
     SessionSettings& settings;
 
 public:
@@ -312,9 +490,25 @@ private:
     juce::Label    partsLabel;
     juce::ComboBox partsCombo;
 
-    // Bars per modifier
+    // Cadence mode
+    juce::Label    cadenceModeLabel;
+    juce::ComboBox cadenceModeCombo;
+
+    // Bars per modifier (Fixed mode)
     juce::Label  barsLabel;
     juce::Slider barsSlider;
+
+    // Variable cadence range
+    juce::Label  barsRangeMinLabel;
+    juce::Slider barsRangeMinSlider;
+    juce::Label  barsRangeMaxLabel;
+    juce::Slider barsRangeMaxSlider;
+
+    // Timed cadence range
+    juce::Label  timedMinLabel;
+    juce::Slider timedMinSlider;
+    juce::Label  timedMaxLabel;
+    juce::Slider timedMaxSlider;
 
     // Animation toggles
     juce::ToggleButton animToggle;

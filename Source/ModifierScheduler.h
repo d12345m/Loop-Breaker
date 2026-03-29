@@ -143,5 +143,12 @@ private:
     void maybeResnapQuantized();
     ModifierDescriptor prepareVariantDescriptor(const ModifierDescriptor& base) const;
 
+    // Returns the number of bars for the next trigger window, depending on cadence mode.
+    // Fixed: barsBetweenModifiers. Variable: random in [barsRangeMin, barsRangeMax].
+    int computeNextBarInterval() const;
+
+    // Returns the number of seconds for the next trigger (Timed mode only).
+    double computeNextTimedInterval() const;
+
     juce::Array<ModifierSchedulerListener*> listeners;
 };

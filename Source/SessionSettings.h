@@ -12,6 +12,14 @@
 #include <JuceHeader.h>
 #include "ModifierProbabilityManager.h"
 
+// Determines how the modifier scheduler decides when to fire the next modifier.
+enum class CadenceMode
+{
+    Fixed    = 0,   // Every N bars (original behaviour)
+    Variable = 1,   // Random bar count within a user-defined range (still snaps to bar boundaries)
+    Timed    = 2    // Random time interval within a user-defined range (not tied to bars)
+};
+
 struct SessionSettings
 {
     // Modifier probability weights (per-type slider values)
@@ -21,6 +29,17 @@ struct SessionSettings
     int timeSigNumerator = 4;           // e.g. 4 in 4/4
     int timeSigDenominator = 4;         // e.g. 4 in 4/4
     int barsBetweenModifiers = 4;       // How many bars elapse before next modifier is applied
+
+    // Cadence mode
+    CadenceMode cadenceMode = CadenceMode::Fixed;
+
+    // Variable cadence range (CadenceMode::Variable)
+    int barsRangeMin = 2;              // Minimum bars between modifiers
+    int barsRangeMax = 8;              // Maximum bars between modifiers
+
+    // Timed cadence range (CadenceMode::Timed) — seconds
+    double timedIntervalMinSec = 5.0;   // Minimum seconds between modifiers
+    double timedIntervalMaxSec = 60.0;  // Maximum seconds between modifiers (up to 300)
 
   // Modifier scheduling
   bool modifiersEnabled = true;       // If false, the modifier queue is stopped/suppressed

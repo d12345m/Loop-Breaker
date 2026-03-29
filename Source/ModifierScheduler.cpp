@@ -123,10 +123,19 @@ void ModifierScheduler::setUserSelectedBuffers(const juce::Array<int>& indices)
 
 void ModifierScheduler::scheduleNextTrigger()
 {
-    // Base target aligned to the *next* bar boundary after a fixed bar interval.
+    if (settings.cadenceMode == CadenceMode::Timed)
+    {
+        // Timed mode: next trigger at a random time offset from now (not bar-aligned).
+        const double interval = computeNextTimedInterval();
+        nextTriggerAbsoluteSeconds = accumulatedSecondsTotal + interval;
+        return;
+    }
+
+    // Fixed or Variable mode — both snap to bar boundaries.
+    const int barInterval = computeNextBarInterval();
     const double secondsPerBar = settings.getSecondsPerBar();
     const double currentBars = (secondsPerBar > 0.0 ? (accumulatedSecondsTotal / secondsPerBar) : 0.0);
-    const double nextBarIndex = std::floor(currentBars + 1e-9) + (double) settings.barsBetweenModifiers;
+    const double nextBarIndex = std::floor(currentBars + 1e-9) + (double) barInterval;
     double base = nextBarIndex * secondsPerBar;
 
     if (quantizationEnabled.load())
@@ -164,6 +173,20 @@ void ModifierScheduler::scheduleNextTriggerHost(double currentPpq, double bpm)
     const double barLenPpq = (double) settings.timeSigNumerator * (4.0 / denom);
     const double secondsPerQuarter = 60.0 / bpm;
 
+    if (settings.cadenceMode == CadenceMode::Timed)
+    {
+        // Timed mode: next trigger at a random time offset (not bar-aligned).
+        const double interval = computeNextTimedInterval();
+        const double targetSeconds = (currentPpq * secondsPerQuarter) + interval;
+        nextTriggerPpq = (secondsPerQuarter > 0.0) ? (targetSeconds / secondsPerQuarter) : (currentPpq + 1.0);
+        nextMainTriggerPpq = nextTriggerPpq;
+        nextTriggerAbsoluteSeconds = targetSeconds;
+        return;
+    }
+
+    // Determine bar interval depending on Fixed vs Variable
+    const int barInterval = computeNextBarInterval();
+
     const int burstRemaining = quarterNoteBurstRemaining.load();
     if (burstRemaining > 0)
     {
@@ -180,9 +203,9 @@ void ModifierScheduler::scheduleNextTriggerHost(double currentPpq, double bpm)
         }
         else
         {
-            // Next trigger is at the next bar boundary, plus barsBetweenModifiers.
+            // Next trigger is at the next bar boundary, plus barInterval.
             const double currentBar = (barLenPpq > 0.0 ? std::floor((currentPpq / barLenPpq) + 1e-9) : 0.0);
-            const double targetBar = currentBar + (double) settings.barsBetweenModifiers;
+            const double targetBar = currentBar + (double) barInterval;
             nextTriggerPpq = targetBar * barLenPpq;
             nextMainTriggerPpq = nextTriggerPpq;
         }
@@ -307,9 +330,9 @@ void ModifierScheduler::triggerIfDueHost(double currentPpq, double bpm)
             if (barLenPpq > 0.0 && nextMainTriggerPpq <= currentPpq + 1e-9)
             {
                 // Snap to the bar boundary at or before the current trigger,
-                // then step forward by barsBetweenModifiers whole bars.
+                // then step forward by the next bar interval.
                 const double currentBar = std::floor((nextTriggerPpq / barLenPpq) + 1e-9);
-                const double targetBar  = currentBar + (double) settings.barsBetweenModifiers;
+                const double targetBar  = currentBar + (double) computeNextBarInterval();
                 nextMainTriggerPpq = targetBar * barLenPpq;
             }
         }
@@ -321,7 +344,7 @@ void ModifierScheduler::triggerIfDueHost(double currentPpq, double bpm)
 
             // If this was a normal MAIN trigger (not a burst tick), advance the main schedule.
             if (burstRemainingBefore <= 0 && barLenPpq > 0.0)
-                nextMainTriggerPpq = nextTriggerPpq + ((double) settings.barsBetweenModifiers * barLenPpq);
+                nextMainTriggerPpq = nextTriggerPpq + ((double) computeNextBarInterval() * barLenPpq);
         }
 
         lastTriggerAbsoluteSeconds = nextTriggerPpq * secondsPerQuarter;
@@ -876,4 +899,34 @@ void ModifierScheduler::maybeResnapQuantized()
     // Reuse scheduleNextTrigger logic but temporarily adjust lastTrigger so progress stays monotonic.
     lastTriggerAbsoluteSeconds = accumulatedSecondsTotal; // restart window
     scheduleNextTrigger();
+}
+
+int ModifierScheduler::computeNextBarInterval() const
+{
+    switch (settings.cadenceMode)
+    {
+        case CadenceMode::Variable:
+        {
+            const int lo = juce::jmax(1, juce::jmin(settings.barsRangeMin, settings.barsRangeMax));
+            const int hi = juce::jmax(lo, juce::jmax(settings.barsRangeMin, settings.barsRangeMax));
+            const juce::SpinLock::ScopedLockType lock(rngLock);
+            return rng.nextInt({ lo, hi + 1 }); // inclusive range
+        }
+        case CadenceMode::Timed:
+            // Not bar-based; callers should use computeNextTimedInterval() instead.
+            // Return a safe fallback in case this is called unexpectedly.
+            return settings.barsBetweenModifiers;
+
+        case CadenceMode::Fixed:
+        default:
+            return settings.barsBetweenModifiers;
+    }
+}
+
+double ModifierScheduler::computeNextTimedInterval() const
+{
+    const double lo = juce::jmax(0.5, juce::jmin(settings.timedIntervalMinSec, settings.timedIntervalMaxSec));
+    const double hi = juce::jmax(lo, juce::jmax(settings.timedIntervalMinSec, settings.timedIntervalMaxSec));
+    const juce::SpinLock::ScopedLockType lock(rngLock);
+    return lo + rng.nextDouble() * (hi - lo);
 }

@@ -53,6 +53,8 @@
             file="Source/ChannelStrip.h"/>
       <FILE id="modifierPresetH" name="ModifierPreset.h" compile="0" resource="0"
             file="Source/ModifierPreset.h"/>
+      <FILE id="probPresetMgrH" name="ProbabilityPresetManager.h" compile="0"
+            resource="0" file="Source/ProbabilityPresetManager.h"/>
       <FILE id="presetBarH" name="PresetBarComponent.h" compile="0" resource="0"
             file="Source/PresetBarComponent.h"/>
       <FILE id="appStateH" name="AppState.h" compile="0" resource="0" file="Source/AppState.h"/>

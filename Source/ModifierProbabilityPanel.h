@@ -14,6 +14,7 @@
 
 #include <JuceHeader.h>
 #include "ModifierProbabilityManager.h"
+#include "ProbabilityPresetManager.h"
 #include "PluginProcessor.h"
 #include "ThemeEngine.h"
 #include "ThemeFonts.h"
@@ -33,6 +34,7 @@ public:
     {
         buildRows();
         buildPadRows();
+        buildPresetBar();
 
         viewport.setViewedComponent (&content, false);
         viewport.setScrollBarsShown (true, false);
@@ -60,6 +62,17 @@ public:
     void resized() override
     {
         auto area = getLocalBounds();
+
+        // Preset bar at top
+        auto presetBarArea = area.removeFromTop (36).reduced (4, 2);
+        presetCombo.setBounds (presetBarArea.removeFromLeft (200));
+        presetBarArea.removeFromLeft (4);
+        presetSaveBtn.setBounds (presetBarArea.removeFromLeft (60));
+        presetBarArea.removeFromLeft (4);
+        presetSaveAsBtn.setBounds (presetBarArea.removeFromLeft (72));
+        presetBarArea.removeFromLeft (4);
+        presetDeleteBtn.setBounds (presetBarArea.removeFromLeft (60));
+
         auto bottomBar = area.removeFromBottom (32).reduced (4, 2);
         resetButton.setBounds (bottomBar.removeFromRight (160));
         viewport.setBounds (area);
@@ -123,6 +136,14 @@ private:
     juce::Component                         content;
     std::vector<Row>                        rows;
     juce::TextButton                        resetButton;
+
+    // Probability preset bar
+    ProbabilityPresetManager                presetManager;
+    juce::ComboBox                          presetCombo;
+    juce::TextButton                        presetSaveBtn;
+    juce::TextButton                        presetSaveAsBtn;
+    juce::TextButton                        presetDeleteBtn;
+    juce::String                            currentPresetName;
 
     // Per-pad target probability rows
     struct PadRow
@@ -204,6 +225,198 @@ private:
 
             rows.push_back (std::move (row));
         }
+    }
+
+    // ── Preset bar ─────────────────────────────────────────────────────
+    void buildPresetBar()
+    {
+        presetCombo.setTextWhenNothingSelected ("(no preset)");
+        presetCombo.setTextWhenNoChoicesAvailable ("(no presets saved)");
+        presetCombo.onChange = [this] { onPresetSelected(); };
+        addAndMakeVisible (presetCombo);
+        rebuildPresetCombo();
+
+        presetSaveBtn.setButtonText ("Save");
+        presetSaveBtn.onClick = [this] { onSavePreset(); };
+        addAndMakeVisible (presetSaveBtn);
+
+        presetSaveAsBtn.setButtonText ("Save As");
+        presetSaveAsBtn.onClick = [this] { onSaveAsPreset(); };
+        addAndMakeVisible (presetSaveAsBtn);
+
+        presetDeleteBtn.setButtonText ("Delete");
+        presetDeleteBtn.onClick = [this] { onDeletePreset(); };
+        addAndMakeVisible (presetDeleteBtn);
+    }
+
+    void rebuildPresetCombo()
+    {
+        presetCombo.clear (juce::dontSendNotification);
+        const auto& names = presetManager.getPresetNames();
+        for (int i = 0; i < names.size(); ++i)
+            presetCombo.addItem (names[i], i + 1);
+
+        // Re-select the current preset if it still exists
+        if (currentPresetName.isNotEmpty())
+        {
+            const int idx = names.indexOf (currentPresetName);
+            if (idx >= 0)
+                presetCombo.setSelectedId (idx + 1, juce::dontSendNotification);
+            else
+                currentPresetName.clear();
+        }
+    }
+
+    ProbabilityPreset captureCurrentSettings() const
+    {
+        ProbabilityPreset preset;
+        preset.name = currentPresetName;
+
+        for (auto type : ModifierProbabilityManager::allModifierTypes())
+        {
+            const juce::String id = "prob_" + juce::String (static_cast<int> (type));
+            float w = 1.0f;
+            if (auto* rawVal = apvts.getRawParameterValue (id))
+                w = rawVal->load();
+            preset.modifierWeights[type] = w;
+        }
+
+        for (int i = 0; i < 8; ++i)
+        {
+            const juce::String id = "padProb_" + juce::String (i);
+            float w = 1.0f;
+            if (auto* rawVal = apvts.getRawParameterValue (id))
+                w = rawVal->load();
+            preset.padProbabilities[static_cast<size_t> (i)] = w;
+        }
+
+        return preset;
+    }
+
+    void applyPreset (const ProbabilityPreset& preset)
+    {
+        for (auto type : ModifierProbabilityManager::allModifierTypes())
+        {
+            const juce::String id = "prob_" + juce::String (static_cast<int> (type));
+            auto it = preset.modifierWeights.find (type);
+            float w = (it != preset.modifierWeights.end()) ? it->second : 1.0f;
+            if (auto* param = apvts.getParameter (id))
+                param->setValueNotifyingHost (w);
+        }
+
+        for (int i = 0; i < 8; ++i)
+        {
+            const juce::String id = "padProb_" + juce::String (i);
+            if (auto* param = apvts.getParameter (id))
+                param->setValueNotifyingHost (preset.padProbabilities[static_cast<size_t> (i)]);
+        }
+    }
+
+    void onPresetSelected()
+    {
+        const int sel = presetCombo.getSelectedId();
+        if (sel <= 0) return;
+
+        const auto& names = presetManager.getPresetNames();
+        const int idx = sel - 1;
+        if (idx < 0 || idx >= names.size()) return;
+
+        if (auto preset = presetManager.loadPreset (names[idx]))
+        {
+            currentPresetName = preset->name;
+            applyPreset (*preset);
+        }
+    }
+
+    void onSavePreset()
+    {
+        if (currentPresetName.isEmpty())
+        {
+            onSaveAsPreset();
+            return;
+        }
+
+        auto preset = captureCurrentSettings();
+        preset.name = currentPresetName;
+        presetManager.savePreset (preset);
+        rebuildPresetCombo();
+    }
+
+    void onSaveAsPreset()
+    {
+        auto* aw = new juce::AlertWindow ("Save Probability Preset",
+                                           "Enter a name for this preset:",
+                                           juce::MessageBoxIconType::NoIcon);
+        aw->addTextEditor ("name", currentPresetName.isNotEmpty() ? currentPresetName
+                                                                   : "My Preset");
+        aw->addButton ("Save",   1);
+        aw->addButton ("Cancel", 0);
+
+        aw->enterModalState (true, juce::ModalCallbackFunction::create (
+            [this, aw] (int result)
+            {
+                if (result == 1)
+                {
+                    auto name = aw->getTextEditorContents ("name").trim();
+                    if (name.isNotEmpty())
+                    {
+                        // Check if overwriting
+                        bool exists = presetManager.getPresetNames().contains (name);
+                        if (exists)
+                        {
+                            // Confirm overwrite
+                            juce::AlertWindow::showOkCancelBox (
+                                juce::MessageBoxIconType::WarningIcon,
+                                "Overwrite Preset?",
+                                "A preset named \"" + name + "\" already exists. Overwrite?",
+                                "Overwrite", "Cancel", nullptr,
+                                juce::ModalCallbackFunction::create (
+                                    [this, name] (int confirmResult)
+                                    {
+                                        if (confirmResult == 1)
+                                        {
+                                            currentPresetName = name;
+                                            auto preset = captureCurrentSettings();
+                                            preset.name = name;
+                                            presetManager.savePreset (preset);
+                                            rebuildPresetCombo();
+                                        }
+                                    }));
+                        }
+                        else
+                        {
+                            currentPresetName = name;
+                            auto preset = captureCurrentSettings();
+                            preset.name = name;
+                            presetManager.savePreset (preset);
+                            rebuildPresetCombo();
+                        }
+                    }
+                }
+                delete aw;
+            }), true);
+    }
+
+    void onDeletePreset()
+    {
+        if (currentPresetName.isEmpty()) return;
+
+        juce::AlertWindow::showOkCancelBox (
+            juce::MessageBoxIconType::WarningIcon,
+            "Delete Preset?",
+            "Delete \"" + currentPresetName + "\"?",
+            "Delete", "Cancel", nullptr,
+            juce::ModalCallbackFunction::create (
+                [this] (int result)
+                {
+                    if (result == 1)
+                    {
+                        presetManager.deletePreset (currentPresetName);
+                        currentPresetName.clear();
+                        presetCombo.setSelectedId (0, juce::dontSendNotification);
+                        rebuildPresetCombo();
+                    }
+                }));
     }
 
     void buildPadRows()

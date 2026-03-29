@@ -252,6 +252,7 @@ def build_manual():
         "24 modifier types spanning buffer transforms, channel effects, master effects, and special operations",
         "Per-modifier probability sliders with DAW automation and MIDI CC control",
         "Per-pad target probability to weight which pads receive modifiers",
+        "Global probability presets: save and recall named probability configurations across projects",
         "4 modifier preset snapshot slots (A-D) for instant recall of complex states",
         "Multi-output routing: 8 independent stereo output buses plus a master mix bus",
         "Full MIDI control: pad selection, modifier toggle, and preset recall via MIDI notes",
@@ -577,6 +578,32 @@ def build_manual():
     pdf.body_text(
         "A button at the bottom of the panel resets all probability sliders to their default "
         "value of 1.0 (100%)."
+    )
+
+    pdf.chapter_title("Probability Presets", level=2)
+    pdf.body_text(
+        "Probability Presets let you save and recall entire probability configurations "
+        "(all modifier weights and pad target probabilities) as named presets that persist "
+        "globally across all projects and DAW sessions. Presets are stored as individual JSON "
+        "files in your user Application Support folder, so they are available regardless of "
+        "which DAW project is open."
+    )
+    pdf.body_text(
+        "A preset bar at the top of the Probability tab provides quick access:"
+    )
+    pdf.bullet("Preset dropdown \u2014 Select a saved preset to load it instantly. All modifier "
+               "probability sliders and pad target probability sliders are updated to match "
+               "the saved values.")
+    pdf.bullet("Save \u2014 Overwrite the currently selected preset with the current probability "
+               "settings. If no preset is selected, this behaves like Save As.")
+    pdf.bullet("Save As \u2014 Save the current settings under a new name. A dialog prompts you "
+               "to enter a name. If a preset with that name already exists, you are asked to "
+               "confirm the overwrite.")
+    pdf.bullet("Delete \u2014 Delete the currently selected preset. A confirmation dialog is "
+               "shown before the preset is permanently removed.")
+    pdf.body_text(
+        "Probability Presets do NOT include MIDI CC mappings, timing settings, or any other "
+        "session-level configuration \u2014 only the modifier and pad probability slider values."
     )
 
     # ═══════════════════════════════════════════════════════════════════════

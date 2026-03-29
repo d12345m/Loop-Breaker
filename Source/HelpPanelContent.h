@@ -282,6 +282,26 @@ private:
             contentHolder.sections.push_back(s);
         }
 
+        // ---- Probability Presets ----
+        {
+            Section s;
+            s.heading = "Probability Presets";
+            s.body =
+                "Probability Presets let you save and recall entire probability configurations "
+                "(all modifier weights and pad target probabilities) as named presets that "
+                "persist globally across all projects and DAW sessions.\n\n"
+                "A preset bar at the top of the Probability tab provides quick access:";
+            s.table = {
+                { "Preset dropdown",    "Select a saved preset to load it instantly" },
+                { "Save",               "Overwrite the currently selected preset with the "
+                                         "current probability settings" },
+                { "Save As",            "Save the current settings under a new name; "
+                                         "confirms before overwriting an existing preset" },
+                { "Delete",             "Delete the currently selected preset (with confirmation)" },
+            };
+            contentHolder.sections.push_back(s);
+        }
+
         // ---- MIDI ----
         {
             Section s;

@@ -36,6 +36,7 @@ public:
         // Resizer bars
         addAndMakeVisible(horizontalDivider);
         addAndMakeVisible(verticalDivider1);
+        addAndMakeVisible(verticalDivider2);
 
         // Horizontal: history (left) | divider | right stack
         horizontalLayout.setItemLayout(0, 200, -1.0, 400);
@@ -45,9 +46,9 @@ public:
         // Vertical (right column): modifier selection | tearing debug | node clip debug
         verticalLayout.setItemLayout(0, 100, -1.0, 180);
         verticalLayout.setItemLayout(1, 8, 8, 8);
-        verticalLayout.setItemLayout(2, 80, -1.0, 180);
+        verticalLayout.setItemLayout(2, 200, -1.0, 260);  // tearing: 8 channels need ~200px min
         verticalLayout.setItemLayout(3, 8, 8, 8);
-        verticalLayout.setItemLayout(4, 100, -1.0, -1.0);
+        verticalLayout.setItemLayout(4, 60, -1.0, 120);
 
         modifierSelectionPanel.setForceSelectionCallback([&appState](ModifierType type) {
             appState.scheduler.forceUpcomingModifier(type);

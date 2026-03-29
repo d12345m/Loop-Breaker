@@ -146,7 +146,64 @@ public:
             }
         }
 
-    // --- Delay Processing (pre-reverb) ---
+        // --- Insert filters and tremolo prior to reverb ---
+        // §3.2A: Split into separate branch-free loops for vectorization.
+
+        // --- High-pass filter (IIR, separate loop per channel) ---
+        if (effects().highPassEnabled)
+        {
+            updateHighPassCoeffs(params.highPassCutoff);
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                auto* data = tempBuffer.getWritePointer(ch);
+                for (int i = 0; i < numSamples; ++i)
+                    data[i] = highPass[ch].processSample(data[i]);
+            }
+
+            // Clip probe: after high-pass
+            if (clipProbes) (*clipProbes)[NodeId::HighPass].inspect(tempBuffer, numSamples);
+        }
+
+        // --- Low-pass filter (IIR, separate loop per channel) ---
+        if (effects().lowPassEnabled)
+        {
+            updateLowPassCoeffs(params.lowPassCutoff);
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                auto* data = tempBuffer.getWritePointer(ch);
+                for (int i = 0; i < numSamples; ++i)
+                    data[i] = lowPass[ch].processSample(data[i]);
+            }
+
+            // Clip probe: after low-pass
+            if (clipProbes) (*clipProbes)[NodeId::LowPass].inspect(tempBuffer, numSamples);
+        }
+
+        // --- S&H Low-pass filter (IIR with variable Q) ---
+        if (effects().shLowPassEnabled)
+        {
+            updateSHLowPassCoeffs(params.shLpfCutoff, params.shLpfQ);
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                auto* data = tempBuffer.getWritePointer(ch);
+                for (int i = 0; i < numSamples; ++i)
+                    data[i] = shLowPass[ch].processSample(data[i]);
+            }
+        }
+
+        // --- S&H High-pass filter (IIR with variable Q) ---
+        if (effects().shHighPassEnabled)
+        {
+            updateSHHighPassCoeffs(params.shHpfCutoff, params.shHpfQ);
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                auto* data = tempBuffer.getWritePointer(ch);
+                for (int i = 0; i < numSamples; ++i)
+                    data[i] = shHighPass[ch].processSample(data[i]);
+            }
+        }
+
+    // --- Delay Processing (post-S&H filters) ---
         if (effects().delayEnabled)
         {
             // Allocate delay line if needed
@@ -242,63 +299,6 @@ public:
 
             // Clip probe: after delay
             if (clipProbes) (*clipProbes)[NodeId::Delay].inspect(tempBuffer, numSamples);
-        }
-
-        // --- Insert filters and tremolo prior to reverb ---
-        // §3.2A: Split into separate branch-free loops for vectorization.
-
-        // --- High-pass filter (IIR, separate loop per channel) ---
-        if (effects().highPassEnabled)
-        {
-            updateHighPassCoeffs(params.highPassCutoff);
-            for (int ch = 0; ch < numChannels; ++ch)
-            {
-                auto* data = tempBuffer.getWritePointer(ch);
-                for (int i = 0; i < numSamples; ++i)
-                    data[i] = highPass[ch].processSample(data[i]);
-            }
-
-            // Clip probe: after high-pass
-            if (clipProbes) (*clipProbes)[NodeId::HighPass].inspect(tempBuffer, numSamples);
-        }
-
-        // --- Low-pass filter (IIR, separate loop per channel) ---
-        if (effects().lowPassEnabled)
-        {
-            updateLowPassCoeffs(params.lowPassCutoff);
-            for (int ch = 0; ch < numChannels; ++ch)
-            {
-                auto* data = tempBuffer.getWritePointer(ch);
-                for (int i = 0; i < numSamples; ++i)
-                    data[i] = lowPass[ch].processSample(data[i]);
-            }
-
-            // Clip probe: after low-pass
-            if (clipProbes) (*clipProbes)[NodeId::LowPass].inspect(tempBuffer, numSamples);
-        }
-
-        // --- S&H Low-pass filter (IIR with variable Q) ---
-        if (effects().shLowPassEnabled)
-        {
-            updateSHLowPassCoeffs(params.shLpfCutoff, params.shLpfQ);
-            for (int ch = 0; ch < numChannels; ++ch)
-            {
-                auto* data = tempBuffer.getWritePointer(ch);
-                for (int i = 0; i < numSamples; ++i)
-                    data[i] = shLowPass[ch].processSample(data[i]);
-            }
-        }
-
-        // --- S&H High-pass filter (IIR with variable Q) ---
-        if (effects().shHighPassEnabled)
-        {
-            updateSHHighPassCoeffs(params.shHpfCutoff, params.shHpfQ);
-            for (int ch = 0; ch < numChannels; ++ch)
-            {
-                auto* data = tempBuffer.getWritePointer(ch);
-                for (int i = 0; i < numSamples; ++i)
-                    data[i] = shHighPass[ch].processSample(data[i]);
-            }
         }
 
         // --- Tremolo (vectorizable gain modulation) ---

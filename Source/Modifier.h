@@ -119,8 +119,8 @@ struct ModifierDescriptor
     std::optional<double> plannedSHDivisionBars;
     // Granular parameters (Clouds-inspired)
     std::optional<double> plannedGrainDensityHz;   // grains per second (2..24)
-    std::optional<double> plannedGrainSizeMs;      // grain length in ms (15..200)
-    std::optional<double> plannedGrainPitchSpread; // pitch variance in semitones (0..12)
+    std::optional<double> plannedGrainSizeMs;      // grain length in ms (60..500)
+    std::optional<double> plannedGrainPitchSpread; // pitch spread in semitones, quantized to octaves (0, 12, 24)
     std::optional<double> plannedGrainMix;         // wet/dry mix 0..1
     std::optional<double> plannedGrainTexture;     // window shape 0=smooth..1=sharp
 };

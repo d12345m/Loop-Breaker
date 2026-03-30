@@ -1208,7 +1208,7 @@ private:
                 strip.effects().granularEnabled = true;
                 float targetMix   = desc.plannedGrainMix.has_value()         ? (float)desc.plannedGrainMix.value()         : 0.75f;
                 float density     = desc.plannedGrainDensityHz.has_value()   ? (float)desc.plannedGrainDensityHz.value()   : 8.0f;
-                float size        = desc.plannedGrainSizeMs.has_value()      ? (float)desc.plannedGrainSizeMs.value()      : 80.0f;
+                float size        = desc.plannedGrainSizeMs.has_value()      ? (float)desc.plannedGrainSizeMs.value()      : 150.0f;
                 float pitchSpread = desc.plannedGrainPitchSpread.has_value() ? (float)desc.plannedGrainPitchSpread.value() : 0.0f;
                 float texture     = desc.plannedGrainTexture.has_value()     ? (float)desc.plannedGrainTexture.value()     : 0.3f;
                 float fadeBars    = desc.plannedFxFadeBars.has_value()       ? (float)desc.plannedFxFadeBars.value()       : 1.0f;
@@ -1232,7 +1232,7 @@ private:
                 strip.effects().granularEnabled = true;
                 float targetMix   = desc.plannedGrainMix.has_value()         ? (float)desc.plannedGrainMix.value()         : 0.75f;
                 float density     = desc.plannedGrainDensityHz.has_value()   ? (float)desc.plannedGrainDensityHz.value()   : 8.0f;
-                float size        = desc.plannedGrainSizeMs.has_value()      ? (float)desc.plannedGrainSizeMs.value()      : 80.0f;
+                float size        = desc.plannedGrainSizeMs.has_value()      ? (float)desc.plannedGrainSizeMs.value()      : 150.0f;
                 float pitchSpread = desc.plannedGrainPitchSpread.has_value() ? (float)desc.plannedGrainPitchSpread.value() : 0.0f;
                 float texture     = desc.plannedGrainTexture.has_value()     ? (float)desc.plannedGrainTexture.value()     : 0.3f;
                 double totalBars  = desc.plannedFxFadeBars.value_or(4.0);

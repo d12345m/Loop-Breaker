@@ -807,8 +807,8 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
     else if (base.type == ModifierType::BufferGranularOn || base.type == ModifierType::BufferGranularMomentary)
     {
         static const double densities[] { 2.0, 4.0, 8.0, 12.0, 16.0, 24.0 };
-        static const double sizes[]     { 15.0, 30.0, 60.0, 100.0, 150.0, 200.0 };
-        static const double pitches[]   { 0.0, 2.0, 5.0, 7.0, 12.0 };
+        static const double sizes[]     { 60.0, 100.0, 150.0, 200.0, 300.0, 500.0 };
+        static const double pitches[]   { 0.0, 12.0, 24.0 };
         static const double mixes[]     { 0.5, 0.75, 1.0 };
         static const double textures[]  { 0.1, 0.3, 0.5, 0.8 };
         static const double fades[]     { 0.0, 1.0, 2.0 };
@@ -828,8 +828,9 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
             double fadeBars = fades[rng.nextInt((int)std::size(fades))];
             modified.plannedFxFadeBars = fadeBars;
             juce::String fadeLabel = fadeBars <= 0.0 ? "instant" : juce::String((int)fadeBars) + " bars";
+            juce::String pitchLabel = pitch <= 0.0 ? "unison" : (juce::String("\xC2\xB1") + juce::String((int)(pitch / 12.0)) + " oct");
             modified.description = base.description + " -> " + juce::String((int)density) + " g/s | "
-                + juce::String((int)size) + "ms | ±" + juce::String((int)pitch) + "st | Mix "
+                + juce::String((int)size) + "ms | " + pitchLabel + " | Mix "
                 + juce::String((int)std::round(mix * 100.0)) + "% | Fade: " + fadeLabel;
         }
         else
@@ -837,8 +838,9 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
             static const double durations[] { 2.0, 4.0, 8.0, 16.0 };
             double dur = durations[rng.nextInt((int)std::size(durations))];
             modified.plannedFxFadeBars = dur;
+            juce::String pitchLabel = pitch <= 0.0 ? "unison" : (juce::String("\xC2\xB1") + juce::String((int)(pitch / 12.0)) + " oct");
             modified.description = base.description + " -> " + juce::String((int)density) + " g/s | "
-                + juce::String((int)size) + "ms | ±" + juce::String((int)pitch) + "st | Mix "
+                + juce::String((int)size) + "ms | " + pitchLabel + " | Mix "
                 + juce::String((int)std::round(mix * 100.0)) + "% | " + juce::String((int)dur) + " bars";
         }
     }

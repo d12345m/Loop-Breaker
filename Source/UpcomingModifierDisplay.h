@@ -131,7 +131,10 @@ public:
                 if (desc->plannedGrainSizeMs.has_value())
                     parts << " | " << juce::String(desc->plannedGrainSizeMs.value(), 0) << "ms";
                 if (desc->plannedGrainPitchSpread.has_value())
-                    parts << " | \xC2\xB1" << juce::String(desc->plannedGrainPitchSpread.value(), 0) << "st";
+                {
+                    double sp = desc->plannedGrainPitchSpread.value();
+                    parts << " | " << (sp <= 0.0 ? juce::String("unison") : (juce::String("\xC2\xB1") + juce::String((int)(sp / 12.0)) + " oct"));
+                }
                 if (desc->plannedFxFadeBars.has_value())
                 {
                     auto bars = desc->plannedFxFadeBars.value();

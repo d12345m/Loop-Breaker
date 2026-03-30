@@ -636,8 +636,8 @@ public:
         float shDivisionBars = 0.25f; // S&H rate: 0.0625=1/16, 0.125=1/8, 0.25=1/4
         // Granular (Clouds-inspired)
         float grainDensityHz = 4.0f;     // grains per second
-        float grainSizeMs = 80.0f;       // grain length in ms
-        float grainPitchSpread = 0.0f;   // pitch variance in semitones
+        float grainSizeMs = 150.0f;      // grain length in ms
+        float grainPitchSpread = 0.0f;   // pitch spread in semitones (quantized to octaves: 0, 12, 24)
         float grainMix = 0.0f;           // wet/dry 0..1
         float grainTexture = 0.3f;       // window shape 0=smooth..1=sharp
     };
@@ -1177,7 +1177,10 @@ public:
             slot->readPos = (float)((captureWritePos - offset - grainLen + captureBufSize * 2) % captureBufSize);
             slot->total = grainLen;
             slot->remaining = grainLen;
-            float semi = (rng.nextFloat() * 2.0f - 1.0f) * pitchSpread;
+            // Quantize pitch to octave intervals (0, ±12, ±24 semitones) to stay in key
+            int maxOctaves = (int)(pitchSpread / 12.0f);
+            int octaveShift = maxOctaves > 0 ? (rng.nextInt(maxOctaves * 2 + 1) - maxOctaves) : 0;
+            float semi = (float)(octaveShift * 12);
             slot->readInc = std::pow(2.0f, semi / 12.0f);
             float pan = rng.nextFloat();
             slot->panL = std::cos(pan * juce::MathConstants<float>::halfPi);

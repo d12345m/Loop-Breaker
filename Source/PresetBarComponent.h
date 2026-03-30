@@ -37,7 +37,7 @@ public:
             buttons[i]->setInterceptsMouseClicks(false, false);
             addAndMakeVisible(buttons[i].get());
         }
-        startTimerHz(30); // drive highlight animations
+        startTimerHz(15); // drive highlight animations (reduced from 30 Hz)
     }
 
     ~PresetBarComponent() override
@@ -341,7 +341,7 @@ public:
 private:
     void timerCallback() override
     {
-        const double dt = 1.0 / 30.0;
+        const double dt = 1.0 / 15.0;
         for (int i = 0; i < 4; ++i)
         {
             highlightAnimators[static_cast<size_t>(i)].tick(dt);

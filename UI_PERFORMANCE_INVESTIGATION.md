@@ -12,17 +12,17 @@ The plugin exposes 9 stereo output buses: 1 main mix + 8 individual pad outputs.
 
 The UI side has **9 independent juce::Timer instances** running simultaneously, each calling `repaint()` on their component at a fixed rate:
 
-| Component | Rate | Per-frame channel work | Visibility |
-|---|---|---|---|
-| `UpcomingModifierDisplay` | 30 Hz | None | Always visible (Session tab) |
-| `PresetBarComponent` | 30 Hz | None (4 slots only) | Always visible (Session tab) |
-| `PadGridComponent` | 20 Hz | 8× flash/glow animator ticks | Always visible (Session tab) |
-| `PluginEditorContent` | 20 Hz | 8× playhead + loop + state sync | Always visible |
-| `BackgroundAnimator` | 15 Hz | None | Always visible |
-| `ModifierProbabilityPanel` | 10 Hz | Label refresh per modifier type | Probability tab |
-| `FxStatusPanel` | 5 Hz | 8× string concat + float format | Settings/Debug tab |
-| `NodeClipDebugPanel` | 4 Hz | 8×14 = 112 cell renders | Debug tab |
-| `TearingDebugPanel` | 2 Hz | 8×18 = 144 atomic reads + text | Debug tab |
+| Component                  | Rate  | Per-frame channel work          | Visibility                   |
+| -------------------------- | ----- | ------------------------------- | ---------------------------- |
+| `UpcomingModifierDisplay`  | 30 Hz | None                            | Always visible (Session tab) |
+| `PresetBarComponent`       | 30 Hz | None (4 slots only)             | Always visible (Session tab) |
+| `PadGridComponent`         | 20 Hz | 8× flash/glow animator ticks    | Always visible (Session tab) |
+| `PluginEditorContent`      | 20 Hz | 8× playhead + loop + state sync | Always visible               |
+| `BackgroundAnimator`       | 15 Hz | None                            | Always visible               |
+| `ModifierProbabilityPanel` | 10 Hz | Label refresh per modifier type | Probability tab              |
+| `FxStatusPanel`            | 5 Hz  | 8× string concat + float format | Settings/Debug tab           |
+| `NodeClipDebugPanel`       | 4 Hz  | 8×14 = 112 cell renders         | Debug tab                    |
+| `TearingDebugPanel`        | 2 Hz  | 8×18 = 144 atomic reads + text  | Debug tab                    |
 
 The critical insight is that **JUCE timers fire on the message thread regardless of component visibility**. A component in a background tab still has its timer running, builds strings, and calls `repaint()` — the repaint may be coalesced by the framework but the timer callback work is not.
 
@@ -45,6 +45,7 @@ Lines 667-690: For all 8 buffers:
 ```
 
 **Problem:** `padGrid.repaint()` is called unconditionally every 50ms (line 693), forcing a full repaint of all 8 pad cells even when nothing has changed. Each pad repaint involves:
+
 - Waveform thumbnail drawing (`drawChannels`)
 - Loop overlay with diagonal hatching (clip region + line drawing in a loop)
 - Playhead with gradient glow
@@ -109,6 +110,7 @@ for (int padIdx = 0; padIdx < 8; ++padIdx)
 ### 5. Cascading Repaints from `padGrid.repaint()`
 
 The `PluginEditorContent` timer calls `padGrid.repaint()` unconditionally at 20 Hz (line 693). The `PadGridComponent::paintOverChildren()` then renders all 8 pads with:
+
 - Gradient fills, rounded rectangles, waveform thumbnails
 - Loop region hatching (a `for` loop drawing diagonal lines inside clip regions)
 - Playhead glow gradient
@@ -133,14 +135,14 @@ The phrase "starts to drag over time" suggests a **leak or accumulation** rather
 
 ## Quantified Per-Frame Cost (8 Outputs Active)
 
-| Component | Strings/frame | Atomic reads/frame | Draw calls/frame | Frames/sec |
-|---|---|---|---|---|
-| PluginEditorContent | ~10 | ~48 | ~240 | 20 |
-| FxStatusPanel | ~80 | ~72 | ~24 | 5 |
-| TearingDebugPanel | ~176 | ~176 | ~176 | 2 |
-| NodeClipDebugPanel | ~112 | ~450 | ~224 | 4 |
-| PadGridComponent | ~16 | ~16 | ~120 | 20 |
-| **Totals (per second)** | **~5,400** | **~12,600** | **~10,500** | — |
+| Component               | Strings/frame | Atomic reads/frame | Draw calls/frame | Frames/sec |
+| ----------------------- | ------------- | ------------------ | ---------------- | ---------- |
+| PluginEditorContent     | ~10           | ~48                | ~240             | 20         |
+| FxStatusPanel           | ~80           | ~72                | ~24              | 5          |
+| TearingDebugPanel       | ~176          | ~176               | ~176             | 2          |
+| NodeClipDebugPanel      | ~112          | ~450               | ~224             | 4          |
+| PadGridComponent        | ~16           | ~16                | ~120             | 20         |
+| **Totals (per second)** | **~5,400**    | **~12,600**        | **~10,500**      | —          |
 
 ---
 
@@ -217,12 +219,14 @@ The phrase "starts to drag over time" suggests a **leak or accumulation** rather
 ### Immediate (High Impact)
 
 1. **Add visibility guards to all timer callbacks:**
+
    ```cpp
    void timerCallback() override {
        if (!isShowing()) return;  // skip work when in background tab
        repaint();
    }
    ```
+
    Affected: `FxStatusPanel`, `TearingDebugPanel`, `NodeClipDebugPanel`, `ModifierProbabilityPanel`
 
 2. **Make `padGrid.repaint()` conditional:**

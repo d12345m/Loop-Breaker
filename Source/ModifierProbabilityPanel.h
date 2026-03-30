@@ -474,6 +474,8 @@ private:
     // -------------------------------------------------------------------------
     void timerCallback() override
     {
+        if (!isShowing()) return;
+
         // Refresh value labels from live APVTS atomics
         for (auto& row : rows)
             updateValueLabel (row);

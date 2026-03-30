@@ -209,7 +209,7 @@ public:
 
         refreshStatus();
         applyThemeColors();
-        startTimerHz(20); // 50ms UI refresh - lower overhead
+        startTimerHz(15); // 66ms UI refresh - reduced from 20 Hz
     }
 
     ~PluginEditorContent() override
@@ -447,6 +447,8 @@ private:
     std::unique_ptr<juce::FileChooser> fileChooser;
 
     bool padPathsSynced = false; // true once pad file paths have been synced to the UI after state restore
+    std::array<double, 8> lastPlayheadSamples {{ 0, 0, 0, 0, 0, 0, 0, 0 }};
+    std::array<bool, 8> lastLoopEnabled {{ false, false, false, false, false, false, false, false }};
 
     // Queue a preset recall to replace the next scheduled modifier trigger.
     // Updates the upcoming modifier display to show the preset name.
@@ -680,21 +682,37 @@ private:
         modifierDisplay.setSuppressed((! app.settings.modifiersEnabled) || app.scheduler.isSuppressed());
 
         // Update playhead positions for waveform display (only when not playing).
+        bool padGridDirty = false;
         for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
         {
             if (auto* b = app.bufferManager.getBuffer(i); b && b->hasAudioLoaded())
             {
                 padGrid.setTotalSamplesForPad(i, (double) b->getDurationInSamples());
-                padGrid.setPlayheadForPad(i, (double) b->getPlayheadPositionInSamples());
+
+                const double newPlayhead = (double) b->getPlayheadPositionInSamples();
+                if (std::abs(newPlayhead - lastPlayheadSamples[(size_t)i]) > 1.0)
+                {
+                    lastPlayheadSamples[(size_t)i] = newPlayhead;
+                    padGridDirty = true;
+                }
+                padGrid.setPlayheadForPad(i, newPlayhead);
+
+                const bool loopOn = b->isLoopWindowEnabled();
+                if (loopOn != lastLoopEnabled[(size_t)i])
+                {
+                    lastLoopEnabled[(size_t)i] = loopOn;
+                    padGridDirty = true;
+                }
                 padGrid.setLoopWindowForPad(i,
-                                           b->isLoopWindowEnabled(),
+                                           loopOn,
                                            (double) b->getLoopStartSamples(),
                                            (double) b->getLoopEndSamples());
             }
         }
         
-        // Repaint for smooth playhead animation
-        padGrid.repaint();
+        // Only repaint padGrid when playhead or loop state actually changed
+        if (padGridDirty)
+            padGrid.repaint();
     }
 
     void attachPadCallbacks()

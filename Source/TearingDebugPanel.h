@@ -37,6 +37,18 @@ public:
 class TearingDebugPanel : public juce::Component, public juce::TooltipClient, private juce::Timer
 {
 public:
+    // Snapshot of one pad's tearing stats (plain ints, no atomics)
+    struct StatsSnapshot
+    {
+        int emptyOutputBuffers = 0, partialUnderfills = 0, discontinuities = 0;
+        int mediumDiscontinuities = 0, minorDiscontinuities = 0, zeroSampleRuns = 0;
+        int clippedSamples = 0, nanOrInfSamples = 0, rmsJumps = 0;
+        int directionFlips = 0, sliceJumps = 0, modeTransitions = 0;
+        int soundTouchResets = 0, dcOffsetDrifts = 0;
+        int lookaheadPreCrossfades = 0, lookaheadMispredictions = 0, lookaheadAborts = 0;
+        int totalEvents = 0, criticalEvents = 0, mediumEvents = 0;
+    };
+
     explicit TearingDebugPanel(AppState& appState) : app(appState)
     {
         startTimerHz(2); // Refresh 2 Hz
@@ -113,31 +125,20 @@ public:
         
         area.removeFromTop(1);
         
-        // Data rows for each buffer - single row per pad
-        for (int i = 0; i < app.channelStrips.size(); ++i)
+        // Data rows for each buffer - single row per pad (from cached snapshots)
+        for (int i = 0; i < (int)cachedStats.size(); ++i)
         {
             if (area.getHeight() < lineH)
                 break;
                 
-            const auto& strip = *app.channelStrips[i];
-            const auto* buffer = strip.getAudioBuffer();
-            if (!buffer)
-                continue;
-                
-            const auto& stats = buffer->getTearingStats();
-            
-            const int totalEvents = stats.getTotalEvents();
-            const int criticalEvents = stats.emptyOutputBuffers.load() + stats.discontinuities.load() 
-                                      + stats.nanOrInfSamples.load();
-            const int mediumEvents = stats.mediumDiscontinuities.load() + stats.rmsJumps.load() 
-                                   + stats.partialUnderfills.load();
+            const auto& s = cachedStats[(size_t)i];
             
             // Color code based on severity
-            if (totalEvents == 0)
+            if (s.totalEvents == 0)
                 g.setColour(Theme::textSubtle());
-            else if (criticalEvents > 0)
+            else if (s.criticalEvents > 0)
                 g.setColour(Theme::bad());
-            else if (mediumEvents > 5 || totalEvents > 20)
+            else if (s.mediumEvents > 5 || s.totalEvents > 20)
                 g.setColour(Theme::warn());
             else
                 g.setColour(Theme::text());
@@ -146,26 +147,26 @@ public:
             
             // All columns in one row
             g.drawText(juce::String(i + 1), row.removeFromLeft(18), juce::Justification::centredLeft);
-            g.drawText(juce::String(stats.emptyOutputBuffers.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
-            g.drawText(juce::String(stats.partialUnderfills.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
-            g.drawText(juce::String(stats.discontinuities.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
-            g.drawText(juce::String(stats.mediumDiscontinuities.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
-            g.drawText(juce::String(stats.minorDiscontinuities.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
-            g.drawText(juce::String(stats.zeroSampleRuns.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
-            g.drawText(juce::String(stats.clippedSamples.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
-            g.drawText(juce::String(stats.nanOrInfSamples.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
-            g.drawText(juce::String(stats.rmsJumps.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
-            g.drawText(juce::String(stats.directionFlips.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
-            g.drawText(juce::String(stats.sliceJumps.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
-            g.drawText(juce::String(stats.modeTransitions.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
-            g.drawText(juce::String(stats.soundTouchResets.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
-            g.drawText(juce::String(stats.dcOffsetDrifts.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
-            g.drawText(juce::String(stats.lookaheadPreCrossfades.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
-            g.drawText(juce::String(stats.lookaheadMispredictions.load()), row.removeFromLeft(colW), juce::Justification::centredLeft);
-            g.drawText(juce::String(stats.lookaheadAborts.load()), row, juce::Justification::centredLeft);
+            g.drawText(juce::String(s.emptyOutputBuffers), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(s.partialUnderfills), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(s.discontinuities), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(s.mediumDiscontinuities), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(s.minorDiscontinuities), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(s.zeroSampleRuns), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(s.clippedSamples), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(s.nanOrInfSamples), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(s.rmsJumps), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(s.directionFlips), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(s.sliceJumps), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(s.modeTransitions), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(s.soundTouchResets), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(s.dcOffsetDrifts), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(s.lookaheadPreCrossfades), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(s.lookaheadMispredictions), row.removeFromLeft(colW), juce::Justification::centredLeft);
+            g.drawText(juce::String(s.lookaheadAborts), row, juce::Justification::centredLeft);
         }
         
-        // Summary at bottom
+        // Summary at bottom (from cached totals)
         if (area.getHeight() >= lineH * 3)
         {
             area.removeFromTop(4);
@@ -173,49 +174,27 @@ public:
             g.drawHorizontalLine(area.getY(), (float)area.getX(), (float)area.getRight());
             area.removeFromTop(4);
             
-            int totalAllPads = 0;
-            int totalCritical = 0;
-            int totalMedium = 0;
-            int totalMinor = 0;
-            
-            for (int i = 0; i < app.channelStrips.size(); ++i)
-            {
-                const auto& strip = *app.channelStrips[i];
-                if (const auto* buffer = strip.getAudioBuffer())
-                {
-                    const auto& stats = buffer->getTearingStats();
-                    totalAllPads += stats.getTotalEvents();
-                    totalCritical += stats.emptyOutputBuffers.load() + stats.discontinuities.load() 
-                                   + stats.nanOrInfSamples.load();
-                    totalMedium += stats.mediumDiscontinuities.load() + stats.rmsJumps.load() 
-                                 + stats.partialUnderfills.load() + stats.dcOffsetDrifts.load();
-                    totalMinor += stats.minorDiscontinuities.load() + stats.directionFlips.load() 
-                                + stats.sliceJumps.load() + stats.modeTransitions.load() 
-                                + stats.soundTouchResets.load();
-                }
-            }
-            
             g.setFont(ThemeFonts::getInstance().monoBoldFont(12.0f));
             
             // Color-coded summary by severity
             auto summaryRow = area.removeFromTop(lineH);
             g.setColour(Theme::text());
-            g.drawText("Total: " + juce::String(totalAllPads), summaryRow.removeFromLeft(100), juce::Justification::centredLeft);
+            g.drawText("Total: " + juce::String(cachedTotalAll), summaryRow.removeFromLeft(100), juce::Justification::centredLeft);
             
-            if (totalCritical > 0)
+            if (cachedTotalCritical > 0)
                 g.setColour(Theme::bad());
             else
                 g.setColour(Theme::textSubtle());
-            g.drawText("Critical: " + juce::String(totalCritical), summaryRow.removeFromLeft(90), juce::Justification::centredLeft);
+            g.drawText("Critical: " + juce::String(cachedTotalCritical), summaryRow.removeFromLeft(90), juce::Justification::centredLeft);
             
-            if (totalMedium > 0)
+            if (cachedTotalMedium > 0)
                 g.setColour(Theme::warn());
             else
                 g.setColour(Theme::textSubtle());
-            g.drawText("Medium: " + juce::String(totalMedium), summaryRow.removeFromLeft(90), juce::Justification::centredLeft);
+            g.drawText("Medium: " + juce::String(cachedTotalMedium), summaryRow.removeFromLeft(90), juce::Justification::centredLeft);
             
             g.setColour(Theme::textSubtle());
-            g.drawText("Minor: " + juce::String(totalMinor), summaryRow, juce::Justification::centredLeft);
+            g.drawText("Minor: " + juce::String(cachedTotalMinor), summaryRow, juce::Justification::centredLeft);
         }
 #else
         // Release build message
@@ -275,9 +254,63 @@ private:
     TearingTooltipLookAndFeel tooltipLnf;
     juce::TooltipWindow tooltipWindow { this };
     std::vector<juce::Rectangle<int>> headerColumnBounds;
+
+    // Cached stats snapshots (populated in timerCallback, used in paint)
+    std::vector<StatsSnapshot> cachedStats;
+    int cachedTotalAll = 0, cachedTotalCritical = 0, cachedTotalMedium = 0, cachedTotalMinor = 0;
     
     void timerCallback() override 
     { 
+        if (!isShowing()) return;
+
+        // Snapshot all atomic stats into plain structs
+        const auto numStrips = app.channelStrips.size();
+        cachedStats.resize(numStrips);
+        cachedTotalAll = cachedTotalCritical = cachedTotalMedium = cachedTotalMinor = 0;
+
+        for (int i = 0; i < (int)numStrips; ++i)
+        {
+            const auto& strip = *app.channelStrips[(size_t)i];
+            const auto* buffer = strip.getAudioBuffer();
+            auto& s = cachedStats[(size_t)i];
+            if (!buffer)
+            {
+                s = {};
+                continue;
+            }
+            const auto& st = buffer->getTearingStats();
+            s.emptyOutputBuffers     = st.emptyOutputBuffers.load();
+            s.partialUnderfills      = st.partialUnderfills.load();
+            s.discontinuities        = st.discontinuities.load();
+            s.mediumDiscontinuities  = st.mediumDiscontinuities.load();
+            s.minorDiscontinuities   = st.minorDiscontinuities.load();
+            s.zeroSampleRuns         = st.zeroSampleRuns.load();
+            s.clippedSamples         = st.clippedSamples.load();
+            s.nanOrInfSamples        = st.nanOrInfSamples.load();
+            s.rmsJumps               = st.rmsJumps.load();
+            s.directionFlips         = st.directionFlips.load();
+            s.sliceJumps             = st.sliceJumps.load();
+            s.modeTransitions        = st.modeTransitions.load();
+            s.soundTouchResets       = st.soundTouchResets.load();
+            s.dcOffsetDrifts         = st.dcOffsetDrifts.load();
+            s.lookaheadPreCrossfades = st.lookaheadPreCrossfades.load();
+            s.lookaheadMispredictions = st.lookaheadMispredictions.load();
+            s.lookaheadAborts        = st.lookaheadAborts.load();
+            s.totalEvents    = s.emptyOutputBuffers + s.partialUnderfills + s.discontinuities
+                             + s.mediumDiscontinuities + s.minorDiscontinuities + s.zeroSampleRuns
+                             + s.clippedSamples + s.nanOrInfSamples + s.rmsJumps + s.directionFlips
+                             + s.sliceJumps + s.modeTransitions + s.soundTouchResets + s.dcOffsetDrifts
+                             + s.lookaheadPreCrossfades + s.lookaheadMispredictions + s.lookaheadAborts;
+            s.criticalEvents = s.emptyOutputBuffers + s.discontinuities + s.nanOrInfSamples;
+            s.mediumEvents   = s.mediumDiscontinuities + s.rmsJumps + s.partialUnderfills;
+
+            cachedTotalAll      += s.totalEvents;
+            cachedTotalCritical += s.criticalEvents;
+            cachedTotalMedium   += s.mediumDiscontinuities + s.rmsJumps + s.partialUnderfills + s.dcOffsetDrifts;
+            cachedTotalMinor    += s.minorDiscontinuities + s.directionFlips + s.sliceJumps
+                                + s.modeTransitions + s.soundTouchResets;
+        }
+
         repaint(); 
     }
     

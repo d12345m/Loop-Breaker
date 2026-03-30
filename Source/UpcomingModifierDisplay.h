@@ -20,7 +20,7 @@ class UpcomingModifierDisplay : public juce::Component,
 public:
     UpcomingModifierDisplay()
     {
-        startTimerHz (30);  // shimmer needs smooth animation
+        startTimerHz (15);  // shimmer animation (reduced from 30 Hz)
     }
 
     void setUpcoming(const std::optional<ModifierDescriptor>& desc)
@@ -297,7 +297,7 @@ private:
         const auto& anim = ThemeEngine::getInstance().getAnimationConfig();
         if (anim.enabled && anim.progressBarShimmer && progress > 0.01 && !suppressed)
         {
-            shimmerPhase += (1.0f / 30.0f) * anim.animationSpeed * 0.5f;  // ~2s cycle
+            shimmerPhase += (1.0f / 15.0f) * anim.animationSpeed * 0.5f;  // ~2s cycle
             if (shimmerPhase > 1.0f) shimmerPhase -= 1.0f;
             repaint();
         }

@@ -231,7 +231,11 @@ public:
     }
 
 private:
-    void timerCallback() override { repaint(); }
+    void timerCallback() override
+    {
+        if (!isShowing()) return;
+        repaint();
+    }
 
     AppState& app;
     juce::TextButton resetButton;

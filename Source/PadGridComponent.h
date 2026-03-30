@@ -69,7 +69,7 @@ public:
             loopEndSamples[(size_t)i] = 0.0;
         }
 
-        startTimerHz(20); // for transient flash highlight decay - lower overhead
+        startTimerHz(15); // for transient flash highlight decay (reduced from 20 Hz)
     }
 
     // Returns indices of pads whose toggle state is on (selected by user for modifiers)
@@ -726,7 +726,7 @@ private:
 
     void timerCallback() override
     {
-        const double dt = 1.0 / 20.0;  // 50 ms per tick
+        const double dt = 1.0 / 15.0;  // matches 15 Hz timer
         bool any = false;
         for (int i = 0; i < numPads; ++i)
         {

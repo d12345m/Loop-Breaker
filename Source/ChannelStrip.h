@@ -1054,7 +1054,7 @@ public:
     // ── Granular processor (Clouds-inspired) ──
     struct GranularProcessor
     {
-        static constexpr int kMaxGrains = 24;
+        static constexpr int kMaxGrains = 48;
         static constexpr int kCaptureMs = 2000;
 
         struct Grain

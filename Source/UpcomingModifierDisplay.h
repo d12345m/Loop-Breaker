@@ -133,7 +133,7 @@ public:
                 if (desc->plannedGrainPitchSpread.has_value())
                 {
                     double sp = desc->plannedGrainPitchSpread.value();
-                    parts << " | " << (sp <= 0.0 ? juce::String("unison") : (juce::String("\xC2\xB1") + juce::String((int)(sp / 12.0)) + " oct"));
+                    parts << " | " << (sp <= 0.0 ? juce::String("unison") : (juce::String(juce::CharPointer_UTF8("\xc2\xb1")) + juce::String((int)(sp / 12.0)) + " oct"));
                 }
                 if (desc->plannedFxFadeBars.has_value())
                 {

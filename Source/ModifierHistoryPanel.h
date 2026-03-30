@@ -109,6 +109,8 @@ public:
             case ModifierType::ArpSlice:        typeColour = Theme::good(); break;
             case ModifierType::SliceRepeater:   typeColour = Theme::good(); break;
             case ModifierType::SwapModifierStack: typeColour = Theme::accent2(); break;
+            case ModifierType::BufferGranularOn:
+            case ModifierType::BufferGranularMomentary: typeColour = Theme::accent(); break;
             default:                            typeColour = Theme::textSubtle(); break;
         }
 

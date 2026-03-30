@@ -129,6 +129,8 @@ public:
             case ModifierType::BufferDuckingOn:     return "Ducking";
             case ModifierType::BufferSHLowPassOn:   return "S&H Low-Pass";
             case ModifierType::BufferSHHighPassOn:  return "S&H High-Pass";
+            case ModifierType::BufferGranularOn:     return "Granular";
+            case ModifierType::BufferGranularMomentary: return "Granular Burst";
             case ModifierType::MasterHighPassOn:    return "Master High-Pass";
             case ModifierType::MasterLowPassOn:     return "Master Low-Pass";
             case ModifierType::SwitchPart:          return "Switch Part";
@@ -167,6 +169,8 @@ public:
             case ModifierType::BufferDuckingOn:
             case ModifierType::BufferSHLowPassOn:
             case ModifierType::BufferSHHighPassOn:
+            case ModifierType::BufferGranularOn:
+            case ModifierType::BufferGranularMomentary:
                 return "Channel Effect";
 
             case ModifierType::MasterHighPassOn:
@@ -212,6 +216,8 @@ public:
             ModifierType::BufferDuckingOn,
             ModifierType::BufferSHLowPassOn,
             ModifierType::BufferSHHighPassOn,
+            ModifierType::BufferGranularOn,
+            ModifierType::BufferGranularMomentary,
             // Master FX
             ModifierType::MasterHighPassOn,
             ModifierType::MasterLowPassOn,

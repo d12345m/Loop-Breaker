@@ -44,6 +44,7 @@ struct BufferModifierSnapshot
     bool volumeRampEnabled     = false;
     bool shLowPassEnabled      = false;
     bool shHighPassEnabled     = false;
+    bool granularEnabled       = false;
 
     // ── ChannelStrip FxParams ──
     float reverbWet            = 0.0f;
@@ -82,6 +83,11 @@ struct BufferModifierSnapshot
     float shHpfCutoff          = 200.0f;
     float shHpfQ               = 1.0f;
     float shDivisionBars       = 0.25f;
+    float grainDensityHz       = 4.0f;
+    float grainSizeMs          = 80.0f;
+    float grainPitchSpread     = 0.0f;
+    float grainMix             = 0.0f;
+    float grainTexture         = 0.3f;
 
     // ── Serialization ──
     juce::var toVar() const
@@ -110,6 +116,7 @@ struct BufferModifierSnapshot
         o->setProperty("fxVolRamp",    volumeRampEnabled);
         o->setProperty("fxShLpf",      shLowPassEnabled);
         o->setProperty("fxShHpf",      shHighPassEnabled);
+        o->setProperty("fxGran",       granularEnabled);
 
         o->setProperty("revWet",       (double) reverbWet);
         o->setProperty("revPdMs",      (double) reverbPreDelayMs);
@@ -147,6 +154,11 @@ struct BufferModifierSnapshot
         o->setProperty("shHpfCut",     (double) shHpfCutoff);
         o->setProperty("shHpfQ",       (double) shHpfQ);
         o->setProperty("shDivBars",    (double) shDivisionBars);
+        o->setProperty("grDenHz",      (double) grainDensityHz);
+        o->setProperty("grSzMs",       (double) grainSizeMs);
+        o->setProperty("grPtSp",       (double) grainPitchSpread);
+        o->setProperty("grMix",        (double) grainMix);
+        o->setProperty("grTex",        (double) grainTexture);
 
         return juce::var(o);
     }
@@ -186,6 +198,7 @@ struct BufferModifierSnapshot
         s.volumeRampEnabled        = getB("fxVolRamp",false);
         s.shLowPassEnabled         = getB("fxShLpf",  false);
         s.shHighPassEnabled        = getB("fxShHpf",  false);
+        s.granularEnabled          = getB("fxGran",   false);
 
         s.reverbWet                = getF("revWet",   0.0f);
         s.reverbPreDelayMs         = getF("revPdMs",  0.0f);
@@ -223,6 +236,11 @@ struct BufferModifierSnapshot
         s.shHpfCutoff              = getF("shHpfCut", 200.0f);
         s.shHpfQ                   = getF("shHpfQ",   1.0f);
         s.shDivisionBars           = getF("shDivBars",0.25f);
+        s.grainDensityHz           = getF("grDenHz",  4.0f);
+        s.grainSizeMs              = getF("grSzMs",   80.0f);
+        s.grainPitchSpread         = getF("grPtSp",   0.0f);
+        s.grainMix                 = getF("grMix",    0.0f);
+        s.grainTexture             = getF("grTex",    0.3f);
 
         return s;
     }

@@ -91,6 +91,8 @@ juce::OwnedArray<IModifier> ModifierFactory::createAllPrototypes()
     add(ModifierType::BufferAutoPan, ModifierCategory::BufferEffect, "Auto-Pan", "Stereo auto-pan with randomized rate, depth, mix, and fade");
     add(ModifierType::BufferSHLowPassOn, ModifierCategory::BufferEffect, "S&H Low-Pass", "Persistent low-pass filter with sample-and-hold modulated cutoff and Q");
     add(ModifierType::BufferSHHighPassOn, ModifierCategory::BufferEffect, "S&H High-Pass", "Persistent high-pass filter with sample-and-hold modulated cutoff and Q");
+    add(ModifierType::BufferGranularOn, ModifierCategory::BufferEffect, "Granular", "Clouds-inspired granular texture with randomized density, grain size, pitch spread, and mix");
+    add(ModifierType::BufferGranularMomentary, ModifierCategory::BufferEffect, "Granular Burst", "Temporary granular cloud that fades in and out over bars");
 
     // Master FX
     add(ModifierType::MasterHighPassOn, ModifierCategory::MasterEffect, "Master High-Pass", "Temporary master high-pass filter (2-16 bars, ramp or jump mode)");

@@ -721,6 +721,16 @@ def build_manual():
          "The cutoff and Q are randomly re-triggered at a musical rate (16th, 8th, or quarter "
          "note), producing a rhythmic, stepped thinning effect. The cutoff range is 60 Hz to "
          "800 Hz and the Q range is 0.5 to 4.0."),
+        ("Granular", "A Clouds-inspired granular texture effect. Captures incoming audio into a "
+         "short buffer and re-synthesizes it as overlapping grains with randomized position, "
+         "pitch variance, and stereo spread. Parameters include grain density (2\u201324 grains/sec), "
+         "grain size (15\u2013200ms), pitch spread (0\u201312 semitones), wet/dry mix, and texture "
+         "(smooth Hann to sharp rectangular window). This is a permanent effect that remains "
+         "active until Reset is triggered."),
+        ("Granular Burst", "A temporary version of the Granular effect that fades in over half "
+         "the configured duration, then fades back out. Duration options are 2, 4, 8, or 16 bars. "
+         "All other granular parameters (density, size, pitch spread, mix, texture) are randomized "
+         "independently."),
     ]
     for name, desc in channel_mods:
         pdf.set_font("Helvetica", "B", 10.5)

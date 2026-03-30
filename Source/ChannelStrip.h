@@ -26,8 +26,9 @@ struct EffectChainPlaceholder
     bool volumeRampEnabled = false;
     bool shLowPassEnabled = false;
     bool shHighPassEnabled = false;
+    bool granularEnabled = false;
 
-    void reset() { delayEnabled = reverbEnabled = lowPassEnabled = highPassEnabled = tremoloEnabled = chorusEnabled = autoPanEnabled = volumeRampEnabled = shLowPassEnabled = shHighPassEnabled = false; }
+    void reset() { delayEnabled = reverbEnabled = lowPassEnabled = highPassEnabled = tremoloEnabled = chorusEnabled = autoPanEnabled = volumeRampEnabled = shLowPassEnabled = shHighPassEnabled = granularEnabled = false; }
 };
 
 class ChannelStrip
@@ -96,6 +97,9 @@ public:
             chorusDelayWritePos = 0;
             chorusDelayBuffer.setSize(2, chorusDelayBufferSize, false, false, true);
             chorusDelayBuffer.clear();
+
+            // Granular capture buffer
+            granular.prepare(sampleRate);
         }
     }
 
@@ -436,6 +440,15 @@ public:
             if (clipProbes) (*clipProbes)[NodeId::AutoPan].inspect(tempBuffer, numSamples);
         }
 
+        // ── Granular processing (Clouds-inspired) ──
+        if (chain.granularEnabled && params.grainMix > 0.0001f)
+        {
+            granular.process(tempBuffer, numSamples,
+                             params.grainDensityHz, params.grainSizeMs,
+                             params.grainPitchSpread, params.grainMix,
+                             params.grainTexture);
+        }
+
         // Apply volume ramp gain (before reverb and limiter) if active
         if (chain.volumeRampEnabled && params.volumeGain < 0.9999f)
         {
@@ -621,6 +634,12 @@ public:
         float shHpfCutoff = 200.0f;   // current held high-pass cutoff (60..800 Hz)
         float shHpfQ = 1.0f;          // current held high-pass Q (0.5..4.0)
         float shDivisionBars = 0.25f; // S&H rate: 0.0625=1/16, 0.125=1/8, 0.25=1/4
+        // Granular (Clouds-inspired)
+        float grainDensityHz = 4.0f;     // grains per second
+        float grainSizeMs = 80.0f;       // grain length in ms
+        float grainPitchSpread = 0.0f;   // pitch variance in semitones
+        float grainMix = 0.0f;           // wet/dry 0..1
+        float grainTexture = 0.3f;       // window shape 0=smooth..1=sharp
     };
 
     void reset()
@@ -637,8 +656,11 @@ public:
         chorusMixEnv = {};
         panMixEnv = {};
         volumeGainEnv = {};
+        grainMixEnv = {};
+        tempGranular = {};
         tempVolRamp = {};
         shPhaseBars = 0.0f;
+        granular.reset();
         if (buffer) buffer->resetToDefaults();
     }
 
@@ -694,6 +716,20 @@ public:
     void setVolumeGainEnvelope(float start, float target, float durationBars)
     {
         volumeGainEnv = { start, target, durationBars, 0.0f, EffectEnvelope::Curve::Linear };
+    }
+
+    void setGrainMixEnvelope(float start, float target, float durationBars)
+    {
+        grainMixEnv = { start, target, durationBars, 0.0f, EffectEnvelope::Curve::Linear };
+    }
+
+    void startTemporaryGranular(float riseTarget, float riseDurationBars, float returnTarget, float returnDurationBars)
+    {
+        setGrainMixEnvelope(params.grainMix, riseTarget, juce::jmax(0.0f, riseDurationBars));
+        tempGranular.active = true;
+        tempGranular.fallingStarted = false;
+        tempGranular.returnTarget = returnTarget;
+        tempGranular.fallDurationBars = juce::jmax(0.0f, returnDurationBars);
     }
 
     // Temporary volume ramp: ramp down over rampDownBars, hold for holdBars, ramp back up over rampUpBars
@@ -798,6 +834,20 @@ public:
             chain.volumeRampEnabled = false;
             tempVolRamp.active = false;
         }
+        // Granular mix
+        params.grainMix = grainMixEnv.isActive() ? grainMixEnv.current(params.grainMix) : params.grainMix;
+        if (grainMixEnv.isActive()) grainMixEnv.advance(barsDelta);
+        if (tempGranular.active && !tempGranular.fallingStarted && !grainMixEnv.isActive())
+        {
+            setGrainMixEnvelope(params.grainMix, tempGranular.returnTarget, tempGranular.fallDurationBars);
+            tempGranular.fallingStarted = true;
+        }
+        // Auto-disable granular when mix reaches zero and no active envelope
+        if (chain.granularEnabled && !grainMixEnv.isActive() && params.grainMix <= 0.0001f)
+        {
+            chain.granularEnabled = false;
+            tempGranular = {};
+        }
         // S&H filter: advance phase and trigger new random cutoff/Q at each division
         if (chain.shLowPassEnabled || chain.shHighPassEnabled)
         {
@@ -839,6 +889,7 @@ private:
     EffectEnvelope chorusMixEnv;
     EffectEnvelope panMixEnv;
     EffectEnvelope volumeGainEnv;
+    EffectEnvelope grainMixEnv;
     juce::dsp::Reverb reverb;
     juce::dsp::Limiter<float> limiter;
     bool reverbPrepared = false;
@@ -925,6 +976,7 @@ private:
     struct TempFilterBurst { bool active = false; bool fallingStarted = false; float returnTarget = 0.0f; float fallDurationBars = 0.0f; };
     TempFilterBurst tempLpf;
     TempFilterBurst tempHpf;
+    TempFilterBurst tempGranular;
     // Volume ramp state: ramp down -> hold -> ramp up
     struct TempVolRampState {
         bool active = false;
@@ -998,4 +1050,145 @@ public:
         lastSHHpfQ = q;
     }
     struct DubBurstState { bool active = false; bool fallingStarted = false; float fallTarget = 0.0f; float fallDurationBars = 0.0f; } dubBurst;
+
+    // ── Granular processor (Clouds-inspired) ──
+    struct GranularProcessor
+    {
+        static constexpr int kMaxGrains = 24;
+        static constexpr int kCaptureMs = 2000;
+
+        struct Grain
+        {
+            bool active = false;
+            float readPos = 0.0f;
+            float readInc = 1.0f;
+            int remaining = 0;
+            int total = 0;
+            float panL = 1.0f;
+            float panR = 1.0f;
+        };
+
+        juce::AudioBuffer<float> captureBuffer;
+        int captureWritePos = 0;
+        int captureBufSize = 0;
+        Grain grains[kMaxGrains];
+        float triggerAccum = 0.0f;
+        juce::Random rng;
+        double sampleRate = 44100.0;
+
+        void prepare(double sr)
+        {
+            sampleRate = sr;
+            captureBufSize = (int)(sr * kCaptureMs / 1000.0);
+            if (captureBufSize < 64) captureBufSize = 64;
+            captureBuffer.setSize(2, captureBufSize);
+            captureBuffer.clear();
+            captureWritePos = 0;
+            for (auto& g : grains) g.active = false;
+            triggerAccum = 0.0f;
+        }
+
+        void reset()
+        {
+            if (captureBufSize > 0) captureBuffer.clear();
+            captureWritePos = 0;
+            for (auto& g : grains) g.active = false;
+            triggerAccum = 0.0f;
+        }
+
+        void process(juce::AudioBuffer<float>& audio, int numSamples,
+                      float densityHz, float grainSizeMs, float pitchSpread,
+                      float mix, float texture)
+        {
+            if (captureBufSize <= 0 || mix <= 0.0001f) return;
+            const int numCh = juce::jmin(2, audio.getNumChannels());
+            const float samplesPerTrigger = (float)(sampleRate / juce::jmax(0.5, (double)densityHz));
+            const int grainLen = juce::jmax(64, (int)(grainSizeMs * 0.001 * sampleRate));
+
+            for (int i = 0; i < numSamples; ++i)
+            {
+                // Capture input
+                for (int ch = 0; ch < numCh; ++ch)
+                    captureBuffer.setSample(ch, captureWritePos, audio.getSample(ch, i));
+                captureWritePos = (captureWritePos + 1) % captureBufSize;
+
+                // Trigger new grains
+                triggerAccum += 1.0f;
+                if (triggerAccum >= samplesPerTrigger)
+                {
+                    triggerAccum -= samplesPerTrigger;
+                    spawnGrain(grainLen, pitchSpread);
+                }
+
+                // Sum active grains
+                float wetL = 0.0f, wetR = 0.0f;
+                for (auto& g : grains)
+                {
+                    if (!g.active) continue;
+                    float progress = 1.0f - (float)g.remaining / (float)g.total;
+                    float win = grainWindow(progress, texture);
+
+                    int p0 = ((int)g.readPos) % captureBufSize;
+                    if (p0 < 0) p0 += captureBufSize;
+                    int p1 = (p0 + 1) % captureBufSize;
+                    float frac = g.readPos - std::floor(g.readPos);
+
+                    for (int ch = 0; ch < numCh; ++ch)
+                    {
+                        float s = captureBuffer.getSample(ch, p0)
+                                + frac * (captureBuffer.getSample(ch, p1)
+                                        - captureBuffer.getSample(ch, p0));
+                        s *= win;
+                        if (ch == 0) wetL += s * g.panL;
+                        else         wetR += s * g.panR;
+                    }
+                    g.readPos += g.readInc;
+                    if (g.readPos >= (float)captureBufSize) g.readPos -= (float)captureBufSize;
+                    if (g.readPos < 0.0f) g.readPos += (float)captureBufSize;
+                    if (--g.remaining <= 0) g.active = false;
+                }
+
+                // Soft-clip wet signal to prevent grain pileup blowout
+                wetL = std::tanh(wetL);
+                wetR = std::tanh(wetR);
+
+                // Mix
+                float dryL = audio.getSample(0, i);
+                audio.setSample(0, i, dryL * (1.0f - mix) + wetL * mix);
+                if (numCh > 1)
+                {
+                    float dryR = audio.getSample(1, i);
+                    audio.setSample(1, i, dryR * (1.0f - mix) + wetR * mix);
+                }
+            }
+        }
+
+    private:
+        void spawnGrain(int grainLen, float pitchSpread)
+        {
+            Grain* slot = nullptr;
+            for (auto& g : grains)
+                if (!g.active) { slot = &g; break; }
+            if (!slot) return;
+
+            int maxOff = juce::jmax(1, captureBufSize - grainLen * 2);
+            int offset = rng.nextInt(maxOff);
+            slot->active = true;
+            slot->readPos = (float)((captureWritePos - offset - grainLen + captureBufSize * 2) % captureBufSize);
+            slot->total = grainLen;
+            slot->remaining = grainLen;
+            float semi = (rng.nextFloat() * 2.0f - 1.0f) * pitchSpread;
+            slot->readInc = std::pow(2.0f, semi / 12.0f);
+            float pan = rng.nextFloat();
+            slot->panL = std::cos(pan * juce::MathConstants<float>::halfPi);
+            slot->panR = std::sin(pan * juce::MathConstants<float>::halfPi);
+        }
+
+        static float grainWindow(float progress, float texture)
+        {
+            float hann = 0.5f * (1.0f - std::cos(juce::MathConstants<float>::twoPi * progress));
+            float rect = juce::jmin(1.0f, progress * 20.0f) * juce::jmin(1.0f, (1.0f - progress) * 20.0f);
+            return hann + texture * (rect - hann);
+        }
+    } granular;
 };

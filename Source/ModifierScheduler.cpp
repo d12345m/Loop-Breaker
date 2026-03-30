@@ -804,6 +804,44 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
         else                    divLabel = "1/4 note";
         modified.description = base.description + " -> S&H rate: " + divLabel;
     }
+    else if (base.type == ModifierType::BufferGranularOn || base.type == ModifierType::BufferGranularMomentary)
+    {
+        static const double densities[] { 2.0, 4.0, 8.0, 12.0, 16.0, 24.0 };
+        static const double sizes[]     { 15.0, 30.0, 60.0, 100.0, 150.0, 200.0 };
+        static const double pitches[]   { 0.0, 2.0, 5.0, 7.0, 12.0 };
+        static const double mixes[]     { 0.5, 0.75, 1.0 };
+        static const double textures[]  { 0.1, 0.3, 0.5, 0.8 };
+        static const double fades[]     { 0.0, 1.0, 2.0 };
+        const juce::SpinLock::ScopedLockType lock(rngLock);
+        double density = densities[rng.nextInt((int)std::size(densities))];
+        double size    = sizes[rng.nextInt((int)std::size(sizes))];
+        double pitch   = pitches[rng.nextInt((int)std::size(pitches))];
+        double mix     = mixes[rng.nextInt((int)std::size(mixes))];
+        double texture = textures[rng.nextInt((int)std::size(textures))];
+        modified.plannedGrainDensityHz   = density;
+        modified.plannedGrainSizeMs      = size;
+        modified.plannedGrainPitchSpread = pitch;
+        modified.plannedGrainMix         = mix;
+        modified.plannedGrainTexture     = texture;
+        if (base.type == ModifierType::BufferGranularOn)
+        {
+            double fadeBars = fades[rng.nextInt((int)std::size(fades))];
+            modified.plannedFxFadeBars = fadeBars;
+            juce::String fadeLabel = fadeBars <= 0.0 ? "instant" : juce::String((int)fadeBars) + " bars";
+            modified.description = base.description + " -> " + juce::String((int)density) + " g/s | "
+                + juce::String((int)size) + "ms | ±" + juce::String((int)pitch) + "st | Mix "
+                + juce::String((int)std::round(mix * 100.0)) + "% | Fade: " + fadeLabel;
+        }
+        else
+        {
+            static const double durations[] { 2.0, 4.0, 8.0, 16.0 };
+            double dur = durations[rng.nextInt((int)std::size(durations))];
+            modified.plannedFxFadeBars = dur;
+            modified.description = base.description + " -> " + juce::String((int)density) + " g/s | "
+                + juce::String((int)size) + "ms | ±" + juce::String((int)pitch) + "st | Mix "
+                + juce::String((int)std::round(mix * 100.0)) + "% | " + juce::String((int)dur) + " bars";
+        }
+    }
     else if (base.type == ModifierType::SwapModifierStack)
     {
         modified.description = base.description + " -> Rotate stacks";

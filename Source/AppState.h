@@ -184,6 +184,7 @@ struct AppState : public ModifierSchedulerListener
             snap.volumeRampEnabled = fx.volumeRampEnabled;
             snap.shLowPassEnabled  = fx.shLowPassEnabled;
             snap.shHighPassEnabled = fx.shHighPassEnabled;
+            snap.granularEnabled   = fx.granularEnabled;
 
             // ChannelStrip FxParams
             const auto& fp = strip->getFxParams();
@@ -223,6 +224,11 @@ struct AppState : public ModifierSchedulerListener
             snap.shHpfCutoff            = fp.shHpfCutoff;
             snap.shHpfQ                 = fp.shHpfQ;
             snap.shDivisionBars         = fp.shDivisionBars;
+            snap.grainDensityHz         = fp.grainDensityHz;
+            snap.grainSizeMs            = fp.grainSizeMs;
+            snap.grainPitchSpread       = fp.grainPitchSpread;
+            snap.grainMix               = fp.grainMix;
+            snap.grainTexture           = fp.grainTexture;
         }
     }
 
@@ -276,6 +282,7 @@ struct AppState : public ModifierSchedulerListener
             fx.volumeRampEnabled = snap.volumeRampEnabled;
             fx.shLowPassEnabled  = snap.shLowPassEnabled;
             fx.shHighPassEnabled = snap.shHighPassEnabled;
+            fx.granularEnabled   = snap.granularEnabled;
 
             auto& fp = strip->getMutableFxParams();
             fp.reverbWet              = snap.reverbWet;
@@ -314,6 +321,11 @@ struct AppState : public ModifierSchedulerListener
             fp.shHpfCutoff            = snap.shHpfCutoff;
             fp.shHpfQ                 = snap.shHpfQ;
             fp.shDivisionBars         = snap.shDivisionBars;
+            fp.grainDensityHz         = snap.grainDensityHz;
+            fp.grainSizeMs            = snap.grainSizeMs;
+            fp.grainPitchSpread       = snap.grainPitchSpread;
+            fp.grainMix               = snap.grainMix;
+            fp.grainTexture           = snap.grainTexture;
 
             // Reset playhead to the beginning of the file (or loop bracket start
             // if parts are active) so preset recall behaves like a fresh start,
@@ -470,6 +482,12 @@ struct AppState : public ModifierSchedulerListener
                 break;
             case ModifierType::BufferAutoPan:
                 applyBufferAutoPan(desc, targets);
+                break;
+            case ModifierType::BufferGranularOn:
+                applyBufferGranularOn(desc, targets);
+                break;
+            case ModifierType::BufferGranularMomentary:
+                applyBufferGranularMomentary(desc, targets);
                 break;
             case ModifierType::SwitchPart:
             {
@@ -1179,6 +1197,55 @@ private:
         }
     }
 
+    void applyBufferGranularOn(const ModifierDescriptor& desc, const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        for (int idx : targets)
+        {
+            if (juce::isPositiveAndBelow(idx, channelStrips.size()))
+            {
+                auto& strip = *channelStrips[idx];
+                strip.effects().granularEnabled = true;
+                float targetMix   = desc.plannedGrainMix.has_value()         ? (float)desc.plannedGrainMix.value()         : 0.75f;
+                float density     = desc.plannedGrainDensityHz.has_value()   ? (float)desc.plannedGrainDensityHz.value()   : 8.0f;
+                float size        = desc.plannedGrainSizeMs.has_value()      ? (float)desc.plannedGrainSizeMs.value()      : 80.0f;
+                float pitchSpread = desc.plannedGrainPitchSpread.has_value() ? (float)desc.plannedGrainPitchSpread.value() : 0.0f;
+                float texture     = desc.plannedGrainTexture.has_value()     ? (float)desc.plannedGrainTexture.value()     : 0.3f;
+                float fadeBars    = desc.plannedFxFadeBars.has_value()       ? (float)desc.plannedFxFadeBars.value()       : 1.0f;
+                strip.getMutableFxParams().grainDensityHz   = density;
+                strip.getMutableFxParams().grainSizeMs      = size;
+                strip.getMutableFxParams().grainPitchSpread = pitchSpread;
+                strip.getMutableFxParams().grainTexture     = texture;
+                strip.setGrainMixEnvelope(strip.getFxParams().grainMix, targetMix, fadeBars);
+            }
+        }
+    }
+
+    void applyBufferGranularMomentary(const ModifierDescriptor& desc, const juce::Array<int>& targets)
+    {
+        if (targets.isEmpty()) return;
+        for (int idx : targets)
+        {
+            if (juce::isPositiveAndBelow(idx, channelStrips.size()))
+            {
+                auto& strip = *channelStrips[idx];
+                strip.effects().granularEnabled = true;
+                float targetMix   = desc.plannedGrainMix.has_value()         ? (float)desc.plannedGrainMix.value()         : 0.75f;
+                float density     = desc.plannedGrainDensityHz.has_value()   ? (float)desc.plannedGrainDensityHz.value()   : 8.0f;
+                float size        = desc.plannedGrainSizeMs.has_value()      ? (float)desc.plannedGrainSizeMs.value()      : 80.0f;
+                float pitchSpread = desc.plannedGrainPitchSpread.has_value() ? (float)desc.plannedGrainPitchSpread.value() : 0.0f;
+                float texture     = desc.plannedGrainTexture.has_value()     ? (float)desc.plannedGrainTexture.value()     : 0.3f;
+                double totalBars  = desc.plannedFxFadeBars.value_or(4.0);
+                strip.getMutableFxParams().grainDensityHz   = density;
+                strip.getMutableFxParams().grainSizeMs      = size;
+                strip.getMutableFxParams().grainPitchSpread = pitchSpread;
+                strip.getMutableFxParams().grainTexture     = texture;
+                float half = (float)juce::jmax(0.0001, totalBars * 0.5);
+                strip.startTemporaryGranular(targetMix, half, 0.0f, half);
+            }
+        }
+    }
+
     void applyBufferDuckingOn(const juce::Array<int>& targets)
     {
         if (targets.isEmpty()) return;
@@ -1273,6 +1340,7 @@ private:
             snap.volumeRampEnabled = fx.volumeRampEnabled;
             snap.shLowPassEnabled  = fx.shLowPassEnabled;
             snap.shHighPassEnabled = fx.shHighPassEnabled;
+            snap.granularEnabled   = fx.granularEnabled;
 
             // ChannelStrip FxParams
             const auto& fp = strip->getFxParams();
@@ -1312,6 +1380,11 @@ private:
             snap.shHpfCutoff            = fp.shHpfCutoff;
             snap.shHpfQ                 = fp.shHpfQ;
             snap.shDivisionBars         = fp.shDivisionBars;
+            snap.grainDensityHz         = fp.grainDensityHz;
+            snap.grainSizeMs            = fp.grainSizeMs;
+            snap.grainPitchSpread       = fp.grainPitchSpread;
+            snap.grainMix               = fp.grainMix;
+            snap.grainTexture           = fp.grainTexture;
         }
 
         // 2. Rotate: buffer[i] receives the snapshot from buffer[i-1],
@@ -1362,6 +1435,7 @@ private:
             fx.volumeRampEnabled = snap.volumeRampEnabled;
             fx.shLowPassEnabled  = snap.shLowPassEnabled;
             fx.shHighPassEnabled = snap.shHighPassEnabled;
+            fx.granularEnabled   = snap.granularEnabled;
 
             // ChannelStrip FxParams
             auto& fp = strip->getMutableFxParams();
@@ -1401,6 +1475,11 @@ private:
             fp.shHpfCutoff            = snap.shHpfCutoff;
             fp.shHpfQ                 = snap.shHpfQ;
             fp.shDivisionBars         = snap.shDivisionBars;
+            fp.grainDensityHz         = snap.grainDensityHz;
+            fp.grainSizeMs            = snap.grainSizeMs;
+            fp.grainPitchSpread       = snap.grainPitchSpread;
+            fp.grainMix               = snap.grainMix;
+            fp.grainTexture           = snap.grainTexture;
 
             // Declick: fade-in over ~12ms to mask FX parameter discontinuities
             strip->requestDeclickFadeIn(512);

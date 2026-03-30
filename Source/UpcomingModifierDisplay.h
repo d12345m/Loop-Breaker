@@ -122,6 +122,23 @@ public:
                 parts << (desc->plannedImmediateJump.value() ? "Jump to target then decay" : "Ramp up then ramp down");
                 upcomingVariant = parts;
             }
+            else if (desc->plannedGrainMix.has_value())
+            {
+                juce::String parts;
+                parts << "Mix " << (int)std::round(desc->plannedGrainMix.value() * 100.0) << "%";
+                if (desc->plannedGrainDensityHz.has_value())
+                    parts << " | " << juce::String(desc->plannedGrainDensityHz.value(), 0) << " g/s";
+                if (desc->plannedGrainSizeMs.has_value())
+                    parts << " | " << juce::String(desc->plannedGrainSizeMs.value(), 0) << "ms";
+                if (desc->plannedGrainPitchSpread.has_value())
+                    parts << " | \xC2\xB1" << juce::String(desc->plannedGrainPitchSpread.value(), 0) << "st";
+                if (desc->plannedFxFadeBars.has_value())
+                {
+                    auto bars = desc->plannedFxFadeBars.value();
+                    parts << " | " << (bars <= 0.0 ? juce::String("instant") : juce::String((int)bars) + " bars");
+                }
+                upcomingVariant = parts;
+            }
 
             // Show base description without any appended arrow details (UI will show variant separately)
             auto d = desc->description;

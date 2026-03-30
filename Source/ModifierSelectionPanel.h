@@ -59,6 +59,8 @@ public:
     addToggle(ModifierType::BufferAutoPan, "Auto-Pan");
     addToggle(ModifierType::BufferSHLowPassOn, "S&H Low-Pass");
     addToggle(ModifierType::BufferSHHighPassOn, "S&H High-Pass");
+    addToggle(ModifierType::BufferGranularOn, "Granular");
+    addToggle(ModifierType::BufferGranularMomentary, "Granular Burst");
     addToggle(ModifierType::BufferVolumeRampDown, "Volume Ramp Down");
     // Ducking is enabled by default; GUI toggle removed.
     // Speed variants removed; Speed is randomized at runtime.

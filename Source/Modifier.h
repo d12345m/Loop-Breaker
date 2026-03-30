@@ -49,6 +49,8 @@ enum class ModifierType
     BufferAutoPan,
     BufferSHLowPassOn,
     BufferSHHighPassOn,
+    BufferGranularOn,
+    BufferGranularMomentary,
 
     // Master FX modifiers
     MasterHighPassOn,
@@ -115,6 +117,12 @@ struct ModifierDescriptor
     std::optional<double> plannedPingPongDivision; // Musical division in bars
     // S&H Filter: musical division for sample-and-hold rate (0.0625=1/16, 0.125=1/8, 0.25=1/4)
     std::optional<double> plannedSHDivisionBars;
+    // Granular parameters (Clouds-inspired)
+    std::optional<double> plannedGrainDensityHz;   // grains per second (2..24)
+    std::optional<double> plannedGrainSizeMs;      // grain length in ms (15..200)
+    std::optional<double> plannedGrainPitchSpread; // pitch variance in semitones (0..12)
+    std::optional<double> plannedGrainMix;         // wet/dry mix 0..1
+    std::optional<double> plannedGrainTexture;     // window shape 0=smooth..1=sharp
 };
 
 // Execution context passed to modifiers when ultimately applied.

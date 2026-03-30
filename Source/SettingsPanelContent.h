@@ -75,13 +75,13 @@ public:
         barsLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
 
         addAndMakeVisible (barsSlider);
-        barsSlider.setRange (1.0, 16.0, 1.0);
+        barsSlider.setRange (1.0, 32.0, 1.0);
         barsSlider.setValue (settings.barsBetweenModifiers, juce::dontSendNotification);
         barsSlider.setSliderStyle (juce::Slider::LinearHorizontal);
         barsSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 44, 22);
         barsSlider.onValueChange = [this]
         {
-            settings.barsBetweenModifiers = juce::jlimit (1, 16, (int) barsSlider.getValue());
+            settings.barsBetweenModifiers = juce::jlimit (1, 32, (int) barsSlider.getValue());
             if (onBarsChanged) onBarsChanged (settings.barsBetweenModifiers);
         };
 
@@ -109,13 +109,13 @@ public:
         barsRangeMinLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
 
         addAndMakeVisible (barsRangeMinSlider);
-        barsRangeMinSlider.setRange (1.0, 16.0, 1.0);
+        barsRangeMinSlider.setRange (1.0, 32.0, 1.0);
         barsRangeMinSlider.setValue (settings.barsRangeMin, juce::dontSendNotification);
         barsRangeMinSlider.setSliderStyle (juce::Slider::LinearHorizontal);
         barsRangeMinSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 44, 22);
         barsRangeMinSlider.onValueChange = [this]
         {
-            settings.barsRangeMin = juce::jlimit (1, 16, (int) barsRangeMinSlider.getValue());
+            settings.barsRangeMin = juce::jlimit (1, 32, (int) barsRangeMinSlider.getValue());
             if (settings.barsRangeMax < settings.barsRangeMin)
             {
                 settings.barsRangeMax = settings.barsRangeMin;
@@ -129,13 +129,13 @@ public:
         barsRangeMaxLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
 
         addAndMakeVisible (barsRangeMaxSlider);
-        barsRangeMaxSlider.setRange (1.0, 16.0, 1.0);
+        barsRangeMaxSlider.setRange (1.0, 32.0, 1.0);
         barsRangeMaxSlider.setValue (settings.barsRangeMax, juce::dontSendNotification);
         barsRangeMaxSlider.setSliderStyle (juce::Slider::LinearHorizontal);
         barsRangeMaxSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 44, 22);
         barsRangeMaxSlider.onValueChange = [this]
         {
-            settings.barsRangeMax = juce::jlimit (1, 16, (int) barsRangeMaxSlider.getValue());
+            settings.barsRangeMax = juce::jlimit (1, 32, (int) barsRangeMaxSlider.getValue());
             if (settings.barsRangeMin > settings.barsRangeMax)
             {
                 settings.barsRangeMin = settings.barsRangeMax;
@@ -150,7 +150,7 @@ public:
         timedMinLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
 
         addAndMakeVisible (timedMinSlider);
-        timedMinSlider.setRange (5.0, 300.0, 1.0);
+        timedMinSlider.setRange (1.0, 300.0, 1.0);
         timedMinSlider.setValue (settings.timedIntervalMinSec, juce::dontSendNotification);
         timedMinSlider.setSliderStyle (juce::Slider::LinearHorizontal);
         timedMinSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 52, 22);
@@ -171,7 +171,7 @@ public:
         timedMaxLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
 
         addAndMakeVisible (timedMaxSlider);
-        timedMaxSlider.setRange (5.0, 300.0, 1.0);
+        timedMaxSlider.setRange (1.0, 300.0, 1.0);
         timedMaxSlider.setValue (settings.timedIntervalMaxSec, juce::dontSendNotification);
         timedMaxSlider.setSliderStyle (juce::Slider::LinearHorizontal);
         timedMaxSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 52, 22);

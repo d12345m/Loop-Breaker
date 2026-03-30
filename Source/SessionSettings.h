@@ -38,7 +38,7 @@ struct SessionSettings
     int barsRangeMax = 8;              // Maximum bars between modifiers
 
     // Timed cadence range (CadenceMode::Timed) — seconds
-    double timedIntervalMinSec = 5.0;   // Minimum seconds between modifiers
+    double timedIntervalMinSec = 1.0;   // Minimum seconds between modifiers
     double timedIntervalMaxSec = 60.0;  // Maximum seconds between modifiers (up to 300)
 
   // Modifier scheduling

@@ -762,7 +762,7 @@ private:
     void barsBetweenModifiersChanged()
     {
         const int bars = (int) barsBetweenModifiersSlider.getValue();
-        app.settings.barsBetweenModifiers = juce::jlimit(1, 16, bars);
+        app.settings.barsBetweenModifiers = juce::jlimit(1, 32, bars);
         refreshStatus();
     }
 

@@ -2263,6 +2263,11 @@ void AudioBuffer::startContinuousRandomSlicing()
 {
     if (params.numSlices > 1)
     {
+        // Cancel arp slicing if active — the two modes are mutually exclusive
+        params.arpSliceActive = false;
+        params.arpSliceRepeaterMode = false;
+        params.arpSequence.clear();
+
         triggerRandomSlice();
         params.continuousRandomSlicing = true;
         // §12: triggerRandomSlice already pre-computes, but ensure it's set.

@@ -353,6 +353,11 @@ struct AppState : public ModifierSchedulerListener
         // Future: update UI labels
     }
 
+    void musicalCueReached() override
+    {
+        bufferManager.startBuffersAwaitingMusicalCue();
+    }
+
     void modifierTriggered(const ModifierDescriptor& desc, const juce::Array<int>& targets) override
     {
         // §4.2  A modifier trigger is a musically relevant cue — start any

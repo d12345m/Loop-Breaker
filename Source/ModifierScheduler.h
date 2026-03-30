@@ -20,6 +20,7 @@ public:
     virtual ~ModifierSchedulerListener() = default;
     virtual void upcomingModifierChanged(const ModifierDescriptor& /*desc*/) {}
     virtual void modifierTriggered(const ModifierDescriptor& /*desc*/, const juce::Array<int>& /*targets*/) {}
+    virtual void musicalCueReached() {}
 };
 
 class ModifierScheduler

@@ -574,6 +574,12 @@ private:
                         app.restorePreset(pi);
                     }
                 }
+                else
+                {
+                    presetBar.triggerHighlight(pi, PresetBarComponent::HighlightType::Save);
+                    app.capturePreset(pi);
+                    presetBar.setSlotOccupied(pi, true);
+                }
             }
         }
 

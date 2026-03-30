@@ -253,6 +253,10 @@ void ModifierScheduler::triggerIfDue()
             if (!userSelectedBuffers.isEmpty())
                 userSelectedBuffers.clearQuick();
         }
+        else
+        {
+            for (auto* l : listeners) l->musicalCueReached();
+        }
         // Even if suppressed, we still advance scheduling windows & pick next upcoming
         lastTriggerAbsoluteSeconds = accumulatedSecondsTotal;
         scheduleNextTrigger();
@@ -313,6 +317,10 @@ void ModifierScheduler::triggerIfDueHost(double currentPpq, double bpm)
             }
             if (!userSelectedBuffers.isEmpty())
                 userSelectedBuffers.clearQuick();
+        }
+        else
+        {
+            for (auto* l : listeners) l->musicalCueReached();
         }
 
         // If the triggered modifier is QuarterNoteBurst, enable rapid-fire mode.

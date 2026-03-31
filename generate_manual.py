@@ -591,19 +591,19 @@ def build_manual():
     pdf.body_text(
         "A preset bar at the top of the Probability tab provides quick access:"
     )
-    pdf.bullet("Preset dropdown \u2014 Select a saved preset to load it instantly. All modifier "
+    pdf.bullet("Preset dropdown -- Select a saved preset to load it instantly. All modifier "
                "probability sliders and pad target probability sliders are updated to match "
                "the saved values.")
-    pdf.bullet("Save \u2014 Overwrite the currently selected preset with the current probability "
+    pdf.bullet("Save -- Overwrite the currently selected preset with the current probability "
                "settings. If no preset is selected, this behaves like Save As.")
-    pdf.bullet("Save As \u2014 Save the current settings under a new name. A dialog prompts you "
+    pdf.bullet("Save As -- Save the current settings under a new name. A dialog prompts you "
                "to enter a name. If a preset with that name already exists, you are asked to "
                "confirm the overwrite.")
-    pdf.bullet("Delete \u2014 Delete the currently selected preset. A confirmation dialog is "
+    pdf.bullet("Delete -- Delete the currently selected preset. A confirmation dialog is "
                "shown before the preset is permanently removed.")
     pdf.body_text(
         "Probability Presets do NOT include MIDI CC mappings, timing settings, or any other "
-        "session-level configuration \u2014 only the modifier and pad probability slider values."
+        "session-level configuration -- only the modifier and pad probability slider values."
     )
 
     # ═══════════════════════════════════════════════════════════════════════
@@ -713,8 +713,8 @@ def build_manual():
         ("S&H Low-Pass", "A persistent low-pass filter with sample-and-hold modulation. "
          "Unlike the standard low-pass filter which ramps up and back down, this filter stays "
          "active until removed by the Reset modifier. The cutoff frequency and resonance (Q) "
-         "are randomly re-triggered at a musical rate — every 16th note, 8th note, or quarter "
-         "note — creating a rhythmic, stepped filtering effect. The cutoff range is 200 Hz to "
+         "are randomly re-triggered at a musical rate -- every 16th note, 8th note, or quarter "
+         "note -- creating a rhythmic, stepped filtering effect. The cutoff range is 200 Hz to "
          "8000 Hz and the Q range is 0.5 to 4.0."),
         ("S&H High-Pass", "A persistent high-pass filter with sample-and-hold modulation. "
          "Like the S&H Low-Pass, this filter stays active until removed by the Reset modifier. "
@@ -723,8 +723,8 @@ def build_manual():
          "800 Hz and the Q range is 0.5 to 4.0."),
         ("Granular", "A Clouds-inspired granular texture effect. Captures incoming audio into a "
          "short buffer and re-synthesizes it as overlapping grains with randomized position, "
-         "pitch variance, and stereo spread. Parameters include grain density (2\u201324 grains/sec), "
-         "grain size (15\u2013200ms), pitch spread (0\u201312 semitones), wet/dry mix, and texture "
+         "pitch variance, and stereo spread. Parameters include grain density (2-24 grains/sec), "
+         "grain size (15-200ms), pitch spread (0-12 semitones), wet/dry mix, and texture "
          "(smooth Hann to sharp rectangular window). This is a permanent effect that remains "
          "active until Reset is triggered."),
         ("Granular Burst", "A temporary version of the Granular effect that fades in over half "

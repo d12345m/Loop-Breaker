@@ -41,10 +41,12 @@ public:
         addAndMakeVisible(modifierDisplay);
         addAndMakeVisible(padGrid);
 
+#if JUCE_DEBUG
         addAndMakeVisible(modifiersToggle);
         modifiersToggle.setToggleState(app.settings.modifiersEnabled, juce::dontSendNotification);
         modifiersToggle.onClick = [this]{ modifiersToggleChanged(); };
         modifiersToggle.addMouseListener(this, false);
+#endif
 
         // Parts count selector (lives in Settings tab; created here for state management)
         partsCountBox.addItem("1 part", 1);
@@ -232,6 +234,29 @@ public:
         g.setColour(Theme::border());
         g.drawRect(getLocalBounds(), 1);
 
+        // ── "LOOP BREAKER" branding in the top-left ──
+        {
+            auto brandArea = brandingBounds.toFloat();
+            auto& fonts = ThemeFonts::getInstance();
+            const auto font = fonts.displayFont(24.0f);
+            g.setFont(font);
+
+            const juce::String loopStr("LOOP ");
+            const juce::String breakerStr("BREAKER");
+            const float loopW = font.getStringWidthFloat(loopStr);
+            const float totalW = loopW + font.getStringWidthFloat(breakerStr);
+            const float startX = brandArea.getX() + (brandArea.getWidth() - totalW) * 0.5f;
+
+            g.setColour(Theme::accent());
+            g.drawText(loopStr, juce::Rectangle<float>(startX, brandArea.getY(), loopW, brandArea.getHeight()),
+                       juce::Justification::centredLeft, false);
+            g.setColour(Theme::text());
+            g.drawText(breakerStr, juce::Rectangle<float>(startX + loopW, brandArea.getY(),
+                       brandArea.getRight() - (startX + loopW), brandArea.getHeight()),
+                       juce::Justification::centredLeft, false);
+        }
+
+#if JUCE_DEBUG
         // Draw MIDI note badge on modifier toggle (below the toggle)
         const auto& palette = ThemeEngine::getInstance().getCurrentPalette();
         const int midiNote = app.settings.modifierToggleMidiNote;
@@ -270,10 +295,12 @@ public:
             g.setFont(ThemeFonts::getInstance().monoFont(11.0f));
             g.drawText(juce::String(midiNote), noteRect, juce::Justification::centred);
         }
+#endif
     }
 
     void mouseDown(const juce::MouseEvent& e) override
     {
+#if JUCE_DEBUG
         // Only handle events targeting the modifiers toggle button
         if (e.eventComponent != &modifiersToggle)
             return;
@@ -299,28 +326,38 @@ public:
             clearModifierToggleMidiNote();
             return;
         }
+#endif
     }
 
     void resized() override
     {
         auto area = getLocalBounds().reduced(8);
 
-        // ── Top bar: enlarged modifier display + compact controls ──
+        // ── Top bar: branding | centred modifier display | controls ──
         auto topBar = area.removeFromTop(110);
-        modifierDisplay.setBounds(topBar.removeFromLeft(topBar.getWidth() * 0.65f).reduced(4));
 
-        auto controlBar = topBar;
+        const int sideW = 150; // symmetric width for branding & volume
 
-        // Volume knob on the right
-        auto volRegion = controlBar.removeFromRight(100).reduced(2);
+        // Left: branding area
+        brandingBounds = topBar.removeFromLeft(sideW).reduced(4, 8);
+
+        // Right: volume knob (+ debug toggle)
+        auto controlBar = topBar.removeFromRight(sideW);
+        auto volRegion = controlBar.reduced(2);
         auto volLabelArea = volRegion.removeFromTop(16);
         masterVolumeLabel.setBounds(volLabelArea);
         masterVolumeSlider.setBounds(volRegion);
 
-        // Center the modifiers toggle in the remaining space
-        const int toggleW = 140;
-        auto toggleArea = controlBar.withSizeKeepingCentre(toggleW, controlBar.getHeight()).reduced(2);
+#if JUCE_DEBUG
+        // In debug builds, squeeze a toggle into the control bar
+        auto debugToggleBar = topBar.removeFromRight(100);
+        const int toggleW = 100;
+        auto toggleArea = debugToggleBar.withSizeKeepingCentre(toggleW, debugToggleBar.getHeight()).reduced(2);
         modifiersToggle.setBounds(toggleArea);
+#endif
+
+        // Centre: modifier display fills the remaining middle area
+        modifierDisplay.setBounds(topBar.reduced(4));
 
         // ── Status row ──
         auto row2 = area.removeFromTop(24).reduced(2);
@@ -428,8 +465,12 @@ private:
 
     ModifierHistoryPanel* externalModifierHistory = nullptr;
 
+#if JUCE_DEBUG
     juce::ToggleButton modifiersToggle { "Modifiers" };
     bool modifierToggleLearnActive = false;
+#endif
+
+    juce::Rectangle<int> brandingBounds;
 
     PresetBarComponent presetBar;
     int presetLearnSlot = -1; // which preset slot is in MIDI learn mode (-1 = none)
@@ -543,7 +584,9 @@ private:
         // Poll for MIDI modifier-toggle request (from audio thread)
         if (processor.checkAndClearModifierToggle())
         {
+#if JUCE_DEBUG
             modifiersToggle.setToggleState(! modifiersToggle.getToggleState(), juce::dontSendNotification);
+#endif
             modifiersToggleChanged();
         }
 
@@ -596,7 +639,9 @@ private:
                 // Learned note for modifier toggle
                 DBG("Assigning note " + juce::String(learnedNote) + " to modifier toggle");
                 app.settings.modifierToggleMidiNote = learnedNote;
+#if JUCE_DEBUG
                 modifierToggleLearnActive = false;
+#endif
                 processor.setMidiLearnMode(false, -1);
                 repaint();
             }
@@ -654,7 +699,9 @@ private:
                 for (int i = 0; i < 8; ++i)
                     padGrid.setMidiNoteForPad(i, app.settings.midiNoteMap[i]);
                 // Sync UI controls to restored settings
+#if JUCE_DEBUG
                 modifiersToggle.setToggleState(app.settings.modifiersEnabled, juce::dontSendNotification);
+#endif
                 {
                     int loadedParts = juce::jlimit(1, 4, app.settings.parts.getNumParts());
                     partsCountBox.setSelectedId(loadedParts, juce::dontSendNotification);
@@ -735,7 +782,11 @@ private:
 
     void modifiersToggleChanged()
     {
+#if JUCE_DEBUG
         const bool enabled = modifiersToggle.getToggleState();
+#else
+        const bool enabled = ! app.settings.modifiersEnabled;
+#endif
         app.settings.modifiersEnabled = enabled;
 
         // Use suppression instead of stop/start so the scheduler timeline
@@ -810,6 +861,7 @@ private:
 
     void startModifierToggleMidiLearn()
     {
+#if JUCE_DEBUG
         // Cancel any existing pad learn mode
         if (processor.isMidiLearnEnabled())
         {
@@ -830,12 +882,15 @@ private:
         modifierToggleLearnActive = true;
         processor.setMidiLearnMode(true, BufferTestAudioProcessor::kModifierToggleLearnIndex);
         repaint();
+#endif
     }
 
     void clearModifierToggleMidiNote()
     {
         app.settings.modifierToggleMidiNote = -1;
+#if JUCE_DEBUG
         modifierToggleLearnActive = false;
+#endif
         processor.setMidiLearnMode(false, -1);
         repaint();
     }
@@ -850,11 +905,13 @@ private:
             const int prevPad = processor.getMidiLearnPadIndex();
             if (prevPad >= 0 && prevPad < 8)
                 padGrid.setMidiLearnForPad(prevPad, false);
+#if JUCE_DEBUG
             if (modifierToggleLearnActive)
             {
                 modifierToggleLearnActive = false;
                 repaint();
             }
+#endif
             if (presetLearnSlot >= 0 && presetLearnSlot < 4)
                 presetBar.setMidiLearnActive(presetLearnSlot, false);
         }

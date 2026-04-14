@@ -264,7 +264,7 @@ public:
                 g.restoreState();
             }
 
-            // Draw filled portion (gradient: accent2 → accent1, or warn at 75%+)
+            // Draw filled portion (gradient: accent2 → accent1)
             if (brandingProgress > 0.001f)
             {
                 g.saveState();
@@ -278,11 +278,8 @@ public:
                 }
                 else
                 {
-                    const bool warnZone = (brandingProgress >= 0.75f);
-                    juce::Colour left  = warnZone ? palette.warn : palette.accent2;
-                    juce::Colour right = warnZone ? palette.warn.brighter(0.2f) : palette.accent1;
-                    juce::ColourGradient grad(left, glyphBounds.getX(), glyphBounds.getCentreY(),
-                                              right, glyphBounds.getRight(), glyphBounds.getCentreY(), false);
+                    juce::ColourGradient grad(palette.accent2, glyphBounds.getX(), glyphBounds.getCentreY(),
+                                              palette.accent1, glyphBounds.getRight(), glyphBounds.getCentreY(), false);
                     g.setGradientFill(grad);
                 }
                 glyphs.draw(g);

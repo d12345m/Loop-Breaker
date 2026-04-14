@@ -39,7 +39,7 @@ public:
     juce::Font displayFont (float height) const
     {
         if (isPixelGridTheme())
-            return makeFont (pixelTypeface, height * 0.6f);
+            return makeFont (pixelTypeface, height * 0.5f);
         return makeFont (displayBoldTypeface, height);
     }
 

@@ -192,6 +192,9 @@ public:
         const float pad = 8.0f;
         auto content = bounds.reduced(pad, 4.0f);
 
+        // ── Bottom row: description (centered) ──
+        auto bottomRow = content.removeFromBottom(22.0f);
+
         // ── Top row: "NEXT" badge + modifier name + variant (truly centered) ──
         auto topRow = content;
 
@@ -243,6 +246,14 @@ public:
                 g.setFont(variantFont);
                 g.drawText(upcomingVariant, varRect, juce::Justification::centredLeft, true);
             }
+        }
+
+        // ── Description (centered) ──
+        if (upcomingDescription.isNotEmpty())
+        {
+            g.setColour(palette.textSecondary);
+            g.setFont(ThemeFonts::getInstance().bodyFont(16.0f));
+            g.drawFittedText(upcomingDescription, bottomRow.toNearestInt(), juce::Justification::centred, 1);
         }
     }
 

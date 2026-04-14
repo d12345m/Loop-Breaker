@@ -79,7 +79,8 @@ public:
         masterVolumeLabel.setJustificationType(juce::Justification::centred);
         masterVolumeLabel.setFont(ThemeFonts::getInstance().controlLabelFont(15.0f));
 
-        addAndMakeVisible(statusLabel);
+        // statusLabel hidden — may be re-used later
+        statusLabel.setVisible(false);
         statusLabel.setJustificationType(juce::Justification::centredLeft);
         statusLabel.setFont(ThemeFonts::getInstance().monoFont(15.0f));
 
@@ -406,12 +407,8 @@ public:
         // Centre: modifier display fills the remaining middle area
         modifierDisplay.setBounds(topBar.reduced(4));
 
-        // ── Status row ──
-        auto row2 = area.removeFromTop(24).reduced(2);
-        statusLabel.setBounds(row2.reduced(2));
-
         // ── Preset bar (A–D) ──
-        area.removeFromTop(4);
+        area.removeFromTop(6);
         auto presetRow = area.removeFromTop(38);
         presetBar.setBounds(presetRow);
 

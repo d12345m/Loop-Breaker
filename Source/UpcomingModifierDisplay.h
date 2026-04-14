@@ -192,9 +192,6 @@ public:
         const float pad = 8.0f;
         auto content = bounds.reduced(pad, 4.0f);
 
-        // ── Bottom row: description + countdown ──
-        auto bottomRow = content.removeFromBottom(22.0f);
-
         // ── Top row: "NEXT" badge + modifier name + variant (truly centered) ──
         auto topRow = content;
 
@@ -246,24 +243,6 @@ public:
                 g.setFont(variantFont);
                 g.drawText(upcomingVariant, varRect, juce::Justification::centredLeft, true);
             }
-        }
-
-        // ── Middle row: description (centered) + countdown (right) ──
-        {
-            // Description
-            g.setColour(palette.textSecondary);
-            g.setFont(ThemeFonts::getInstance().bodyFont(16.0f));
-            auto descArea = bottomRow.withTrimmedRight(160.0f);
-            g.drawFittedText(upcomingDescription, descArea.toNearestInt(), juce::Justification::centred, 1);
-
-            // Countdown (monospaced, right-aligned)
-            auto countArea = bottomRow.removeFromRight(160.0f);
-            g.setColour(palette.textSecondary);
-            g.setFont(ThemeFonts::getInstance().monoFont(16.0f));
-            juce::String timeStr = juce::String(secondsRemaining, 1) + "s  |  "
-                                 + juce::String(barsRemaining, 2) + " bars";
-            juce::String suffix = suppressed ? "  [OFF]" : "";
-            g.drawFittedText(timeStr + suffix, countArea.toNearestInt(), juce::Justification::centredRight, 1);
         }
     }
 

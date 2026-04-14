@@ -192,8 +192,11 @@ public:
         const float pad = 8.0f;
         auto content = bounds.reduced(pad, 4.0f);
 
-        // ── Top row: "NEXT" badge + modifier name + variant ──
-        auto topRow = content.removeFromTop(content.getHeight() * 0.50f);
+        // ── Bottom row: description + countdown ──
+        auto bottomRow = content.removeFromBottom(22.0f);
+
+        // ── Top row: "NEXT" badge + modifier name + variant (truly centered) ──
+        auto topRow = content;
 
         // "NEXT" badge
         {
@@ -205,9 +208,9 @@ public:
             g.drawText("NEXT", badgeRect, juce::Justification::centred);
         }
 
-        // Modifier name (accent1-tinted, bold) + variant, centered together
+        // Modifier name + variant, centered in the full width
         {
-            auto textArea = topRow.withTrimmedLeft(58.0f).withTrimmedRight(170.0f);
+            auto textArea = topRow;
             auto nameFont = ThemeFonts::getInstance().modifierNameFont(26.0f);
             auto variantFont = ThemeFonts::getInstance().monoFont(16.0f);
 
@@ -245,79 +248,15 @@ public:
             }
         }
 
-        // ── Progress bar (right side of top row) ──
+        // ── Middle row: description (centered) + countdown (right) ──
         {
-            auto barArea = topRow.removeFromRight(160.0f).reduced(4.0f, 4.0f);
-            const float barCr = 3.0f;
+            // Description
+            g.setColour(palette.textSecondary);
+            g.setFont(ThemeFonts::getInstance().bodyFont(16.0f));
+            auto descArea = bottomRow.withTrimmedRight(160.0f);
+            g.drawFittedText(upcomingDescription, descArea.toNearestInt(), juce::Justification::centred, 1);
 
-            // Track background
-            g.setColour(palette.panelAlt);
-            g.fillRoundedRectangle(barArea, barCr);
-
-            // Gradient fill: accent2 → accent1 (or warn in last 25%)
-            if (progress > 0.001)
-            {
-                auto fillRect = barArea.withWidth(barArea.getWidth() * (float)progress);
-                if (suppressed)
-                {
-                    g.setColour(palette.warn.withAlpha(0.70f));
-                }
-                else
-                {
-                    const bool warnZone = (progress >= 0.75);
-                    juce::Colour left  = warnZone ? palette.warn : palette.accent2;
-                    juce::Colour right = warnZone ? palette.warn.brighter(0.2f) : palette.accent1;
-                    juce::ColourGradient grad(left, fillRect.getX(), fillRect.getCentreY(),
-                                              right, fillRect.getRight(), fillRect.getCentreY(), false);
-                    g.setGradientFill(grad);
-                }
-                g.fillRoundedRectangle(fillRect, barCr);
-
-                // Shimmer highlight sweep
-                const auto& anim = ThemeEngine::getInstance().getAnimationConfig();
-                if (anim.enabled && anim.progressBarShimmer && !suppressed)
-                {
-                    const float shimmerW = 30.0f;
-                    const float shimmerX = fillRect.getX() + shimmerPhase * (fillRect.getWidth() + shimmerW) - shimmerW;
-                    auto shimmerRect = fillRect.withX(juce::jmax(fillRect.getX(), shimmerX))
-                                              .withWidth(juce::jmin(shimmerW, fillRect.getRight() - shimmerX));
-                    if (shimmerRect.getWidth() > 0)
-                    {
-                        juce::ColourGradient shimmer(
-                            juce::Colours::white.withAlpha(0.0f), shimmerRect.getX(), shimmerRect.getCentreY(),
-                            juce::Colours::white.withAlpha(0.18f), shimmerRect.getCentreX(), shimmerRect.getCentreY(), false);
-                        shimmer.addColour(1.0, juce::Colours::white.withAlpha(0.0f));
-                        g.setGradientFill(shimmer);
-                        g.fillRoundedRectangle(shimmerRect, barCr);
-                    }
-                }
-            }
-
-            // Bar border
-            g.setColour(palette.border.withAlpha(0.5f));
-            g.drawRoundedRectangle(barArea, barCr, 0.5f);
-
-            // PAUSED overlay
-            if (suppressed)
-            {
-                g.setColour(palette.warn);
-                auto pausedFont = ThemeFonts::getInstance().monoBoldFont(13.0f);
-                g.setFont(pausedFont);
-                g.drawFittedText("PAUSED", barArea.toNearestInt(), juce::Justification::centred, 1);
-            }
-        }
-
-        // ── Bottom row: description + countdown ──
-        auto bottomRow = content;
-
-        // Description
-        g.setColour(palette.textSecondary);
-        g.setFont(ThemeFonts::getInstance().bodyFont(16.0f));
-        auto descArea = bottomRow.withTrimmedRight(160.0f);
-        g.drawFittedText(upcomingDescription, descArea.toNearestInt(), juce::Justification::centred, 1);
-
-        // Countdown (monospaced look)
-        {
+            // Countdown (monospaced, right-aligned)
             auto countArea = bottomRow.removeFromRight(160.0f);
             g.setColour(palette.textSecondary);
             g.setFont(ThemeFonts::getInstance().monoFont(16.0f));

@@ -234,26 +234,76 @@ public:
         g.setColour(Theme::border());
         g.drawRect(getLocalBounds(), 1);
 
-        // ── "LOOP BREAKER" branding in the top-left ──
+        // ── "LOOP BREAKER" branding in the top-left with progress fill ──
         {
             auto brandArea = brandingBounds.toFloat();
             auto& fonts = ThemeFonts::getInstance();
             const auto font = fonts.displayFont(24.0f);
             g.setFont(font);
 
-            const juce::String loopStr("LOOP ");
-            const juce::String breakerStr("BREAKER");
-            const float loopW = font.getStringWidthFloat(loopStr);
-            const float totalW = loopW + font.getStringWidthFloat(breakerStr);
-            const float startX = brandArea.getX() + (brandArea.getWidth() - totalW) * 0.5f;
+            const juce::String logoText("LOOP BREAKER");
 
-            g.setColour(Theme::accent());
-            g.drawText(loopStr, juce::Rectangle<float>(startX, brandArea.getY(), loopW, brandArea.getHeight()),
-                       juce::Justification::centredLeft, false);
-            g.setColour(Theme::text());
-            g.drawText(breakerStr, juce::Rectangle<float>(startX + loopW, brandArea.getY(),
-                       brandArea.getRight() - (startX + loopW), brandArea.getHeight()),
-                       juce::Justification::centredLeft, false);
+            // Build glyph arrangement for precise clipping
+            juce::GlyphArrangement glyphs;
+            const float textW = font.getStringWidthFloat(logoText);
+            const float textX = brandArea.getX() + (brandArea.getWidth() - textW) * 0.5f;
+            glyphs.addLineOfText(font, logoText, textX, brandArea.getY() + font.getAscent() + (brandArea.getHeight() - font.getHeight()) * 0.5f);
+
+            auto glyphBounds = glyphs.getBoundingBox(0, -1, false);
+            const float fillX = glyphBounds.getX() + glyphBounds.getWidth() * brandingProgress;
+            const auto& palette = ThemeEngine::getInstance().getCurrentPalette();
+
+            // Draw unfilled portion (dim)
+            {
+                g.saveState();
+                g.reduceClipRegion(juce::Rectangle<int>(
+                    (int)fillX, brandingBounds.getY(),
+                    (int)(glyphBounds.getRight() - fillX + 2), brandingBounds.getHeight()));
+                g.setColour(palette.textSecondary.withAlpha(0.25f));
+                glyphs.draw(g);
+                g.restoreState();
+            }
+
+            // Draw filled portion (gradient: accent2 → accent1, or warn at 75%+)
+            if (brandingProgress > 0.001f)
+            {
+                g.saveState();
+                g.reduceClipRegion(juce::Rectangle<int>(
+                    (int)glyphBounds.getX(), brandingBounds.getY(),
+                    (int)(fillX - glyphBounds.getX() + 2), brandingBounds.getHeight()));
+
+                if (brandingSuppressed)
+                {
+                    g.setColour(palette.warn);
+                }
+                else
+                {
+                    const bool warnZone = (brandingProgress >= 0.75f);
+                    juce::Colour left  = warnZone ? palette.warn : palette.accent2;
+                    juce::Colour right = warnZone ? palette.warn.brighter(0.2f) : palette.accent1;
+                    juce::ColourGradient grad(left, glyphBounds.getX(), glyphBounds.getCentreY(),
+                                              right, glyphBounds.getRight(), glyphBounds.getCentreY(), false);
+                    g.setGradientFill(grad);
+                }
+                glyphs.draw(g);
+                g.restoreState();
+            }
+
+            // When no progress (idle), show original two-tone style
+            if (brandingProgress <= 0.001f && !brandingSuppressed)
+            {
+                const juce::String loopStr("LOOP ");
+                const juce::String breakerStr("BREAKER");
+                const float loopW = font.getStringWidthFloat(loopStr);
+
+                g.setColour(Theme::accent());
+                g.drawText(loopStr, juce::Rectangle<float>(textX, brandArea.getY(), loopW, brandArea.getHeight()),
+                           juce::Justification::centredLeft, false);
+                g.setColour(Theme::text());
+                g.drawText(breakerStr, juce::Rectangle<float>(textX + loopW, brandArea.getY(),
+                           brandArea.getRight() - (textX + loopW), brandArea.getHeight()),
+                           juce::Justification::centredLeft, false);
+            }
         }
 
 #if JUCE_DEBUG
@@ -471,6 +521,8 @@ private:
 #endif
 
     juce::Rectangle<int> brandingBounds;
+    float brandingProgress = 0.0f;
+    bool brandingSuppressed = false;
 
     PresetBarComponent presetBar;
     int presetLearnSlot = -1; // which preset slot is in MIDI learn mode (-1 = none)
@@ -732,7 +784,18 @@ private:
         }
 
         // Show paused styling when modifiers are disabled.
-        modifierDisplay.setSuppressed((! app.settings.modifiersEnabled) || app.scheduler.isSuppressed());
+        bool isSuppressed = (! app.settings.modifiersEnabled) || app.scheduler.isSuppressed();
+        modifierDisplay.setSuppressed(isSuppressed);
+
+        // Update branding progress for logo fill effect
+        float newProgress = app.scheduler.isRunning() ? (float)app.scheduler.getProgressToNextTrigger() : 0.0f;
+        bool newSuppressed = isSuppressed;
+        if (newProgress != brandingProgress || newSuppressed != brandingSuppressed)
+        {
+            brandingProgress = newProgress;
+            brandingSuppressed = newSuppressed;
+            repaint(brandingBounds);
+        }
 
         // Update playhead positions for waveform display (only when not playing).
         bool padGridDirty = false;

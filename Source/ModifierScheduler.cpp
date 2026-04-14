@@ -237,7 +237,11 @@ void ModifierScheduler::triggerIfDue()
     {
         // capture upcoming before mutation
         auto descriptor = upcoming.value();
-        if (!suppressed.load())
+
+        // Skip firing when all modifier probabilities are 0 (Unknown descriptor)
+        const bool isNoop = (descriptor.type == ModifierType::Unknown);
+
+        if (!isNoop && !suppressed.load())
         {
             auto targets = selectTargetBuffers(descriptor);
             // If a buffer-targeting modifier has no eligible targets (all pad
@@ -281,32 +285,10 @@ void ModifierScheduler::triggerIfDueHost(double currentPpq, double bpm)
         const int burstRemainingBefore = quarterNoteBurstRemaining.load();
         auto descriptor = upcoming.value();
 
-        if (descriptor.type == ModifierType::Unknown)
-        {
-            // no-op
-        }
+        // Skip firing when all modifier probabilities are 0 (Unknown descriptor)
+        const bool isNoop = (descriptor.type == ModifierType::Unknown);
 
-        if (descriptor.type == ModifierType::Unknown)
-        {
-            // no-op
-        }
-
-        if (descriptor.type == ModifierType::Unknown)
-        {
-            // no-op
-        }
-
-        if (descriptor.type == ModifierType::Unknown)
-        {
-            // no-op
-        }
-
-        if (descriptor.type == ModifierType::Unknown)
-        {
-            // no-op
-        }
-
-        if (!suppressed.load())
+        if (!isNoop && !suppressed.load())
         {
             auto targets = selectTargetBuffers(descriptor);
             const bool needsTargets = (descriptor.category != ModifierCategory::MasterEffect
@@ -560,6 +542,10 @@ ModifierDescriptor ModifierScheduler::pickRandomDescriptor() const
                 || t == ModifierType::BufferAutoPan
                 || t == ModifierType::BufferSHLowPassOn
                 || t == ModifierType::BufferSHHighPassOn
+                || t == ModifierType::BufferGranularOn
+                || t == ModifierType::BufferGranularMomentary
+                || t == ModifierType::PingPong
+                || t == ModifierType::SwapModifierStack
                 || t == ModifierType::BufferVolumeRampDown
                     || t == ModifierType::SwitchPart
                     || t == ModifierType::QuarterNoteBurst);
@@ -585,20 +571,9 @@ ModifierDescriptor ModifierScheduler::pickRandomDescriptor() const
     const juce::SpinLock::ScopedLockType lock(rngLock);
     int chosen = probMgr.chooseWeighted(candidateIndices, typeForIndex, moreThanOnePart, rng);
 
-    // If every candidate has weight 0, fall back to uniform random (safety net)
+    // If every candidate has weight 0, return an empty descriptor (no modifier)
     if (chosen < 0)
-    {
-        // Filter out SwitchPart if needed
-        juce::Array<int> fallback;
-        for (int ci : candidateIndices)
-        {
-            auto t = prototypeCache[ci]->getDescriptor().type;
-            if (t == ModifierType::SwitchPart && !moreThanOnePart) continue;
-            fallback.add(ci);
-        }
-        if (fallback.isEmpty()) fallback = candidateIndices;
-        chosen = fallback[rng.nextInt(fallback.size())];
-    }
+        return {};
 
     return prototypeCache[chosen]->getDescriptor();
 }

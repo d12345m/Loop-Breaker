@@ -554,6 +554,50 @@ static ThemePalette makeMarathon()
     return p;
 }
 
+static ThemePalette makeGameBoy()
+{
+    ThemePalette p;
+    p.name          = "Game Boy (Light)";
+
+    // Beige plastic body as background
+    p.bg            = hex (0xC4B580);
+    p.bgAlt         = hex (0xB8A974);
+    p.panel         = hex (0xD0C18E);
+    p.panelAlt      = hex (0xC9BA84);
+
+    p.border        = hex (0xA89A68);
+    p.borderGlow    = hex (0x306230);
+
+    // Dark pixel colors for text
+    p.textPrimary   = hex (0x0F380F);
+    p.textSecondary = hex (0x306230);
+    p.textOnAccent  = hex (0xC4B580);
+
+    // Accents: screen greens against the beige body
+    p.accent1       = hex (0x306230);
+    p.accent2       = hex (0x0F380F);
+    p.accent3       = hex (0x8BAC0F);
+
+    p.good          = hex (0x306230);
+    p.warn          = hex (0x0F380F);
+    p.bad           = hex (0x8B2020);
+
+    p.knobFill      = hex (0x306230);
+    p.knobTrack     = hex (0xB8A974);
+    p.waveformFill  = hex (0x8BAC0F);
+    p.playhead      = hex (0x0F380F);
+
+    p.padEmpty      = hex (0xB8A974);
+    p.padLoaded     = hex (0xD0C18E);
+    p.padSelected   = hexA (0x306230, 0.15f);
+    p.padPlaying    = hex (0x9BBC0F);
+
+    p.glowIntensity = 0.1f;
+    p.borderRadius  = 3.0f;
+
+    return p;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  ThemeEngine implementation
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -563,6 +607,7 @@ ThemeEngine::ThemeEngine()
     // All built-in palettes — alphabetical order
     builtInPalettes.push_back (makeArcticSky());
     builtInPalettes.push_back (makeDaylight());
+    builtInPalettes.push_back (makeGameBoy());
     builtInPalettes.push_back (makeGruvbox());
     builtInPalettes.push_back (makeIvory());
     builtInPalettes.push_back (makeMarathon());

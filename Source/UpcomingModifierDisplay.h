@@ -205,27 +205,44 @@ public:
             g.drawText("NEXT", badgeRect, juce::Justification::centred);
         }
 
-        // Modifier name (accent1-tinted, bold)
+        // Modifier name (accent1-tinted, bold) + variant, centered together
         {
-            auto nameArea = topRow.withTrimmedLeft(58.0f).withTrimmedRight(170.0f);
-            g.setColour(palette.accent1);
+            auto textArea = topRow.withTrimmedLeft(58.0f).withTrimmedRight(170.0f);
             auto nameFont = ThemeFonts::getInstance().modifierNameFont(26.0f);
-            g.setFont(nameFont);
-            g.drawText(upcomingName, nameArea, juce::Justification::centredLeft, true);
-        }
+            auto variantFont = ThemeFonts::getInstance().monoFont(16.0f);
 
-        // Variant (secondary text)
-        if (upcomingVariant.isNotEmpty())
-        {
-            auto variantArea = topRow.withTrimmedLeft(58.0f).withTrimmedRight(170.0f);
-            // Compute name width to offset the variant text
+            // Measure name width
             juce::GlyphArrangement nameGlyphs;
-            nameGlyphs.addLineOfText(g.getCurrentFont(), upcomingName, 0.0f, 0.0f);
+            nameGlyphs.addLineOfText(nameFont, upcomingName, 0.0f, 0.0f);
             float nameWidth = nameGlyphs.getBoundingBox(0, -1, false).getWidth();
-            variantArea.removeFromLeft(nameWidth + 10.0f);
-            g.setColour(palette.textSecondary);
-            g.setFont(ThemeFonts::getInstance().monoFont(16.0f));
-            g.drawText(upcomingVariant, variantArea, juce::Justification::centredLeft, true);
+
+            // Measure variant width
+            float variantWidth = 0.0f;
+            const float gap = upcomingVariant.isNotEmpty() ? 10.0f : 0.0f;
+            if (upcomingVariant.isNotEmpty())
+            {
+                juce::GlyphArrangement varGlyphs;
+                varGlyphs.addLineOfText(variantFont, upcomingVariant, 0.0f, 0.0f);
+                variantWidth = varGlyphs.getBoundingBox(0, -1, false).getWidth();
+            }
+
+            float totalWidth = nameWidth + gap + variantWidth;
+            float startX = textArea.getCentreX() - totalWidth * 0.5f;
+
+            // Draw name
+            auto nameRect = textArea.withX(startX).withWidth(nameWidth);
+            g.setColour(palette.accent1);
+            g.setFont(nameFont);
+            g.drawText(upcomingName, nameRect, juce::Justification::centredLeft, true);
+
+            // Draw variant
+            if (upcomingVariant.isNotEmpty())
+            {
+                auto varRect = textArea.withX(startX + nameWidth + gap).withWidth(variantWidth);
+                g.setColour(palette.textSecondary);
+                g.setFont(variantFont);
+                g.drawText(upcomingVariant, varRect, juce::Justification::centredLeft, true);
+            }
         }
 
         // ── Progress bar (right side of top row) ──
@@ -297,7 +314,7 @@ public:
         g.setColour(palette.textSecondary);
         g.setFont(ThemeFonts::getInstance().bodyFont(16.0f));
         auto descArea = bottomRow.withTrimmedRight(160.0f);
-        g.drawFittedText(upcomingDescription, descArea.toNearestInt(), juce::Justification::centredLeft, 1);
+        g.drawFittedText(upcomingDescription, descArea.toNearestInt(), juce::Justification::centred, 1);
 
         // Countdown (monospaced look)
         {

@@ -84,9 +84,13 @@ public:
         {
             int padCol = i / 2;
             int sub    = i % 2;
-            int subW   = padColW / 2;
-            int x      = area.getX() + padCol * padColW + sub * subW;
-            juce::Rectangle<int> btnRect(x, area.getY(), subW - 4, area.getHeight());
+            int colLeft = area.getX() + padCol * padColW;
+            int halfW   = padColW / 2;
+            // Give the second sub-button the remainder so both halves
+            // sum to the full padColW, avoiding accumulated rounding loss.
+            int x = colLeft + (sub == 0 ? 0 : halfW);
+            int w = (sub == 0) ? halfW : (padColW - halfW);
+            juce::Rectangle<int> btnRect(x, area.getY(), w - 4, area.getHeight());
             buttons[i]->setBounds(btnRect.reduced(4, 0));
         }
     }

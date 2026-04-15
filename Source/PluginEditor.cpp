@@ -155,9 +155,9 @@ public:
         for (int i = 0; i < 8; ++i)
             padGrid.setMidiNoteForPad(i, app.settings.midiNoteMap[i]);
 
-        // ── Preset bar (A–D) ──
+        // ── Preset bar (A–H) ──
         addAndMakeVisible(presetBar);
-        for (int i = 0; i < 4; ++i)
+        for (int i = 0; i < 8; ++i)
         {
             presetBar.setSlotOccupied(i, app.presetBank.isSlotOccupied(i));
             presetBar.setMidiNote(i, app.settings.presetMidiNoteMap[static_cast<size_t>(i)]);
@@ -408,7 +408,7 @@ public:
         // Centre: modifier display fills the remaining middle area
         modifierDisplay.setBounds(topBar.reduced(4));
 
-        // ── Preset bar (A–D) ──
+        // ── Preset bar (A–H) ──
         area.removeFromTop(6);
         auto presetRow = area.removeFromTop(38);
         presetBar.setBounds(presetRow);
@@ -647,7 +647,7 @@ private:
         }
 
         // Poll for MIDI preset-recall requests (from audio thread)
-        for (int pi = 0; pi < 4; ++pi)
+        for (int pi = 0; pi < 8; ++pi)
         {
             if (processor.checkAndClearPresetRecall(pi))
             {
@@ -693,7 +693,7 @@ private:
                 repaint();
             }
             else if (padIndex >= BufferTestAudioProcessor::kPresetLearnIndexBase
-                     && padIndex <= BufferTestAudioProcessor::kPresetLearnIndexBase + 3)
+                     && padIndex <= BufferTestAudioProcessor::kPresetLearnIndexBase + 7)
             {
                 // Learned note for a preset slot
                 const int slot = padIndex - BufferTestAudioProcessor::kPresetLearnIndexBase;
@@ -955,7 +955,7 @@ private:
 
     void startPresetMidiLearn(int slot)
     {
-        if (slot < 0 || slot >= 4) return;
+        if (slot < 0 || slot >= 8) return;
 
         // Cancel any existing learn mode (pad, modifier toggle, or another preset)
         if (processor.isMidiLearnEnabled())
@@ -970,7 +970,7 @@ private:
                 repaint();
             }
 #endif
-            if (presetLearnSlot >= 0 && presetLearnSlot < 4)
+            if (presetLearnSlot >= 0 && presetLearnSlot < 8)
                 presetBar.setMidiLearnActive(presetLearnSlot, false);
         }
 
@@ -990,7 +990,7 @@ private:
 
     void clearPresetMidiNote(int slot)
     {
-        if (slot < 0 || slot >= 4) return;
+        if (slot < 0 || slot >= 8) return;
         app.settings.presetMidiNoteMap[static_cast<size_t>(slot)] = -1;
         presetBar.setMidiNote(slot, -1);
         if (presetLearnSlot == slot)

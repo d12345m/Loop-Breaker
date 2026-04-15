@@ -71,13 +71,13 @@ public:
     // Special learn-mode pad index used for the modifier toggle button
     static constexpr int kModifierToggleLearnIndex = 8;
 
-    // Preset learn-mode sentinel indices (9..12 → preset 0..3)
+    // Preset learn-mode sentinel indices (9..16 → preset 0..7)
     static constexpr int kPresetLearnIndexBase = 9;
 
     // Check and clear a pending MIDI preset-recall request (call from UI thread)
     bool checkAndClearPresetRecall(int slotIndex)
     {
-        if (slotIndex < 0 || slotIndex >= 4) return false;
+        if (slotIndex < 0 || slotIndex >= 8) return false;
         return midiPresetRecallRequests[slotIndex].exchange(false);
     }
 
@@ -222,7 +222,7 @@ private:
     std::atomic<int> learnedPadProbMidiCC { -1 };    // the CC# just captured (UI polls & clears)
 
     // MIDI preset recall requests (written on audio thread, polled from UI thread)
-    std::atomic<bool> midiPresetRecallRequests[4] { {false}, {false}, {false}, {false} };
+    std::atomic<bool> midiPresetRecallRequests[8] { {false}, {false}, {false}, {false}, {false}, {false}, {false}, {false} };
 
     static juce::AudioProcessorValueTreeState::ParameterLayout createParamLayout();
 

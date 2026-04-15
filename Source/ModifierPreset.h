@@ -301,7 +301,7 @@ struct ModifierPresetSlot
 */
 struct ModifierPresetBank
 {
-    static constexpr int kNumPresets = 4;
+    static constexpr int kNumPresets = 8;
 
     std::array<ModifierPresetSlot, kNumPresets> slots;
 

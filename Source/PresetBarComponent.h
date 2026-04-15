@@ -2,7 +2,7 @@
  ==============================================================================
    PresetBarComponent.h
    --------------------------------------------------------------------------
-   Horizontal bar of 4 preset buttons (A–D) for the Session tab.
+   Horizontal bar of 8 preset buttons (A–H) for the Session tab.
    Supports click-to-recall, right-click context menu, MIDI learn, and
    visual indicators for occupied / empty / learn states.
  ==============================================================================
@@ -31,7 +31,7 @@ public:
 
     PresetBarComponent()
     {
-        for (int i = 0; i < 4; ++i)
+        for (int i = 0; i < kNumSlots; ++i)
         {
             buttons[i].reset(new juce::Component());
             buttons[i]->setInterceptsMouseClicks(false, false);
@@ -47,7 +47,7 @@ public:
 
     void setSlotOccupied(int index, bool occupied)
     {
-        if (index >= 0 && index < 4)
+        if (index >= 0 && index < kNumSlots)
         {
             slotOccupied[static_cast<size_t>(index)] = occupied;
             repaint();
@@ -56,7 +56,7 @@ public:
 
     void setMidiNote(int index, int note)
     {
-        if (index >= 0 && index < 4)
+        if (index >= 0 && index < kNumSlots)
         {
             midiNotes[static_cast<size_t>(index)] = note;
             repaint();
@@ -65,7 +65,7 @@ public:
 
     void setMidiLearnActive(int index, bool active)
     {
-        if (index >= 0 && index < 4)
+        if (index >= 0 && index < kNumSlots)
         {
             midiLearnActive[static_cast<size_t>(index)] = active;
             repaint();
@@ -74,25 +74,24 @@ public:
 
     void resized() override
     {
-        // Match PadGridComponent column layout so buttons align with pads
         auto area = getLocalBounds().reduced(4, 0);
-        const int cols = 4;
+        const int cols = kNumSlots;
         const int colW = area.getWidth() / cols;
 
-        for (int i = 0; i < 4; ++i)
+        for (int i = 0; i < kNumSlots; ++i)
         {
             juce::Rectangle<int> btnRect(area.getX() + i * colW, area.getY(),
-                                          colW - 4, area.getHeight());
-            buttons[i]->setBounds(btnRect.reduced(4, 0));
+                                          colW - 2, area.getHeight());
+            buttons[i]->setBounds(btnRect.reduced(2, 0));
         }
     }
 
     void paint(juce::Graphics& g) override
     {
         const auto& palette = ThemeEngine::getInstance().getCurrentPalette();
-        static const char* labels[] = { "Preset A", "Preset B", "Preset C", "Preset D" };
+        static const char* labels[] = { "A", "B", "C", "D", "E", "F", "G", "H" };
 
-        for (int i = 0; i < 4; ++i)
+        for (int i = 0; i < kNumSlots; ++i)
         {
             auto btnBounds = buttons[i]->getBounds().toFloat();
             const bool occupied = slotOccupied[static_cast<size_t>(i)];
@@ -153,7 +152,7 @@ public:
 
             // Label (A/B/C/D)
             g.setColour(occupied ? palette.textPrimary : palette.textSecondary);
-            g.setFont(ThemeFonts::getInstance().monoBoldFont(15.0f));
+            g.setFont(ThemeFonts::getInstance().monoBoldFont(13.0f));
             auto labelArea = btnBounds;
 
             // If there's a MIDI note badge or LEARN badge, shift label up
@@ -234,7 +233,7 @@ public:
         Save = accent1 (periwinkle), Recall = accent2 (teal). */
     void triggerHighlight(int slot, HighlightType type)
     {
-        if (slot < 0 || slot >= 4) return;
+        if (slot < 0 || slot >= kNumSlots) return;
 
         highlightedSlot = slot;
         highlightType = type;
@@ -274,7 +273,7 @@ public:
         @p bpm  current session tempo — pulse cycle = one beat. */
     void startPendingGlow(int slot, double bpm = 120.0)
     {
-        if (slot < 0 || slot >= 4) return;
+        if (slot < 0 || slot >= kNumSlots) return;
 
         // Stop any one-shot highlight that mouseDown may have started,
         // so its completion callback can't reset the glow alpha to 0.
@@ -306,7 +305,7 @@ public:
     /** Stop the pending glow on a slot (called when the preset is applied). */
     void clearPendingGlow(int slot)
     {
-        if (slot < 0 || slot >= 4) return;
+        if (slot < 0 || slot >= kNumSlots) return;
 
         pendingGlowAnimators[static_cast<size_t>(slot)].stop();
         highlightAnimators[static_cast<size_t>(slot)].stop();
@@ -328,7 +327,7 @@ public:
     /** Clear any pending glow regardless of slot. */
     void clearAllPendingGlows()
     {
-        for (int i = 0; i < 4; ++i)
+        for (int i = 0; i < kNumSlots; ++i)
         {
             pendingGlowAnimators[static_cast<size_t>(i)].stop();
         }
@@ -342,31 +341,33 @@ private:
     void timerCallback() override
     {
         const double dt = 1.0 / 15.0;
-        for (int i = 0; i < 4; ++i)
+        for (int i = 0; i < kNumSlots; ++i)
         {
             highlightAnimators[static_cast<size_t>(i)].tick(dt);
             pendingGlowAnimators[static_cast<size_t>(i)].tick(dt);
         }
     }
 
-    std::unique_ptr<juce::Component> buttons[4];
-    std::array<bool, 4> slotOccupied { false, false, false, false };
-    std::array<int, 4>  midiNotes { -1, -1, -1, -1 };
-    std::array<bool, 4> midiLearnActive { false, false, false, false };
+    static constexpr int kNumSlots = 8;
+
+    std::unique_ptr<juce::Component> buttons[kNumSlots];
+    std::array<bool, kNumSlots> slotOccupied { false, false, false, false, false, false, false, false };
+    std::array<int, kNumSlots>  midiNotes { -1, -1, -1, -1, -1, -1, -1, -1 };
+    std::array<bool, kNumSlots> midiLearnActive { false, false, false, false, false, false, false, false };
 
     // Highlight state
     int highlightedSlot = -1;
     HighlightType highlightType = HighlightType::None;
-    std::array<float, 4> highlightGlowAlpha { 0.0f, 0.0f, 0.0f, 0.0f };
-    std::array<Animator, 4> highlightAnimators;
+    std::array<float, kNumSlots> highlightGlowAlpha { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+    std::array<Animator, kNumSlots> highlightAnimators;
 
     // Pending recall glow state (looping pulse until applied)
     int pendingGlowSlot = -1;
-    std::array<Animator, 4> pendingGlowAnimators;
+    std::array<Animator, kNumSlots> pendingGlowAnimators;
 
     int getSlotAtPoint(juce::Point<int> point) const
     {
-        for (int i = 0; i < 4; ++i)
+        for (int i = 0; i < kNumSlots; ++i)
         {
             if (buttons[i]->getBounds().contains(point))
                 return i;
@@ -376,7 +377,7 @@ private:
 
     void showContextMenu(int slot)
     {
-        static const char* names[] = { "A", "B", "C", "D" };
+        static const char* names[] = { "A", "B", "C", "D", "E", "F", "G", "H" };
         const bool occupied = slotOccupied[static_cast<size_t>(slot)];
         const int midiNote = midiNotes[static_cast<size_t>(slot)];
 

@@ -314,7 +314,7 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                 DBG("MIDI Note On: " + juce::String(note));
                 
                 // MIDI learn mode: capture note for assignment
-                if (learnMode && learnPad >= 0 && learnPad <= (kPresetLearnIndexBase + 3))
+                if (learnMode && learnPad >= 0 && learnPad <= (kPresetLearnIndexBase + 7))
                 {
                     DBG("Capturing note " + juce::String(note) + " for pad " + juce::String(learnPad));
                     learnedMidiNote.store(note);
@@ -328,8 +328,8 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                     midiModifierToggleRequest.store(true);
                 }
 
-                // Check preset recall MIDI notes (A-D)
-                for (int pi = 0; pi < 4; ++pi)
+                // Check preset recall MIDI notes (A-H)
+                for (int pi = 0; pi < 8; ++pi)
                 {
                     if (app.settings.presetMidiNoteMap[static_cast<size_t>(pi)] >= 0
                         && app.settings.presetMidiNoteMap[static_cast<size_t>(pi)] == note)

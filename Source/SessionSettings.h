@@ -84,8 +84,8 @@ struct SessionSettings
     int modifierToggleMidiNote = -1;
 
     // MIDI note mappings for modifier preset recall (A-D). -1 means unassigned.
-    static constexpr int kNumPresets = 4;
-    std::array<int, kNumPresets> presetMidiNoteMap = { -1, -1, -1, -1 };
+    static constexpr int kNumPresets = 8;
+    std::array<int, kNumPresets> presetMidiNoteMap = { -1, -1, -1, -1, -1, -1, -1, -1 };
 
     // MIDI CC mappings for modifier probability sliders.
     // Index i corresponds to ModifierProbabilityManager::allModifierTypes()[i].

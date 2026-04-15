@@ -74,15 +74,20 @@ public:
 
     void resized() override
     {
-        auto area = getLocalBounds().reduced(4, 0);
-        const int cols = kNumSlots;
-        const int colW = area.getWidth() / cols;
+        // Derive from the same 4-column grid as PadGridComponent,
+        // splitting each pad column into 2 preset buttons so edges align.
+        auto area = getLocalBounds().reduced(4);
+        const int padCols = 4;
+        const int padColW = area.getWidth() / padCols;
 
         for (int i = 0; i < kNumSlots; ++i)
         {
-            juce::Rectangle<int> btnRect(area.getX() + i * colW, area.getY(),
-                                          colW - 2, area.getHeight());
-            buttons[i]->setBounds(btnRect.reduced(2, 0));
+            int padCol = i / 2;
+            int sub    = i % 2;
+            int subW   = padColW / 2;
+            int x      = area.getX() + padCol * padColW + sub * subW;
+            juce::Rectangle<int> btnRect(x, area.getY(), subW - 4, area.getHeight());
+            buttons[i]->setBounds(btnRect.reduced(4, 0));
         }
     }
 

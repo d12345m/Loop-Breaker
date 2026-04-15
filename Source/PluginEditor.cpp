@@ -239,7 +239,7 @@ public:
         {
             auto brandArea = brandingBounds.toFloat();
             auto& fonts = ThemeFonts::getInstance();
-            const auto font = fonts.displayFont(24.0f);
+            const auto font = fonts.displayFont(30.0f);
             g.setFont(font);
 
             const juce::String logoText("LOOP BREAKER");
@@ -384,7 +384,7 @@ public:
         // ── Top bar: branding | centred modifier display | controls ──
         auto topBar = area.removeFromTop(110);
 
-        const int sideW = 150; // symmetric width for branding & volume
+        const int sideW = 245; // symmetric width for branding & volume
 
         // Left: branding area
         brandingBounds = topBar.removeFromLeft(sideW).reduced(4, 8);
@@ -394,7 +394,8 @@ public:
         auto volRegion = controlBar.reduced(2);
         auto volLabelArea = volRegion.removeFromTop(16);
         masterVolumeLabel.setBounds(volLabelArea);
-        masterVolumeSlider.setBounds(volRegion);
+        auto knobSize = juce::jmin(volRegion.getWidth(), volRegion.getHeight());
+        masterVolumeSlider.setBounds(volRegion.withSizeKeepingCentre(knobSize, knobSize));
 
 #if JUCE_DEBUG
         // In debug builds, squeeze a toggle into the control bar

@@ -190,13 +190,11 @@ public:
         g.drawRoundedRectangle(bounds, cr, 1.0f);
 
         const float pad = 8.0f;
-        auto content = bounds.reduced(pad, 4.0f);
+        auto content = bounds.reduced(pad, 12.0f);
 
-        // ── Bottom row: description (centered) ──
-        auto bottomRow = content.removeFromBottom(22.0f);
-
-        // ── Top row: "NEXT" badge + modifier name + variant (truly centered) ──
-        auto topRow = content;
+        // Split content into two equal halves so both rows are vertically centred
+        auto topRow = content.removeFromTop(content.getHeight() / 2);
+        auto bottomRow = content;
 
         // "NEXT" badge
         {

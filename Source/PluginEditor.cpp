@@ -547,8 +547,8 @@ private:
 
         app.pendingPresetRecall.store(slot);
 
-        // Build a fake descriptor so the UpcomingModifierDisplay shows "Preset A/B/C/D"
-        static const char* slotLabels[] = { "A", "B", "C", "D" };
+        // Build a fake descriptor so the UpcomingModifierDisplay shows "Preset A/B/C/D/E/F/G/H"
+        static const char* slotLabels[] = { "A", "B", "C", "D", "E", "F", "G", "H" };
         ModifierDescriptor presetDesc;
         presetDesc.type = ModifierType::Unknown;
         presetDesc.category = ModifierCategory::GlobalUtility;

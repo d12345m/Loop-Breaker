@@ -29,7 +29,7 @@ Before starting, ask the user these questions if not already answered:
 
 ## Procedure
 
-Follow these 14 steps in order. Each step references exact file locations.
+Follow these 15 steps in order. Each step references exact file locations.
 
 ### Step 1: Add Enum Value
 
@@ -138,7 +138,33 @@ addToggle(ModifierType::YourNewModifier, "Your Display Name");
 
 Place it near other modifiers of the same category. The panel auto-layouts vertically.
 
-### Step 7: Add Variant Randomization
+### Step 7: Add to Scheduler Whitelist
+
+**File**: `Source/ModifierScheduler.cpp` — `pickRandomDescriptor()` function
+
+The scheduler has a `restrictToImplemented` flag (default: `true`) that limits random selection to an explicit whitelist of modifier types. **If you skip this step, your modifier will never be randomly selected — it will only fire via the debug panel or force-trigger.**
+
+Find the `if (restrictToImplemented.load())` block and add your type to the `bool allowed = (...)` expression:
+
+```cpp
+if (restrictToImplemented.load())
+{
+    for (int i = 0; i < prototypeCache.size(); ++i)
+    {
+        auto t = prototypeCache[i]->getDescriptor().type;
+        bool allowed = (t == ModifierType::Reverse
+            || t == ModifierType::Speed
+            // ... existing types ...
+            || t == ModifierType::YourNewModifier);  // <-- ADD HERE
+        if (!allowed) continue;
+        candidateIndices.add(i);
+    }
+}
+```
+
+Place your entry near other modifiers of the same category within the condition chain. Without this, the probability panel and APVTS parameter will exist but have no effect — the modifier simply won't appear as a candidate for random selection.
+
+### Step 8: Add Variant Randomization
 
 **File**: `Source/ModifierScheduler.cpp` — `prepareVariantDescriptor()` function
 
@@ -162,7 +188,7 @@ else if (base.type == ModifierType::YourNewModifier)
 
 **Randomization helpers available**: `rng.nextInt(max)`, `rng.nextFloat()`, `rng.nextBool()`, `rng.nextDouble()`
 
-### Step 8: Add Queue Display
+### Step 9: Add Queue Display
 
 **File**: `Source/UpcomingModifierDisplay.h` — `setUpcoming()` method
 
@@ -179,7 +205,7 @@ if (d.plannedYourParam.has_value())
 }
 ```
 
-### Step 9: Implement Modifier Application in AppState
+### Step 10: Implement Modifier Application in AppState
 
 **File**: `Source/AppState.h` — `modifierTriggered()` switch statement
 
@@ -229,7 +255,7 @@ void applyYourNewModifier(const ModifierDescriptor& desc, const juce::Array<int>
 }
 ```
 
-### Step 10: Ensure Reset Cleans Up the Modifier
+### Step 11: Ensure Reset Cleans Up the Modifier
 
 The Reset modifier must undo your new modifier's effects. Check these two reset paths:
 
@@ -247,7 +273,7 @@ The Reset modifier must undo your new modifier's effects. Check these two reset 
 
 **Verification**: After implementing, trigger your modifier then trigger Reset — confirm all state returns to defaults.
 
-### Step 11: Add to Preset System (if applicable)
+### Step 12: Add to Preset System (if applicable)
 
 Only if the user confirmed the modifier state should be saveable in presets.
 
@@ -273,7 +299,7 @@ s.yourParam = getF("yrPrm", 0.5f);
 
 > Backward compatibility is automatic — `fromVar()` helper functions return defaults when keys are missing from old saves.
 
-### Step 12: Add History Panel Color (optional)
+### Step 13: Add History Panel Color (optional)
 
 **File**: `Source/ModifierHistoryPanel.h` — `paintListBoxItem()` method
 
@@ -287,7 +313,7 @@ Available theme colors: `Theme::accent()`, `Theme::accent2()`, `Theme::warn()`, 
 
 This step is optional — modifiers work fine with the default subtle color.
 
-### Step 13: Add to Manual
+### Step 14: Add to Manual
 
 **File**: `generate_manual.py` — modifier documentation lists (around line 969-1081)
 
@@ -300,7 +326,7 @@ Add a tuple to the appropriate list:
 
 The PDF rendering iterates the list automatically — no other changes needed.
 
-### Step 14: Build and Validate
+### Step 15: Build and Validate
 
 1. Build both targets: VST3 and AU (Debug)
 2. Run pluginval to verify no crashes
@@ -314,7 +340,7 @@ The PDF rendering iterates the list automatically — no other changes needed.
 | `Source/Modifier.cpp` | Factory prototype + concrete class (optional) + `createInstance()` case |
 | `Source/ModifierProbabilityManager.h` | `getDisplayName()` + `getCategory()` + `allModifierTypes()` |
 | `Source/ModifierSelectionPanel.h` | `addToggle()` call in constructor for debug panel |
-| `Source/ModifierScheduler.cpp` | `prepareVariantDescriptor()` randomization block |
+| `Source/ModifierScheduler.cpp` | `pickRandomDescriptor()` whitelist + `prepareVariantDescriptor()` randomization block |
 | `Source/UpcomingModifierDisplay.h` | `setUpcoming()` variant text display |
 | `Source/AppState.h` | `modifierTriggered()` switch case + `applyYourModifier()` method |
 | `Source/ChannelStrip.h` | FX enables, params, envelopes, reset (if channel effect) |

@@ -7,6 +7,7 @@ argument-hint: "Describe the new modifier: name, category, what it does, and any
 # Create New Modifier
 
 ## When to Use
+
 - Adding a new audio effect modifier to Loop Breaker
 - Implementing a new buffer transform, channel effect, master effect, or global utility
 - User says "add modifier", "new effect", "create modifier", or similar
@@ -44,10 +45,10 @@ enum class ModifierType
     Reverse,
     Speed,
     // ... existing types ...
-    
+
     // Add your new type in its category group:
     YourNewModifier,    // <-- add here
-    
+
     // Global
     ResetAll,
     Unknown
@@ -110,16 +111,19 @@ case ModifierType::YourNewModifier: return std::make_unique<YourNewModifier>();
 **File**: `Source/ModifierProbabilityManager.h` — three locations:
 
 **A.** `getDisplayName()` — add switch case:
+
 ```cpp
 case ModifierType::YourNewModifier: return "Your Display Name";
 ```
 
 **B.** `getCategory()` — add to the appropriate category group:
+
 ```cpp
 case ModifierType::YourNewModifier:  // falls through with other BufferEffect types
 ```
 
 **C.** `allModifierTypes()` — add to the static vector in the correct category section:
+
 ```cpp
 ModifierType::YourNewModifier,
 ```
@@ -176,12 +180,12 @@ else if (base.type == ModifierType::YourNewModifier)
     // Define option arrays
     static const double options[] { 0.25, 0.5, 0.75, 1.0 };
     double chosen = options[rng.nextInt((int)std::size(options))];
-    
+
     // Populate planned fields
     modified.plannedYourParam = chosen;
-    
+
     // Build description suffix
-    modified.description = base.description + " -> " 
+    modified.description = base.description + " -> "
         + juce::String(chosen * 100.0, 0) + "%";
 }
 ```
@@ -210,6 +214,7 @@ if (d.plannedYourParam.has_value())
 **File**: `Source/AppState.h` — `modifierTriggered()` switch statement
 
 **A.** Add a case to the dispatch switch:
+
 ```cpp
 case ModifierType::YourNewModifier:
     applyYourNewModifier(desc, targets);
@@ -219,6 +224,7 @@ case ModifierType::YourNewModifier:
 **B.** Implement the application method:
 
 For **permanent** modifiers (state persists until Reset):
+
 ```cpp
 void applyYourNewModifier(const ModifierDescriptor& desc, const juce::Array<int>& targets)
 {
@@ -236,6 +242,7 @@ void applyYourNewModifier(const ModifierDescriptor& desc, const juce::Array<int>
 ```
 
 For **temporary** modifiers (auto-decay via envelope):
+
 ```cpp
 void applyYourNewModifier(const ModifierDescriptor& desc, const juce::Array<int>& targets)
 {
@@ -260,14 +267,17 @@ void applyYourNewModifier(const ModifierDescriptor& desc, const juce::Array<int>
 The Reset modifier must undo your new modifier's effects. Check these two reset paths:
 
 **A. `ChannelStrip::reset()`** in `Source/ChannelStrip.h`:
+
 - If you added FX enable flags to `EffectEnables`, ensure `EffectEnables::reset()` clears them (line ~30: the chained assignment sets all flags to `false`)
 - If you added envelope fields, ensure they are reset to `{}` in `ChannelStrip::reset()` (line ~597)
 - If you added FX parameters to `FxParams`, they auto-reset via `params = FxParams{}` (default construction)
 
 **B. `AudioBufferPlayer::resetToDefaults()`** in `Source/AudioBufferPlayer.h` (or similar):
+
 - If your modifier changes buffer playback state (speed, slicing, pitch, etc.), ensure `resetToDefaults()` reverts it
 
 **C. `applyReset()` in `Source/AppState.h`** (line ~587):
+
 - The existing implementation calls `channelStrips[idx]->reset()` which resets both the strip and its underlying buffer
 - If your modifier has additional state outside ChannelStrip/AudioBufferPlayer (rare), add cleanup here
 
@@ -280,18 +290,21 @@ Only if the user confirmed the modifier state should be saveable in presets.
 **File**: `Source/ModifierPreset.h` — `struct BufferModifierSnapshot`
 
 **A.** Add fields:
+
 ```cpp
 bool yourEffectEnabled = false;
 float yourParam = 0.5f;  // default value
 ```
 
 **B.** Add to `toVar()` serialization (use short abbreviated keys):
+
 ```cpp
 obj->setProperty("yrEn", (bool)yourEffectEnabled);
 obj->setProperty("yrPrm", (double)yourParam);
 ```
 
 **C.** Add to `fromVar()` deserialization (with default fallbacks for backward compatibility):
+
 ```cpp
 s.yourEffectEnabled = getB("yrEn", false);
 s.yourParam = getF("yrPrm", 0.5f);
@@ -334,25 +347,25 @@ The PDF rendering iterates the list automatically — no other changes needed.
 
 ## File Reference
 
-| File | What to Change |
-|------|---------------|
-| `Source/Modifier.h` | Enum value + planned variant fields in `ModifierDescriptor` |
-| `Source/Modifier.cpp` | Factory prototype + concrete class (optional) + `createInstance()` case |
-| `Source/ModifierProbabilityManager.h` | `getDisplayName()` + `getCategory()` + `allModifierTypes()` |
-| `Source/ModifierSelectionPanel.h` | `addToggle()` call in constructor for debug panel |
-| `Source/ModifierScheduler.cpp` | `pickRandomDescriptor()` whitelist + `prepareVariantDescriptor()` randomization block |
-| `Source/UpcomingModifierDisplay.h` | `setUpcoming()` variant text display |
-| `Source/AppState.h` | `modifierTriggered()` switch case + `applyYourModifier()` method |
-| `Source/ChannelStrip.h` | FX enables, params, envelopes, reset (if channel effect) |
-| `Source/ModifierPreset.h` | `BufferModifierSnapshot` fields + `toVar()`/`fromVar()` (if preset-saved) |
-| `Source/ModifierHistoryPanel.h` | Optional color case in `paintListBoxItem()` |
-| `generate_manual.py` | Modifier description tuple in appropriate category list |
+| File                                  | What to Change                                                                        |
+| ------------------------------------- | ------------------------------------------------------------------------------------- |
+| `Source/Modifier.h`                   | Enum value + planned variant fields in `ModifierDescriptor`                           |
+| `Source/Modifier.cpp`                 | Factory prototype + concrete class (optional) + `createInstance()` case               |
+| `Source/ModifierProbabilityManager.h` | `getDisplayName()` + `getCategory()` + `allModifierTypes()`                           |
+| `Source/ModifierSelectionPanel.h`     | `addToggle()` call in constructor for debug panel                                     |
+| `Source/ModifierScheduler.cpp`        | `pickRandomDescriptor()` whitelist + `prepareVariantDescriptor()` randomization block |
+| `Source/UpcomingModifierDisplay.h`    | `setUpcoming()` variant text display                                                  |
+| `Source/AppState.h`                   | `modifierTriggered()` switch case + `applyYourModifier()` method                      |
+| `Source/ChannelStrip.h`               | FX enables, params, envelopes, reset (if channel effect)                              |
+| `Source/ModifierPreset.h`             | `BufferModifierSnapshot` fields + `toVar()`/`fromVar()` (if preset-saved)             |
+| `Source/ModifierHistoryPanel.h`       | Optional color case in `paintListBoxItem()`                                           |
+| `generate_manual.py`                  | Modifier description tuple in appropriate category list                               |
 
 ## Categories Quick Reference
 
-| Category | Enum | Targets | Examples |
-|----------|------|---------|----------|
-| BufferTransform | `ModifierCategory::BufferTransform` | Per-pad buffers | Reverse, Speed, BeatSlice, PingPong |
-| BufferEffect | `ModifierCategory::BufferEffect` | Per-pad channel strips | Delay, Reverb, Chorus, Auto-Pan |
-| MasterEffect | `ModifierCategory::MasterEffect` | All channel strips | Master HPF, Master LPF |
-| GlobalUtility | `ModifierCategory::GlobalUtility` | System-wide | SwitchPart, QuarterNoteBurst |
+| Category        | Enum                                | Targets                | Examples                            |
+| --------------- | ----------------------------------- | ---------------------- | ----------------------------------- |
+| BufferTransform | `ModifierCategory::BufferTransform` | Per-pad buffers        | Reverse, Speed, BeatSlice, PingPong |
+| BufferEffect    | `ModifierCategory::BufferEffect`    | Per-pad channel strips | Delay, Reverb, Chorus, Auto-Pan     |
+| MasterEffect    | `ModifierCategory::MasterEffect`    | All channel strips     | Master HPF, Master LPF              |
+| GlobalUtility   | `ModifierCategory::GlobalUtility`   | System-wide            | SwitchPart, QuarterNoteBurst        |

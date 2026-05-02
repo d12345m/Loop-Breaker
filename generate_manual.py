@@ -253,7 +253,7 @@ def build_manual():
         "Per-modifier probability sliders with DAW automation and MIDI CC control",
         "Per-pad target probability to weight which pads receive modifiers",
         "Global probability presets: save and recall named probability configurations across projects",
-        "4 modifier preset snapshot slots (A-D) for instant recall of complex states",
+        "8 modifier preset snapshot slots (A-H) for instant recall of complex states",
         "Multi-output routing: 8 independent stereo output buses plus a master mix bus",
         "Full MIDI control: pad selection, modifier toggle, and preset recall via MIDI notes",
         "Drag-and-drop sample loading from your OS file browser",
@@ -430,7 +430,7 @@ def build_manual():
 
     tabs = [
         ("Session", "The primary performance view. Contains the pad grid, upcoming modifier display, "
-         "modifier toggle, master volume knob, and preset buttons (A-D)."),
+         "modifier toggle, master volume knob, and preset buttons (A-H)."),
         ("Probability", "Per-modifier probability sliders grouped by category (Buffer, Channel Effect, "
          "Master Effect, Special). Also includes per-pad target probability sliders. All sliders are "
          "exposed as DAW automation parameters."),
@@ -504,9 +504,9 @@ def build_manual():
     )
 
     # -- Preset Buttons --
-    pdf.chapter_title("Modifier Preset Buttons (A-D)", level=2)
+    pdf.chapter_title("Modifier Preset Buttons (A-H)", level=2)
     pdf.body_text(
-        "Four preset slots allow you to snapshot and recall the complete modifier state across "
+        "Eight preset slots allow you to snapshot and recall the complete modifier state across "
         "all 8 pads. This captures buffer transform parameters (speed, stretch, pitch, slicing, "
         "ping-pong) and all channel effects settings (reverb, delay, filter, tremolo, chorus, "
         "auto-pan, volume ramp)."
@@ -832,7 +832,7 @@ def build_manual():
 
     pdf.chapter_title("Preset Recall via MIDI", level=2)
     pdf.body_text(
-        "Each preset slot (A-D) can be assigned to a MIDI note for instant recall from a "
+        "Each preset slot (A-H) can be assigned to a MIDI note for instant recall from a "
         "hardware controller. Use the right-click context menu or Shift+Click on a preset button "
         "to enter MIDI Learn mode."
     )
@@ -922,7 +922,7 @@ def build_manual():
         "Preset MIDI note assignments",
         "All probability slider positions and MIDI CC mappings",
         "Pad target probability positions and MIDI CC mappings",
-        "Modifier preset snapshots (A-D)",
+        "Modifier preset snapshots (A-H)",
         "Parts configuration (number of parts, active part)",
         "Bars-between-modifiers setting",
         "Theme selection",
@@ -1029,7 +1029,7 @@ def build_manual():
         "Use the Reset All modifier (ensure its probability is non-zero) as a natural recovery mechanism that periodically returns your loops to their original state.",
         "Assign modifier probability sliders to MIDI CC on your controller to perform live probability adjustments during a set.",
         "Use multi-output routing to apply DAW-side effects (like EQ or compression) to individual pads independently.",
-        "Save modifier presets (A-D) for different \"scenes\" during a performance and trigger them via MIDI for instant transitions.",
+        "Save modifier presets (A-H) for different \"scenes\" during a performance and trigger them via MIDI for instant transitions.",
         "Lower the probability of extreme modifiers (Pitch Up/Down, Beat Slice) if you want more subtle, musical evolution.",
     ]
     for t in tips:

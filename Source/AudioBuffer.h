@@ -22,6 +22,14 @@
 #include <functional>
 
 #include "TimeStretchSoundTouch.h"
+#include "UnifiedStretchBuffer.h"
+
+/// Set to 1 to route time-stretch/pitch through the new UnifiedStretchBuffer
+/// (pull-based WSOLA, no internal SoundTouch FIFO) instead of SoundTouch.
+/// Set to 0 to use the existing SoundTouch pipeline.
+#ifndef USE_UNIFIED_STRETCHER
+  #define USE_UNIFIED_STRETCHER 1
+#endif
 
 //==============================================================================
 /**
@@ -373,6 +381,9 @@ private:
         return s;
     }
 
+    // Unified WSOLA engine (replaces SoundTouch when USE_UNIFIED_STRETCHER == 1)
+    UnifiedStretchBuffer unifiedStretcher;
+
     // Time-stretch engine + scratch buffers (used when stretchRatio != 1.0)
     TimeStretchSoundTouch stretcher;
     bool stretcherPrepared = false;
@@ -469,6 +480,7 @@ private:
     // Internal processing methods
     void processWithRepitching(juce::AudioBuffer<float>& outputBuffer);
     void processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer, const StretchSnapshot& snap);
+    void processWithUnifiedStretch(juce::AudioBuffer<float>& outputBuffer, const StretchSnapshot& snap);
     void handleSlicePlayback(double& currentPos, int fileLengthSamples);
     void applyCrossfadeToSliceTransition(const juce::AudioBuffer<float>& sourceBuffer,
                                          int fileLengthSamples,

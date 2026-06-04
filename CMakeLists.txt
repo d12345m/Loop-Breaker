@@ -70,6 +70,7 @@ target_sources(LoopBreaker PRIVATE
     Source/ProjectManager.cpp
     Source/ModifierSchedulerTests.cpp
     Source/ThemeEngine.cpp
+    Source/UnifiedStretchBuffer.cpp
 )
 
 target_include_directories(LoopBreaker PRIVATE

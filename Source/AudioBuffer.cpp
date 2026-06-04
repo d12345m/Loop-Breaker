@@ -189,10 +189,6 @@ void AudioBuffer::prepare(double sampleRate, int samplesPerBlockExpected)
     for (auto& r : blockResamplers)
         r.reset();
     blockResamplersValid = false;
-
-    // Prepare the unified WSOLA engine (always, regardless of USE_UNIFIED_STRETCHER flag,
-    // so it's ready to use without a rebuild if the flag is flipped at runtime).
-    unifiedStretcher.prepare (sampleRate, 2, samplesPerBlockExpected);
 }
 
 void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
@@ -215,11 +211,7 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
     // Even at 1.0, SoundTouch adds buffering/CPU and can affect UI smoothness in Debug builds.
     if (useStretcher)
     {
-#if USE_UNIFIED_STRETCHER
-        processWithUnifiedStretch(outputBuffer, snap);
-#else
         processWithTimeStretch(outputBuffer, snap);
-#endif
     }
     else
     {
@@ -2232,109 +2224,6 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         if (tearingDebugEnabled.load())
             tearingStats.partialUnderfills.fetch_add(1, std::memory_order_relaxed);
 #endif
-    }
-}
-
-//==============================================================================
-// processWithUnifiedStretch — pull-based WSOLA path (USE_UNIFIED_STRETCHER == 1)
-//==============================================================================
-
-void AudioBuffer::processWithUnifiedStretch(juce::AudioBuffer<float>& outputBuffer,
-                                             const StretchSnapshot& snap)
-{
-    const int numOutputSamples = outputBuffer.getNumSamples();
-    outputBuffer.clear();
-
-    auto data = getAudioDataSnapshot();
-    if (data == nullptr || data->buffer.getNumSamples() <= 0 || data->sampleRate <= 0.0)
-        return;
-
-    const int   fileLengthSamples = data->buffer.getNumSamples();
-    const double fileSampleRate   = data->sampleRate;
-    const int   numChannels       = juce::jmin (outputBuffer.getNumChannels(),
-                                                 data->buffer.getNumChannels());
-    if (numChannels <= 0)
-        return;
-
-    // Propagate current parameters to the unified engine
-    unifiedStretcher.setStretchRatio (snap.stretchRatio);
-    unifiedStretcher.setPitchSemiTones (snap.pitchSemis);
-    unifiedStretcher.setSpeedMagnitude (snap.speedMag());
-    unifiedStretcher.setDirection (snap.direction());
-
-    // Set slice bounds if slicing is active
-    if (slicingModeActive.load())
-    {
-        const int slice = currentActiveSlice.load();
-        const double sStart = getSliceStartPosition (slice, fileLengthSamples);
-        const double sEnd   = getSliceEndPosition   (slice, fileLengthSamples);
-        unifiedStretcher.setSliceBounds (sStart, sEnd, params.isLooping);
-    }
-    else if (loopWindowEnabled.load())
-    {
-        unifiedStretcher.setSliceBounds ((double) loopStartSamples.load(),
-                                          (double) loopEndSamples.load(),
-                                          params.isLooping);
-    }
-    else
-    {
-        unifiedStretcher.clearSliceBounds (fileLengthSamples);
-    }
-
-    // Handle slice triggers: reset WSOLA state so the new slice boundary takes effect cleanly
-    if (sliceTriggered.exchange (false))
-    {
-        // Jump the playhead to the new slice start
-        const int slice = currentActiveSlice.load();
-        const double newPos = getSliceStartPosition (slice, fileLengthSamples);
-        playheadPosition.store (newPos);
-
-        // Reset WSOLA engine: clear midBuffer, pitch resamplers, etc.
-        unifiedStretcher.reset();
-
-#if JUCE_DEBUG
-        if (tearingDebugEnabled.load())
-            tearingStats.sliceJumps.fetch_add (1, std::memory_order_relaxed);
-        DBG ("[AudioBuffer " + juce::String(bufferIndex) + "] UnifiedStretch: slice jump → "
-             + juce::String(slice) + " pos=" + juce::String(newPos));
-#endif
-    }
-
-    // Pull output from the unified engine
-    double playhead = playheadPosition.load();
-    const int written = unifiedStretcher.readBlock (data->buffer, fileSampleRate,
-                                                     playhead, outputBuffer, numOutputSamples);
-    playheadPosition.store (playhead);
-
-    // If we didn't fill the block (end of file / slice), fade the tail
-    if (written < numOutputSamples)
-    {
-        const int tail    = numOutputSamples - written;
-        const int fadeOut = juce::jmin (tail, juce::jmax (1, (int)(hostSampleRate * 0.002)));
-
-        for (int ch = 0; ch < numChannels; ++ch)
-        {
-            float* out       = outputBuffer.getWritePointer (ch);
-            const float last = written > 0 ? out[written - 1] : 0.0f;
-            for (int i = 0; i < fadeOut; ++i)
-                out[written + i] = last * (1.0f - (float)(i + 1) / (float)(fadeOut + 1));
-            if (written + fadeOut < numOutputSamples)
-                juce::FloatVectorOperations::clear (out + written + fadeOut,
-                                                    numOutputSamples - written - fadeOut);
-        }
-
-#if JUCE_DEBUG
-        if (tearingDebugEnabled.load() && written < numOutputSamples)
-            tearingStats.partialUnderfills.fetch_add (1, std::memory_order_relaxed);
-#endif
-    }
-
-    // Notify listeners of position change
-    const double newPosSeconds = playheadPosition.load() / fileSampleRate;
-    if (std::abs (newPosSeconds - previousPosition) > 0.01)
-    {
-        previousPosition = newPosSeconds;
-        notifyPositionChanged();
     }
 }
 

@@ -1123,13 +1123,6 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
     // Apply the saved theme on editor open
     ThemeEngine::getInstance().setTheme(processor.getAppState().settings.themeName);
 
-    // Moonbase: enable update badge and disable analytics
-    if (activationUI)
-        activationUI->enableUpdateBadge();
-
-    if (processor.moonbaseClient)
-        processor.moonbaseClient->setTransmitAnalytics (false, false);
-
     setSize (1200, 800);
     setResizable(true, true);
     setResizeLimits(920, 600, 2400, 1600);
@@ -1165,6 +1158,4 @@ void BufferTestAudioProcessorEditor::resized()
 
     if (tabComponent)
         tabComponent->setBounds(bounds);
-
-    MOONBASE_RESIZE_ACTIVATION_UI
 }

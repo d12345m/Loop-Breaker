@@ -22,15 +22,11 @@ add_subdirectory(Submodules/clap-juce-extensions EXCLUDE_FROM_ALL)
 # ─── SoundTouch (header-only for us — sources are unity-included) ────────────
 set(SOUNDTOUCH_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/soundtouch/include")
 
-# ─── Moonbase JUCE Client module ─────────────────────────────────────────────
-juce_add_module("${CMAKE_CURRENT_SOURCE_DIR}/Submodules/moonbase_JUCEClient")
-
 # ─── Binary Resources ────────────────────────────────────────────────────────
 juce_add_binary_data(LoopBreakerBinaryData
     HEADER_NAME "BinaryData.h"
     NAMESPACE BinaryData
     SOURCES
-        Resources/moonbase_api_config.json
         Resources/Fonts/Rajdhani-Bold.ttf
         Resources/Fonts/Rajdhani-Regular.ttf
         Resources/Fonts/JetBrainsMono-Regular.ttf
@@ -123,8 +119,6 @@ target_link_libraries(LoopBreaker
         juce::juce_graphics
         juce::juce_gui_basics
         juce::juce_gui_extra
-        juce::juce_product_unlocking
-        moonbase_JUCEClient
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags

@@ -8,8 +8,6 @@
 class BufferTestAudioProcessor : public juce::AudioProcessor
 {
 public:
-    MOONBASE_DECLARE_LICENSING("Glow Machine Audio", ProjectInfo::projectName, ProjectInfo::versionString)
-
     BufferTestAudioProcessor();
     ~BufferTestAudioProcessor() override;
 

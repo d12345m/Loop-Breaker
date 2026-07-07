@@ -36,7 +36,5 @@ private:
 
     ThemeLookAndFeel editorLnf;
 
-    MOONBASE_DECLARE_AND_INIT_ACTIVATION_UI (processor);
-
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BufferTestAudioProcessorEditor)
 };

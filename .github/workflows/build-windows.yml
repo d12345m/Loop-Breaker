@@ -15,14 +15,10 @@ jobs:
     runs-on: windows-latest
     steps:
       # ── Checkout ──────────────────────────────────────────────────────────
-      # SUBMODULE_PAT is needed to clone the private moonbase_JUCEClient submodule.
-      # Create a fine-grained PAT with read access to Moonbase-sh/moonbase_JUCEClient
-      # and add it as a repo secret named SUBMODULE_PAT.
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: recursive
-          token: ${{ secrets.SUBMODULE_PAT || github.token }}
 
       # ── Cache JUCE ────────────────────────────────────────────────────────
       - name: Cache JUCE

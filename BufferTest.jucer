@@ -87,9 +87,7 @@
       <FILE id="nodeClipDebugPanelH" name="NodeClipDebugPanel.h" compile="0"
             resource="0" file="Source/NodeClipDebugPanel.h"/>
     </GROUP>
-    <GROUP id="{MOONBASE_RES}" name="Resources">
-      <FILE id="moonbaseConfig" name="moonbase_api_config.json" compile="0"
-            resource="1" file="Resources/moonbase_api_config.json"/>
+    <GROUP id="{RESOURCES_GROUP}" name="Resources">
       <FILE id="fontRajdhaniBold" name="Rajdhani-Bold.ttf" compile="0"
             resource="1" file="Resources/Fonts/Rajdhani-Bold.ttf"/>
       <FILE id="fontRajdhaniRegular" name="Rajdhani-Regular.ttf" compile="0"
@@ -116,9 +114,6 @@
     <MODULE id="juce_graphics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_gui_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_gui_extra" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
-    <MODULE id="juce_product_unlocking" showAllCode="1" useLocalCopy="0"
-            useGlobalPath="1"/>
-    <MODULE id="moonbase_JUCEClient" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
   </MODULES>
   <JUCEOPTIONS JUCE_STRICT_REFCOUNTEDPOINTER="1"/>
   <EXPORTFORMATS>
@@ -142,8 +137,6 @@
         <MODULEPATH id="juce_graphics" path="/Users/derekmiller/JUCE/modules"/>
         <MODULEPATH id="juce_gui_basics" path="/Users/derekmiller/JUCE/modules"/>
         <MODULEPATH id="juce_gui_extra" path="/Users/derekmiller/JUCE/modules"/>
-        <MODULEPATH id="juce_product_unlocking" path="/Users/derekmiller/JUCE/modules"/>
-        <MODULEPATH id="moonbase_JUCEClient" path="/Users/derekmiller/Documents/JUCE/BufferTest/Submodules"/>
         <MODULEPATH id="juce_cryptography" path="../../../JUCE/modules"/>
       </MODULEPATHS>
     </XCODE_MAC>

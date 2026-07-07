@@ -212,8 +212,6 @@ void BufferTestAudioProcessor::changeProgramName (int, const juce::String&)
 
 void BufferTestAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    MOONBASE_PREPARE_TO_PLAY (sampleRate, samplesPerBlock);
-
     app.bufferManager.prepare(sampleRate, samplesPerBlock);
 
     // §6.1  Pre-allocate per-block scratch buffer used in processBlock to avoid
@@ -833,8 +831,6 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
         }
         app.advanceFxEnvelopes(blockSeconds);
     }
-
-    MOONBASE_PROCESS (buffer);
 }
 
 bool BufferTestAudioProcessor::hasEditor() const

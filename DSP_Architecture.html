@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Loop Breaker — DSP Architecture &amp; Audio Flow</title>
+<style>
+  :root {
+    --bg:        #0a0e14;
+    --bg2:       #0f151e;
+    --panel:     #121a25;
+    --panel2:    #18222f;
+    --border:    #24303f;
+    --border2:   #33475c;
+    --text:      #e6edf3;
+    --muted:     #8b98a5;
+    --faint:     #5a6875;
+    --audio:     #f5a524;  /* audio signal */
+    --audio-dim: #7a5514;
+    --signal:    #22d3ee;  /* data / cross-thread */
+    --ctrl:      #a78bfa;  /* control / modifiers */
+    --ok:        #34d399;  /* de-click / safety */
+    --danger:    #f87171;  /* clipping */
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", ui-monospace, Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: var(--sans); line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--signal); text-decoration: none; }
+  code, .mono { font-family: var(--mono); font-size: 0.86em; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+
+  /* ---------- header ---------- */
+  header {
+    padding: 56px 0 34px; border-bottom: 1px solid var(--border);
+    background:
+      radial-gradient(1200px 380px at 15% -60%, rgba(245,165,36,0.10), transparent 60%),
+      radial-gradient(1000px 360px at 85% -40%, rgba(167,139,250,0.10), transparent 60%);
+  }
+  .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 3px;
+    text-transform: uppercase; color: var(--audio); margin-bottom: 14px; }
+  h1 { font-size: 40px; margin: 0 0 12px; letter-spacing: -0.5px; font-weight: 700; }
+  h1 .sub { color: var(--muted); font-weight: 400; }
+  .lede { color: var(--muted); font-size: 17px; max-width: 780px; margin: 0; }
+  .meta-row { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 26px;
+    font-family: var(--mono); font-size: 12px; color: var(--faint); }
+  .meta-row b { color: var(--text); font-weight: 500; }
+
+  /* ---------- legend ---------- */
+  .legend { display: flex; gap: 20px; flex-wrap: wrap; margin: 22px 0 0;
+    font-family: var(--mono); font-size: 12px; }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); }
+  .dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+
+  section { padding: 44px 0; border-bottom: 1px solid var(--border); }
+  h2 { font-size: 13px; letter-spacing: 2.5px; text-transform: uppercase;
+    color: var(--muted); font-family: var(--mono); font-weight: 600;
+    margin: 0 0 6px; }
+  .h2big { font-size: 26px; letter-spacing: -0.3px; color: var(--text);
+    text-transform: none; font-family: var(--sans); margin: 0 0 20px; font-weight: 650; }
+  p.note { color: var(--muted); max-width: 820px; }
+
+  /* ---------- pipeline spine ---------- */
+  .toolbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    margin-bottom: 22px; }
+  .toggle-group { display: inline-flex; border: 1px solid var(--border2);
+    border-radius: 9px; overflow: hidden; }
+  .toggle-group button { background: var(--panel); color: var(--muted);
+    border: none; padding: 9px 15px; font-family: var(--mono); font-size: 12px;
+    cursor: pointer; transition: .15s; }
+  .toggle-group button.active { background: var(--audio); color: #1a1205; font-weight: 600; }
+  .toggle-group button:not(.active):hover { color: var(--text); background: var(--panel2); }
+  .btn { background: var(--panel); border: 1px solid var(--border2); color: var(--muted);
+    padding: 9px 15px; border-radius: 9px; font-family: var(--mono); font-size: 12px;
+    cursor: pointer; transition: .15s; }
+  .btn:hover { color: var(--text); border-color: var(--signal); }
+  .btn.on { color: var(--signal); border-color: var(--signal); }
+  .hint { font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
+
+  .spine-scroll { overflow-x: auto; padding: 14px 2px 20px; margin: 0 -4px; }
+  .spine { display: flex; align-items: stretch; gap: 0; min-width: 1120px; position: relative; }
+  .stage { position: relative; display: flex; flex-direction: column; }
+  .node {
+    position: relative; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 13px 15px; min-width: 132px; cursor: pointer;
+    transition: .18s; z-index: 2;
+  }
+  .node:hover { transform: translateY(-3px); border-color: var(--border2);
+    box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+  .node.sel { border-color: var(--audio); box-shadow: 0 0 0 1px var(--audio),
+    0 12px 34px rgba(245,165,36,.18); }
+  .node .k { font-family: var(--mono); font-size: 10px; letter-spacing: 1px;
+    text-transform: uppercase; color: var(--faint); margin-bottom: 5px; }
+  .node .t { font-size: 14px; font-weight: 600; letter-spacing: -0.2px; }
+  .node .d { font-size: 11.5px; color: var(--muted); margin-top: 4px; line-height: 1.35; }
+  .node .badge { position: absolute; top: -9px; right: 10px; font-family: var(--mono);
+    font-size: 9px; padding: 2px 7px; border-radius: 20px; letter-spacing: .5px; }
+  .node[data-lane="ctrl"] { border-left: 3px solid var(--ctrl); }
+  .node[data-lane="audio"] { border-left: 3px solid var(--audio); }
+  .node[data-lane="thread"] { border-left: 3px solid var(--signal); }
+  .node[data-lane="safety"] { border-left: 3px solid var(--ok); }
+
+  .connector { flex: 0 0 46px; position: relative; align-self: center; height: 3px;
+    background: linear-gradient(90deg, var(--border) 0%, var(--border2) 100%);
+    margin-top: 0; }
+  .connector::after { content: ""; position: absolute; right: -1px; top: -4px;
+    border: 5px solid transparent; border-left-color: var(--border2); }
+  .stage-label { font-family: var(--mono); font-size: 10px; color: var(--faint);
+    text-align: center; margin-top: 8px; letter-spacing: .5px; }
+
+  /* ---------- detail panel ---------- */
+  .detail {
+    margin-top: 26px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 14px; padding: 0; overflow: hidden; min-height: 120px;
+  }
+  .detail-head { display: flex; align-items: baseline; gap: 12px; padding: 18px 22px;
+    border-bottom: 1px solid var(--border); background: var(--panel2); flex-wrap: wrap; }
+  .detail-head .title { font-size: 19px; font-weight: 650; letter-spacing: -0.3px; }
+  .detail-head .tag { font-family: var(--mono); font-size: 11px; padding: 3px 9px;
+    border-radius: 6px; background: rgba(245,165,36,.12); color: var(--audio); }
+  .detail-body { padding: 20px 22px; display: grid; grid-template-columns: 1.35fr 1fr;
+    gap: 26px; }
+  .detail-body h4 { font-family: var(--mono); font-size: 11px; letter-spacing: 1.5px;
+    text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+  .detail-body p { margin: 0 0 12px; font-size: 14.5px; }
+  .detail-body ul { margin: 0; padding-left: 18px; }
+  .detail-body li { font-size: 13.5px; color: var(--text); margin-bottom: 7px; }
+  .detail-body li b { color: var(--audio); font-weight: 600; }
+  .kv { display: flex; flex-direction: column; gap: 9px; }
+  .kv .row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 12px;
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; }
+  .kv .row .kk { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .kv .row .vv { font-family: var(--mono); font-size: 12px; color: var(--text);
+    text-align: right; }
+  .codebox { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; font-family: var(--mono); font-size: 12px; color: var(--signal);
+    overflow-x: auto; margin: 10px 0 0; white-space: pre; }
+  .fileref { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  .fileref b { color: var(--muted); font-weight: 500; }
+  .empty-hint { padding: 34px 22px; color: var(--faint); font-family: var(--mono);
+    font-size: 13px; text-align: center; }
+
+  /* ---------- generic grids ---------- */
+  .grid { display: grid; gap: 16px; }
+  .g2 { grid-template-columns: 1fr 1fr; }
+  .g3 { grid-template-columns: repeat(3,1fr); }
+  .g4 { grid-template-columns: repeat(4,1fr); }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 17px; }
+  .card h3 { margin: 0 0 8px; font-size: 15px; letter-spacing: -0.2px; }
+  .card p { margin: 0; font-size: 13px; color: var(--muted); }
+  .card .stat { font-family: var(--mono); font-size: 22px; color: var(--audio);
+    font-weight: 600; }
+  .card.c-ctrl { border-left: 3px solid var(--ctrl); }
+  .card.c-audio { border-left: 3px solid var(--audio); }
+  .card.c-signal { border-left: 3px solid var(--signal); }
+  .card.c-ok { border-left: 3px solid var(--ok); }
+
+  /* ---------- fx chain strip ---------- */
+  .fxchain { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .fx { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 11px; font-size: 12.5px; position: relative; cursor: default;
+    transition: .15s; }
+  .fx:hover { border-color: var(--border2); background: var(--panel2); }
+  .fx .n { font-family: var(--mono); font-size: 9px; color: var(--faint);
+    margin-right: 6px; }
+  .fx.lim { border-color: var(--ok); color: var(--ok); }
+  .fx.declick { border-color: var(--ok); background: rgba(52,211,153,.08); color: var(--ok); }
+  .arrow { color: var(--faint); font-family: var(--mono); }
+
+  /* ---------- nested sub-flow (reader internals) ---------- */
+  .subflow { display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+    margin: 12px 0 4px; padding: 12px; border: 1px dashed var(--border2);
+    border-radius: 10px; background: var(--bg2); }
+  .subflow .chip { font-family: var(--mono); font-size: 11px; padding: 7px 10px;
+    border-radius: 7px; white-space: nowrap; }
+  .chip.src { background: var(--panel2); color: var(--muted); border: 1px solid var(--border2); }
+  .chip.juce { background: rgba(245,165,36,.14); color: var(--audio); border: 1px solid var(--audio-dim); }
+  .chip.st { background: rgba(34,211,238,.14); color: var(--signal); border: 1px solid #1a5f6b; }
+  .chip.outp { background: rgba(52,211,153,.12); color: var(--ok); border: 1px solid #2a6b52; }
+  .subflow .arrow { font-size: 13px; }
+  .subflow-cap { font-family: var(--mono); font-size: 10.5px; color: var(--faint);
+    margin-top: 2px; }
+  .bypass-tag { display: inline-block; font-family: var(--mono); font-size: 10px;
+    color: var(--faint); border: 1px dashed var(--faint); border-radius: 5px;
+    padding: 1px 6px; margin-left: 6px; }
+
+  /* ---------- threading lanes ---------- */
+  .lanes { display: flex; flex-direction: column; gap: 12px; }
+  .lane { display: grid; grid-template-columns: 190px 1fr; gap: 14px; align-items: center; }
+  .lane .lname { font-family: var(--mono); font-size: 12px; padding: 10px 12px;
+    border-radius: 9px; border: 1px solid var(--border); background: var(--panel); }
+  .lane .ltrack { height: 46px; border-radius: 9px; border: 1px solid var(--border);
+    background: repeating-linear-gradient(90deg, var(--bg2), var(--bg2) 22px, var(--panel) 22px, var(--panel) 44px);
+    display: flex; align-items: center; padding: 0 12px; gap: 8px; overflow: hidden; }
+  .blk { font-family: var(--mono); font-size: 11px; padding: 5px 10px; border-radius: 6px;
+    white-space: nowrap; }
+  .blk.rt { background: rgba(245,165,36,.16); color: var(--audio); border: 1px solid var(--audio-dim); }
+  .blk.wk { background: rgba(34,211,238,.14); color: var(--signal); border: 1px solid #1a5f6b; }
+  .blk.bg { background: rgba(167,139,250,.14); color: var(--ctrl); border: 1px solid #5b4a8a; }
+  .blk.ui { background: var(--panel2); color: var(--muted); border: 1px solid var(--border2); }
+  .lane .lname.rt { border-left: 3px solid var(--audio); }
+  .lane .lname.wk { border-left: 3px solid var(--signal); }
+  .lane .lname.bg { border-left: 3px solid var(--ctrl); }
+  .lane .lname.ui { border-left: 3px solid var(--muted); }
+
+  /* modifier taxonomy */
+  .modgrid { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; }
+  .modcat { background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px; }
+  .modcat h3 { margin: 0 0 4px; font-size: 14px; }
+  .modcat .sub { font-family: var(--mono); font-size: 10px; color: var(--faint);
+    margin-bottom: 11px; letter-spacing: .5px; }
+  .modcat ul { margin: 0; padding: 0; list-style: none; }
+  .modcat li { font-size: 12.5px; padding: 5px 0; border-top: 1px solid var(--border);
+    color: var(--muted); }
+  .modcat li:first-child { border-top: none; }
+  .modcat li b { color: var(--text); font-weight: 600; display: block; font-size: 12.5px; }
+
+  footer { padding: 34px 0 60px; color: var(--faint); font-family: var(--mono);
+    font-size: 12px; }
+
+  @media (max-width: 780px) {
+    .detail-body, .g2, .g3, .g4, .modgrid { grid-template-columns: 1fr; }
+    h1 { font-size: 30px; }
+  }
+  @media print {
+    body { background: #fff; color: #111; }
+    .spine-scroll { overflow: visible; }
+    .toolbar, .hint { display: none; }
+    section, header { border-color: #ccc; }
+    .node, .card, .detail, .fx, .lane .ltrack { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="eyebrow">Design Document · Real-Time DSP</div>
+    <h1>Loop Breaker <span class="sub">— DSP Operations &amp; Audio Flow</span></h1>
+    <p class="lede">A JUCE audio plugin that turns loaded loops into evolving, glitchy performances.
+    This document maps every stage a buffer of samples passes through — from the host callback,
+    across the real-time thread pool, through per-pad playback and effects, to the output buses —
+    and the scheduler that reconfigures that graph in musical time.</p>
+    <div class="meta-row">
+      <span>Framework: <b>JUCE / AudioProcessor</b></span>
+      <span>Time-stretch: <b>SoundTouch (WSOLA)</b></span>
+      <span>Pads: <b>8 · stereo</b></span>
+      <span>Parallelism: <b>3 workers + audio thread</b></span>
+      <span>Generated: <b>2026-07-15</b></span>
+    </div>
+    <div class="legend">
+      <span><i class="dot" style="background:var(--audio)"></i> Audio signal path</span>
+      <span><i class="dot" style="background:var(--ctrl)"></i> Control / modifiers</span>
+      <span><i class="dot" style="background:var(--signal)"></i> Data / cross-thread</span>
+      <span><i class="dot" style="background:var(--ok)"></i> De-click / safety</span>
+    </div>
+  </div>
+</header>
+
+<!-- ============ 1. THE SPINE ============ -->
+<section id="flow">
+  <div class="wrap">
+    <h2>01 — The Signal Spine</h2>
+    <div class="h2big">One block of audio, end to end</div>
+    <p class="note">Every audio callback (<code>processBlock</code>) walks this pipeline once. Click any
+    stage to inspect its DSP. Toggle the playback engine to see which path a pad takes when it is
+    merely repitched versus time-stretched or pitch-shifted.</p>
+
+    <div class="toolbar">
+      <div class="toggle-group" id="engineToggle">
+        <button data-engine="repitch" class="active">Repitch path</button>
+        <button data-engine="stretch">Time-stretch path</button>
+      </div>
+      <span class="hint">Click a stage for its DSP detail · scroll horizontally to follow the chain</span>
+    </div>
+
+    <div class="spine-scroll">
+      <div class="spine" id="spine">
+        <!-- stages injected by JS -->
+      </div>
+    </div>
+
+    <div class="detail" id="detail">
+      <div class="empty-hint">Select a stage above to view its DSP operation, parameters, and source location.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 2. PLAYBACK ENGINE ============ -->
+<section id="engine">
+  <div class="wrap">
+    <h2>02 — Per-Pad Playback Engine</h2>
+    <div class="h2big">Two ways to read a sample buffer</div>
+    <p class="note">Each pad owns an <code>AudioBuffer</code> voice. Per block it snapshots its atomic
+    state into a coherent <code>StretchSnapshot</code>, then <b>branches once</b> to one of two readers.
+    The choice is <code>useStretcher()</code> — true whenever <code>stretchRatio ≠ 1.0</code> <i>or</i>
+    <code>pitchSemiTones ≠ 0</code>. This is an either/or dispatch per block, <i>not</i> a serial chain:
+    when a pad is at normal stretch with no pitch shift, <b>SoundTouch is never touched</b>.</p>
+
+    <div class="grid g2">
+      <div class="card c-audio">
+        <h3>① Repitch reader <span class="fileref">— processWithRepitching</span></h3>
+        <p style="margin-bottom:2px">Speed change &amp; direction only — pitch tracks speed, like varispeed tape.
+        The JUCE interpolator reads the source <b>straight to output</b>.</p>
+        <div class="subflow">
+          <span class="chip src">source buffer</span>
+          <span class="arrow">›</span>
+          <span class="chip juce">JUCE interp / resample</span>
+          <span class="arrow">›</span>
+          <span class="chip outp">output</span>
+          <span class="bypass-tag">SoundTouch bypassed</span>
+        </div>
+        <ul style="margin:8px 0 0;padding-left:18px;font-size:13px;color:var(--muted)">
+          <li>Per-output-sample step <code>= speed × (fileSR / hostSR)</code></li>
+          <li>4-point Lagrange / linear: <code>dst = src[p1] + frac·(src[p2]−src[p1])</code></li>
+          <li>Negative speed ⇒ reverse; bulk <code>copyFrom</code> fast-path when speed=1 &amp; rates match</li>
+        </ul>
+      </div>
+      <div class="card c-audio">
+        <h3>② Time-stretch reader <span class="fileref">— processWithTimeStretch</span></h3>
+        <p style="margin-bottom:2px">Independent tempo &amp; pitch. The <b>same JUCE interpolator</b> reads the
+        source into an <b>input scratch</b>, and SoundTouch WSOLA warps that — two nested stages:</p>
+        <div class="subflow">
+          <span class="chip src">source buffer</span>
+          <span class="arrow">›</span>
+          <span class="chip juce">JUCE interp → stretchInScratch</span>
+          <span class="arrow">›</span>
+          <span class="chip st">SoundTouch WSOLA</span>
+          <span class="arrow">›</span>
+          <span class="chip outp">output</span>
+        </div>
+        <div class="subflow-cap">The JUCE read stage is <code>fillInputScratch</code> (bulk copy · LagrangeInterpolator · per-sample fallback); SoundTouch does the time/pitch warp.</div>
+        <ul style="margin:8px 0 0;padding-left:18px;font-size:13px;color:var(--muted)">
+          <li>Windows: SEQUENCE 60 ms · SEEKWINDOW 25 ms · OVERLAP 12 ms</li>
+          <li>Pitch active ⇒ speed via <b>tempo</b>; else via <b>rate</b> (keeps them independent)</li>
+          <li>Source read does <b>not</b> apply the stretch ratio — SoundTouch does, avoiding double-application</li>
+          <li>Feed/drain loop primes latency, clamps output to ±1.0; reverse widens windows to 35/18</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="note" style="margin-top:16px"><b>Key nuance:</b> the JUCE <code>LagrangeInterpolator</code>
+    (source reading / resampling) runs in <b>both</b> paths — writing to the output in repitch mode, and to
+    SoundTouch's input scratch in stretch mode. SoundTouch (time/pitch warp) runs <b>only</b> in the stretch
+    path. Both readers then share the <b>slice engine</b> (beat-slice random, arp sequence, slice-repeater),
+    <b>ping-pong</b> (direction flips every musical half-period), and the 50 ms <code>SmoothedValue</code>
+    ramps on speed, stretch, pitch and speed-magnitude.</p>
+  </div>
+</section>
+
+<!-- ============ 3. FX CHAIN ============ -->
+<section id="fx">
+  <div class="wrap">
+    <h2>03 — Per-Pad Insert FX Chain</h2>
+    <div class="h2big">ChannelStrip::processDSPChain — fixed order</div>
+    <p class="note">After the playback reader fills the pad's scratch buffer, its <code>ChannelStrip</code>
+    runs the insert chain below in a fixed order. Each stage is gated by an enable flag and driven by an
+    <code>EffectEnvelope</code> that ramps parameters over musical bars. A <code>NodeProbe</code> inspects
+    the signal after most stages to locate clipping.</p>
+    <div class="fxchain" style="margin-top:6px">
+      <span class="fx"><span class="n">01</span>Ducking</span><span class="arrow">›</span>
+      <span class="fx"><span class="n">02</span>High-pass</span><span class="arrow">›</span>
+      <span class="fx"><span class="n">03</span>Low-pass</span><span class="arrow">›</span>
+      <span class="fx"><span class="n">04</span>S&amp;H Low-pass</span><span class="arrow">›</span>
+      <span class="fx"><span class="n">05</span>S&amp;H High-pass</span><span class="arrow">›</span>
+      <span class="fx"><span class="n">06</span>Delay</span><span class="arrow">›</span>
+      <span class="fx"><span class="n">07</span>Tremolo</span><span class="arrow">›</span>
+      <span class="fx"><span class="n">08</span>Chorus</span><span class="arrow">›</span>
+      <span class="fx"><span class="n">09</span>Auto-pan</span><span class="arrow">›</span>
+      <span class="fx"><span class="n">10</span>Granular</span><span class="arrow">›</span>
+      <span class="fx"><span class="n">11</span>Volume ramp</span><span class="arrow">›</span>
+      <span class="fx lim"><span class="n">12</span>Limiter</span><span class="arrow">›</span>
+      <span class="fx"><span class="n">13</span>Reverb</span><span class="arrow">›</span>
+      <span class="fx lim"><span class="n">14</span>Limiter</span><span class="arrow">›</span>
+      <span class="fx declick"><span class="n">15</span>Boundary de-click</span>
+    </div>
+    <div class="grid g3" style="margin-top:22px">
+      <div class="card"><h3>Delay</h3><p>Multi-tap fractional line; feedback high-cut IIR + tanh saturation; optional ping-pong &amp; wow/flutter modulation of the read tap.</p></div>
+      <div class="card"><h3>S&amp;H Filters</h3><p>Per-strip RNG latches a new random cutoff &amp; Q at each musical division (1/16…1/4), driven by an accumulating phase.</p></div>
+      <div class="card"><h3>Granular</h3><p>Clouds-style: 2 s capture ring, up to 48 grains, octave-quantized pitch, Hann/rect texture blend, tanh soft-clip.</p></div>
+      <div class="card"><h3>Reverb</h3><p>JUCE <code>dsp::Reverb</code>, roomSize 0.80, 20 ms pre-delay, perceptual wet <code>= wet^0.85</code>, limiter fore &amp; aft.</p></div>
+      <div class="card"><h3>Chorus / Auto-pan</h3><p>Chorus: LFO-modulated fractional delay. Auto-pan: constant-power sine panner, rate from musical division.</p></div>
+      <div class="card c-ok"><h3>Boundary de-click</h3><p>Final guard smoothing block-edge discontinuities before the buffer leaves the strip.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4. THREADING ============ -->
+<section id="threads">
+  <div class="wrap">
+    <h2>04 — Threading Model</h2>
+    <div class="h2big">Who runs what, and how audio crosses threads</div>
+    <p class="note">The 8 pads render concurrently on a lock-free, allocation-free pool — the audio thread
+    is itself a worker, giving 4-way parallelism. Merging (summation) happens back on the audio thread
+    because it is not independent. Disk I/O never touches the audio thread.</p>
+    <div class="lanes" style="margin-top:8px">
+      <div class="lane">
+        <div class="lname rt">Audio thread</div>
+        <div class="ltrack">
+          <span class="blk rt">MIDI parse</span><span class="blk rt">transport / tempo</span>
+          <span class="blk rt">dispatch 8 pads</span><span class="blk rt">merge + gain</span>
+          <span class="blk rt">clip probe</span><span class="blk rt">advance envelopes</span>
+        </div>
+      </div>
+      <div class="lane">
+        <div class="lname wk">RT workers ×3</div>
+        <div class="ltrack">
+          <span class="blk wk">pad 0 render</span><span class="blk wk">pad 1 render</span>
+          <span class="blk wk">pad 2 render</span><span class="blk wk">… → perBufferScratch[i]</span>
+        </div>
+      </div>
+      <div class="lane">
+        <div class="lname bg">Background loader</div>
+        <div class="ltrack">
+          <span class="blk bg">decode file</span><span class="blk bg">SR-convert (Lagrange)</span>
+          <span class="blk bg">push → AbstractFifo</span>
+        </div>
+      </div>
+      <div class="lane">
+        <div class="lname ui">Message / UI</div>
+        <div class="ltrack">
+          <span class="blk ui">MIDI-learn</span><span class="blk ui">preset recall</span>
+          <span class="blk ui">param edits (APVTS)</span><span class="blk ui">transport readout</span>
+        </div>
+      </div>
+    </div>
+    <div class="grid g3" style="margin-top:22px">
+      <div class="card c-signal"><h3>Lock-free load hand-off</h3><p>Decoded <code>LoadedAudioData</code> crosses loader→audio via a 32-slot <code>AbstractFifo</code> + atomic pointer swap with hazard-style retainers. The audio thread never frees memory or blocks.</p></div>
+      <div class="card c-signal"><h3>Deferred SoundTouch reset</h3><p>Param changes set <code>stretcherNeedsReset</code>; the actual reset runs on the audio thread, so the message thread never touches the stretcher.</p></div>
+      <div class="card c-signal"><h3>Prepared gate</h3><p>An acquire-load atomic <code>resourcesPrepared</code> forces silence during AU release-time callbacks and bus reconfiguration (10-block grace).</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 5. MODIFIER SYSTEM ============ -->
+<section id="mods">
+  <div class="wrap">
+    <h2>05 — The Modifier System</h2>
+    <div class="h2big">How the graph rewrites itself in musical time</div>
+    <p class="note">A "modifier" is a scheduled, probabilistically-selected command — not a DSP block itself.
+    The <code>ModifierScheduler</code> fires one at each musical boundary; <code>AppState::modifierTriggered</code>
+    switches on its type and mutates parameters on the targeted pads' <code>AudioBuffer</code> or
+    <code>ChannelStrip</code>. The DSP above then renders the new configuration.</p>
+
+    <div class="grid g4" style="margin:6px 0 24px">
+      <div class="card c-ctrl"><div class="stat">1</div><p>Select — weighted-random descriptor from enabled probabilities</p></div>
+      <div class="card c-ctrl"><div class="stat">2</div><p>Quantize — snap trigger forward to bar / subdivision grid</p></div>
+      <div class="card c-ctrl"><div class="stat">3</div><p>Trigger — pick 1–4 target pads, broadcast to listeners</p></div>
+      <div class="card c-ctrl"><div class="stat">4</div><p>Apply — mutate atomics; next block renders the change</p></div>
+    </div>
+
+    <div class="modgrid">
+      <div class="modcat">
+        <h3>Buffer Transforms</h3>
+        <div class="sub">PLAYBACK ENGINE</div>
+        <ul>
+          <li><b>Reverse</b> negate speed sign</li>
+          <li><b>Speed</b> 0.25 / 0.5 / 2×</li>
+          <li><b>Stretch</b> tempo, pitch held</li>
+          <li><b>Pitch ±Octave</b> ±12 semitones</li>
+          <li><b>Beat-Slice Random</b> 4–64 slices</li>
+          <li><b>Arp Slice</b> fixed random sequence</li>
+          <li><b>Slice Repeater</b> repeat one slice</li>
+          <li><b>Ping-Pong</b> fwd/back oscillation</li>
+        </ul>
+      </div>
+      <div class="modcat">
+        <h3>Buffer Effects</h3>
+        <div class="sub">CHANNELSTRIP FX</div>
+        <ul>
+          <li><b>Reverb</b> wet ramp over bars</li>
+          <li><b>Delay / Dub Burst</b> feedback + ping-pong</li>
+          <li><b>Low / High-pass</b> swept cutoff</li>
+          <li><b>S&amp;H Filters</b> stepped random cutoff</li>
+          <li><b>Tremolo</b> amplitude LFO</li>
+          <li><b>Chorus · Auto-pan</b></li>
+          <li><b>Granular (on / momentary)</b></li>
+          <li><b>Volume Ramp Down</b></li>
+        </ul>
+      </div>
+      <div class="modcat">
+        <h3>Master Effects</h3>
+        <div class="sub">ALL STRIPS</div>
+        <ul>
+          <li><b>Master Low-pass</b> → 1200 Hz</li>
+          <li><b>Master High-pass</b> → 180 Hz</li>
+          <li style="border-top:none;color:var(--faint);padding-top:10px">Jump or ramp mode, 2–16 bar duration, applied across every channel strip.</li>
+        </ul>
+      </div>
+      <div class="modcat">
+        <h3>Global Utilities</h3>
+        <div class="sub">SCHEDULER / STATE</div>
+        <ul>
+          <li><b>Switch Part</b> change active part</li>
+          <li><b>Swap Modifier Stack</b> rotate FX between pads</li>
+          <li><b>Quarter-Note Burst</b> rapid-fire triggering</li>
+          <li><b>Reset All</b> restore defaults</li>
+        </ul>
+      </div>
+    </div>
+    <p class="note" style="margin-top:18px"><b>Timing</b>: two parallel timelines — host PPQ (preferred, tempo-locked)
+    and a delta-time fallback. Cadence is Fixed, Variable (random bar range) or Timed (random seconds).
+    Exactly one modifier is queued in <code>upcoming</code> at a time; the UI reads it for the countdown display.</p>
+  </div>
+</section>
+
+<!-- ============ 6. DE-CLICK ARSENAL ============ -->
+<section id="declick">
+  <div class="wrap">
+    <h2>06 — De-Click / De-Pop Arsenal</h2>
+    <div class="h2big">Seven mechanisms that keep transitions silent</div>
+    <p class="note">Glitch performance means constant discontinuities — slice jumps, engine switches,
+    stretcher resets. Each is masked by a purpose-built equal-power crossfade or fade. All use
+    <code>fadeIn = sin(θ)</code>, <code>fadeOut = cos(θ)</code>, <code>θ = progress·π/2</code>.</p>
+    <div class="grid g3">
+      <div class="card c-ok"><h3>A · Slice crossfade</h3><p>Equal-power blend on every slice / loop / file-boundary jump in the repitch path. Default 20 ms (882 samples @44.1k); length captured at start so mid-fade changes can't corrupt it.</p></div>
+      <div class="card c-ok"><h3>B · Input-side crossfade</h3><p>In stretch mode the discontinuity is blended into SoundTouch's <i>input</i> (≥50 ms) so the OLA engine never sees a hard edge.</p></div>
+      <div class="card c-ok"><h3>C · Lookahead pre-prime</h3><p>When slicing + stretching, the next slice is ramped into the stretcher input within its latency window, then continued past the boundary.</p></div>
+      <div class="card c-ok"><h3>D · Transition fade</h3><p>Multi-block equal-power fade from the <code>stretchOutputRing</code> tail when switching repitch↔stretch or after a reset. 20–80 ms, spans as many blocks as needed.</p></div>
+      <div class="card c-ok"><h3>E · Startup fade-in</h3><p>First block after a stretcher reset is pre-primed with ~2× latency and fades in linearly over 20–40 ms to mask the settling transient.</p></div>
+      <div class="card c-ok"><h3>F · Underrun tail fade</h3><p>If SoundTouch underfills a block, the tail fades to zero over ~2 ms instead of holding the last sample (which caused DC offset).</p></div>
+    </div>
+    <p class="note" style="margin-top:16px"><b>G · Output-side crossfade</b> is a legacy fallback now rarely
+    hit. Pad (−12 dB) and master gains are flat multiplies; smoothing is handled entirely by the
+    parameter ramps and the crossfades above.</p>
+  </div>
+</section>
+
+<!-- ============ 7. DATA STRUCTURES ============ -->
+<section id="data">
+  <div class="wrap">
+    <h2>07 — Buffers &amp; Data Structures</h2>
+    <div class="h2big">Where the samples actually live</div>
+    <div class="grid g2">
+      <div class="card c-signal"><h3>LoadedAudioData</h3><p>Ref-counted decoded source sample (stereo <code>AudioBuffer&lt;float&gt;</code> + sample rate + name). Read lock-free via an atomic pointer with retainer rotation; survives release/re-prepare so audio isn't reloaded on bus changes.</p></div>
+      <div class="card c-signal"><h3>Pending-load FIFO</h3><p>32-slot SPSC <code>AbstractFifo</code>. Loader thread writes decoded buffers; audio thread drains them and applies the loop window. Overflow is logged, not blocked.</p></div>
+      <div class="card c-signal"><h3>stretchOutputRing</h3><p>Stereo 100 ms circular buffer written every block. Feeds transition fades and snapshots so the previous engine's tail can crossfade into the new one.</p></div>
+      <div class="card c-audio"><h3>Scratch buffers</h3><p><code>perBufferScratch[8]</code> + main <code>scratchBuffer</code>, all pre-allocated in <code>prepareToPlay</code>. Runtime <code>setSize</code> is guarded by <code>jassertfalse</code> — no allocation on the audio thread, ever.</p></div>
+    </div>
+    <p class="note" style="margin-top:16px">Output topology: one stereo <b>Mix</b> bus plus 8 stereo per-pad
+    buses (<b>Ch1…Ch8</b>) for multi-out routing in the host.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    Loop Breaker — DSP Architecture · self-contained interactive document · print to PDF via ⌘P / Ctrl-P.<br>
+    Source references: PluginProcessor.cpp · AudioBuffer.cpp · ChannelStrip.h · ModifierScheduler.cpp · TimeStretchSoundTouch.h · NodeClipDetector.h · RealtimeThreadPool.h
+  </div>
+</footer>
+
+<script>
+// ---------- stage data for the spine ----------
+const STAGES = [
+  {
+    id:"host", lane:"ctrl", k:"Host", t:"DAW Callback", d:"Transport · tempo · MIDI · params",
+    badge:{txt:"input", c:"var(--ctrl)"}, label:"host",
+    tag:"Entry", title:"Host → processBlock",
+    desc:"The DAW delivers a block of input samples plus a MIDI buffer and playhead info. A <code>ScopedNoDenormals</code> guard is set, and an acquire-load of <code>resourcesPrepared</code> gates the whole method — if resources aren't prepared (e.g. an AU release-time callback), the buffer is cleared and the method returns silence.",
+    bullets:["<b>Denormal guard</b> for the whole block","<b>Prepared gate</b> — silence if not ready","10-block <b>grace period</b> across bus reconfig"],
+    kv:[["entry","BufferTestAudioProcessor::processBlock"],["gate","resourcesPrepared (acquire)"],["file","PluginProcessor.cpp:301"]]
+  },
+  {
+    id:"control", lane:"ctrl", k:"Control", t:"Decode &amp; Sync", d:"MIDI · APVTS · transport · tempo",
+    label:"control plane",
+    tag:"Control", title:"MIDI parse · parameter sync · transport detection",
+    desc:"MIDI note-ons drive modifier toggles, preset recalls and pad toggles (all via atomic request flags); CCs map to parameters. 22 modifier + 8 pad probability parameters are read from the APVTS each block. The playhead is inspected to decide play/stop — falling back to inferring playback from advancing sample/PPQ deltas — and to detect restart-to-zero.",
+    bullets:["MIDI-learn capture → atomic flags","<b>22 + 8</b> atomic probability reads / block","Transport inference when host doesn't report playing","Tempo-follow: <code>mult = bpm / referenceBpm</code>"],
+    kv:[["params","modifierProbabilities · padTargetProbabilities"],["tempo","setTempoMultiplier(mult)"],["file","PluginProcessor.cpp:312–765"]]
+  },
+  {
+    id:"pool", lane:"thread", k:"Threads", t:"Fan-out ×8", d:"RealtimeThreadPool.processAll",
+    badge:{txt:"parallel", c:"var(--signal)"}, label:"thread pool",
+    tag:"Concurrency", title:"Parallel per-pad render",
+    desc:"The 8 pad renders are dispatched onto a lock-free, allocation-free pool: 3 pre-spawned workers plus the audio thread itself = 4-way parallelism. Each task clears and fills its own <code>perBufferScratch[i]</code>, so there are no data races between pads. Dispatch is a <code>generation</code>-counter bump; completion is a spin-wait on an atomic counter.",
+    bullets:["<b>3 workers + audio thread</b> = 4-way","Zero heap allocation on dispatch (stack lambda + trampoline)","Each pad writes only its own scratch buffer","Workers spin-yield 2000× then sleep 100µs"],
+    kv:[["dispatch","processAll(8, task)"],["sync","nextTask.fetch_add · completedTasks"],["file","RealtimeThreadPool.h:70–129"]]
+  },
+  {
+    id:"snapshot", lane:"audio", k:"Per-pad", t:"State Snapshot", d:"StretchSnapshot · atomics",
+    label:"AudioBuffer",
+    tag:"Playback", title:"Coherent state snapshot",
+    desc:"Inside <code>AudioBuffer::processBlock</code> all atomic playback state (speed, stretch, pitch, tempo mult, slice/loop/ping-pong) is snapshotted once into a coherent <code>StretchSnapshot</code>, and the decoded source is fetched lock-free via <code>getAudioDataSnapshot()</code>. This prevents torn reads mid-block and decides which reader runs.",
+    bullets:["Atomic state read once → local <code>StretchSnapshot</code>","<code>getAudioDataSnapshot()</code> bumps a refcount (hazard-pointer style)","<code>useStretcher()</code> = stretch≠1 OR pitch≠0"],
+    kv:[["struct","StretchSnapshot (AudioBuffer.h:372)"],["dispatch","AudioBuffer.cpp:221–227"],["source","atomic LoadedAudioData*"]]
+  },
+  {
+    id:"reader", lane:"audio", k:"Engine", t:"Read Samples", d:"Repitch · or · SoundTouch",
+    dynamic:true, label:"reader",
+    tag:"Playback", title:"Sample reader",
+    // dynamic content set by engine toggle
+  },
+  {
+    id:"slice", lane:"audio", k:"Warp", t:"Slice · Ping-Pong", d:"jumps + equal-power fades",
+    label:"slice / warp",
+    tag:"Playback", title:"Slice engine, ping-pong & crossfades",
+    desc:"Both readers share the warp layer: beat-slice-random, arp sequence, and slice-repeater compute a target read position; ping-pong flips the direction sign every musical half-period. Every jump triggers an equal-power crossfade (mechanism A/B) so the seam is inaudible. 50 ms <code>SmoothedValue</code> ramps keep speed/stretch/pitch changes glitch-free.",
+    bullets:["Slice modes: single, continuous-random, arp, repeater","Ping-pong: <code>period = divisionBars·(60/bpm)·4·sr</code>","Every seam → equal-power crossfade (~20 ms)","Speed / stretch / pitch: 50 ms smoothing"],
+    kv:[["slice","getSliceStart/EndPosition"],["crossfade","applyCrossfadeToSliceTransition"],["file","AudioBuffer.cpp:2586 / 2716"]]
+  },
+  {
+    id:"fx", lane:"audio", k:"FX", t:"ChannelStrip", d:"15-stage insert chain",
+    label:"insert FX",
+    tag:"Effects", title:"ChannelStrip::processDSPChain",
+    desc:"The pad's scratch buffer runs the fixed 15-stage insert chain: ducking → HP → LP → S&H HP/LP → delay → tremolo → chorus → auto-pan → granular → volume-ramp → limiter → reverb → limiter → boundary de-click. Each stage is enable-gated and ramped by an <code>EffectEnvelope</code>; a <code>NodeProbe</code> inspects the signal after most stages.",
+    bullets:["Fixed order, per-stage enable flags","Parameters ramped over musical bars by envelopes","Limiter <b>before and after</b> reverb","Per-stage clip probes (14 named nodes)"],
+    kv:[["chain","processDSPChain (ChannelStrip.h:112)"],["envelopes","advanceFxEnvelopes / block"],["probes","NodeClipDetector.h"]]
+  },
+  {
+    id:"merge", lane:"audio", k:"Sum", t:"Merge Buses", d:"addFrom → mix + Ch1–8",
+    label:"merge",
+    tag:"Mix", title:"Sequential merge into buses",
+    desc:"Back on the audio thread (summation isn't independent), each of the 8 scratch buffers is added into the stereo Mix bus and copied to its per-pad output bus (Ch1…Ch8) when that bus is enabled. This is the barrier after the parallel render.",
+    bullets:["<code>mix.addFrom(...)</code> for the main stereo bus","<code>padBus.addFrom(...)</code> for Ch1–8 multi-out","Runs on the audio thread after the pool completes"],
+    kv:[["mix","bus 0 (stereo)"],["pads","bus 1–8 (stereo each)"],["file","PluginProcessor.cpp:811–830"]]
+  },
+  {
+    id:"gain", lane:"audio", k:"Gain", t:"−12 dB · Master", d:"pad reduction + master vol",
+    label:"gain stage",
+    tag:"Mix", title:"Gain staging",
+    desc:"Each pad's output is scaled by a fixed <code>−12 dB</code> (×0.251189) headroom reduction, then by the master volume (<code>decibelsToGain</code>, −12…+12 dB). Both are flat multiplies — parameter smoothing lives upstream. Applied per-pad inside <code>processSingleBuffer</code>.",
+    bullets:["Pad reduction <code>×0.251189 = 10^(−12/20)</code>","Master volume from APVTS, ±12 dB","Flat multiply; no per-sample ramp here"],
+    kv:[["pad gain","applyGain(0.251189f)"],["master","applyGain(decibelsToGain(dB))"],["file","AudioBufferManager.cpp:116"]]
+  },
+  {
+    id:"probe", lane:"safety", k:"Safety", t:"Clip Probe", d:"NodeProbe on final mix",
+    label:"inspect",
+    tag:"Safety", title:"Final-mix clip inspection",
+    desc:"The final mix is scanned by <code>mixBusProbe.inspect</code>: per block it tracks peak, recent peak, clip counts against ±1.0 and ±2.0, NaN/Inf, block RMS and the max RMS-jump between blocks (a pop indicator). All lock-free atomics for UI readout — the audio is not modified here.",
+    bullets:["Peak, clip (±1.0), hard-clip (±2.0), NaN/Inf","Max RMS-jump = discontinuity/pop indicator","<code>findFirstClippingNode()</code> pinpoints the culprit stage","Lock-free; read-only inspection"],
+    kv:[["probe","mixBusProbe.inspect(mix, n)"],["nodes","14 named chain points"],["file","NodeClipDetector.h · PluginProcessor.cpp:833"]]
+  },
+  {
+    id:"out", lane:"audio", k:"Output", t:"Buses Out", d:"Mix + Ch1–8 → host",
+    badge:{txt:"output", c:"var(--audio)"}, label:"output",
+    tag:"Output", title:"Output to host",
+    desc:"The stereo Mix bus and the 8 per-pad buses are handed back to the host. Envelopes are then advanced by the block duration (<code>advanceFxEnvelopes</code>), which is what produces the fade-over-N-bars behavior and auto-disables effects that ramp to zero. If playback is disabled or transport is stopped, all buses are cleared to silence and the method returns early.",
+    bullets:["1 stereo Mix + 8 stereo pad buses","Envelopes advanced by block seconds after output","Transport-stopped / disabled ⇒ cleared silence"],
+    kv:[["buses","Mix + Ch1…Ch8"],["post","advanceFxEnvelopes(blockSeconds)"],["file","PluginProcessor.cpp:835–848"]]
+  }
+];
+
+const READER = {
+  repitch: {
+    d:"JUCE interp → output",
+    desc:"With <code>stretchRatio=1</code> and <code>pitch=0</code>, the pad uses <code>processWithRepitching</code>. The JUCE interpolator reads the source <b>straight to output</b> — each output sample advances the read head by <code>step = speed × (fileSR/hostSR)</code> and interpolates between neighboring source samples. Pitch tracks speed like tape varispeed. <b>SoundTouch is bypassed entirely</b> in this path. A bulk <code>copyFrom</code> fast-path is taken when speed=1 and rates already match.",
+    bullets:["Flow: <b>source → JUCE interp/resample → output</b>","<code>step = speed × (fileSR / hostSR)</code>","Branch-free interp: <code>dst = src[p1] + frac·(src[p2]−src[p1])</code>","Negative speed ⇒ reverse; SoundTouch never runs here"],
+    kv:[["reader","processWithRepitching"],["interp","4-point Lagrange / linear"],["soundtouch","bypassed"],["file","AudioBuffer.cpp:544"]]
+  },
+  stretch: {
+    d:"JUCE interp → SoundTouch",
+    desc:"When <code>stretchRatio≠1</code> or <code>pitch≠0</code>, the pad uses <code>processWithTimeStretch</code> — <b>two nested stages</b>. First the <b>same JUCE interpolator</b> reads the source into an input scratch (<code>fillInputScratch</code> → <code>stretchInScratch</code>); then SoundTouch WSOLA warps that scratch into the output. The source read does <b>not</b> apply the stretch ratio (SoundTouch does, avoiding double-application). Tempo/rate/pitch are decoupled: pitch active ⇒ speed via tempo, else via rate.",
+    bullets:["Flow: <b>source → JUCE interp → stretchInScratch → SoundTouch → output</b>","Read stage = bulk copy · LagrangeInterpolator · per-sample fallback","Windows: SEQUENCE 60ms · SEEKWINDOW 25ms · OVERLAP 12ms","Feed/drain loop (≤24 iters), output clamp ±1.0; reverse widens windows to 35/18"],
+    kv:[["reader","processWithTimeStretch"],["read stage","fillInputScratch (JUCE)"],["warp","SoundTouch WSOLA"],["file","AudioBuffer.cpp:1233"]]
+  }
+};
+
+let engine = "repitch";
+let selected = null;
+
+// ---------- build spine ----------
+const spine = document.getElementById("spine");
+function buildSpine() {
+  spine.innerHTML = "";
+  STAGES.forEach((s, i) => {
+    const stage = document.createElement("div");
+    stage.className = "stage";
+    const node = document.createElement("div");
+    node.className = "node" + (selected===s.id?" sel":"");
+    node.dataset.lane = s.lane;
+    node.dataset.id = s.id;
+    let dyn = s.dynamic ? READER[engine] : null;
+    const dtext = dyn ? dyn.d : s.d;
+    node.innerHTML =
+      (s.badge?`<span class="badge" style="background:${hexA(s.badge.c)};color:${s.badge.c}">${s.badge.txt}</span>`:"") +
+      `<div class="k">${s.k}</div><div class="t">${s.t}</div><div class="d">${dtext}</div>`;
+    node.addEventListener("click", ()=>select(s.id));
+    stage.appendChild(node);
+    const lbl = document.createElement("div");
+    lbl.className = "stage-label"; lbl.textContent = s.label;
+    stage.appendChild(lbl);
+    spine.appendChild(stage);
+    if (i < STAGES.length-1) {
+      const c = document.createElement("div");
+      c.className = "connector";
+      spine.appendChild(c);
+    }
+  });
+}
+function hexA(c){ // translucent bg for badge
+  if(c.includes("audio")) return "rgba(245,165,36,.14)";
+  if(c.includes("ctrl")) return "rgba(167,139,250,.14)";
+  if(c.includes("signal")) return "rgba(34,211,238,.14)";
+  return "rgba(52,211,153,.14)";
+}
+
+// ---------- detail rendering ----------
+function select(id){
+  selected = id;
+  buildSpine();
+  const s = STAGES.find(x=>x.id===id);
+  let content = s;
+  if (s.dynamic){
+    const r = READER[engine];
+    content = {...s, desc:r.desc, bullets:r.bullets, kv:r.kv,
+      title:"Sample reader — "+(engine==="repitch"?"Repitch":"Time-stretch")};
+  }
+  const kvHtml = content.kv.map(([k,v])=>
+    `<div class="row"><span class="kk">${k}</span><span class="vv">${v}</span></div>`).join("");
+  const bullets = content.bullets.map(b=>`<li>${b}</li>`).join("");
+  document.getElementById("detail").innerHTML = `
+    <div class="detail-head">
+      <span class="title">${content.title}</span>
+      <span class="tag">${s.tag}</span>
+    </div>
+    <div class="detail-body">
+      <div>
+        <h4>What happens</h4>
+        <p>${content.desc}</p>
+        <h4 style="margin-top:16px">Key points</h4>
+        <ul>${bullets}</ul>
+      </div>
+      <div>
+        <h4>Reference</h4>
+        <div class="kv">${kvHtml}</div>
+      </div>
+    </div>`;
+  document.getElementById("detail").scrollIntoView({behavior:"smooth", block:"nearest"});
+}
+
+// ---------- engine toggle ----------
+document.getElementById("engineToggle").addEventListener("click", e=>{
+  const b = e.target.closest("button"); if(!b) return;
+  engine = b.dataset.engine;
+  [...e.currentTarget.children].forEach(x=>x.classList.toggle("active", x===b));
+  buildSpine();
+  if (selected==="reader") select("reader");
+});
+
+buildSpine();
+</script>
+</body>
+</html>

@@ -92,7 +92,12 @@ BufferTestAudioProcessor::BufferTestAudioProcessor()
              == SessionSettings::kNumModifierTypes);
 }
 
-BufferTestAudioProcessor::~BufferTestAudioProcessor() = default;
+BufferTestAudioProcessor::~BufferTestAudioProcessor()
+{
+    // Do not permit a late host callback to begin normal rendering while the
+    // processor's members are being dismantled.
+    resourcesPrepared.store (false, std::memory_order_release);
+}
 
 void BufferTestAudioProcessor::requestPlayAll()
 {
@@ -212,12 +217,10 @@ void BufferTestAudioProcessor::changeProgramName (int, const juce::String&)
 
 void BufferTestAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    resourcesPrepared.store (false, std::memory_order_release);
+
     app.bufferManager.prepare(sampleRate, samplesPerBlock);
     app.prepareDSP(sampleRate, samplesPerBlock);
-
-    // §6.1  Pre-allocate per-block scratch buffer used in processBlock to avoid
-    // heap allocation on the audio thread.  2 channels covers stereo output.
-    scratchBuffer.setSize(2, samplesPerBlock, false, false, true);
 
     // §9.1  Pre-allocate per-buffer scratch buffers for parallel processing.
     for (auto& buf : perBufferScratch)
@@ -231,10 +234,18 @@ void BufferTestAudioProcessor::prepareToPlay (double sampleRate, int samplesPerB
     // Some hosts may call setStateInformation before prepareToPlay; reload on the audio thread.
     if (pendingRestoreReload.exchange(false))
         reloadBuffersFromPadPaths();
+
+    resourcesPrepared.store (true, std::memory_order_release);
 }
 
 void BufferTestAudioProcessor::releaseResources()
 {
+    // Live may issue a trailing AU render callback while releasing an instance.
+    // Make it output silence immediately. AudioBufferManager deliberately keeps
+    // its render buffers allocated until the next prepare/destruction so that a
+    // callback which was already in flight cannot dereference released storage.
+    resourcesPrepared.store (false, std::memory_order_release);
+
     // Check if there are pad paths that need reloading before killing jobs.
     // releaseResources kills background loader threads, so we must re-arm
     // the reload flag so that the next prepareToPlay / processBlock cycle
@@ -293,6 +304,12 @@ bool BufferTestAudioProcessor::isBusesLayoutSupported (const BusesLayout& layout
 void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
+
+    if (! resourcesPrepared.load (std::memory_order_acquire))
+    {
+        buffer.clear();
+        return;
+    }
 
     // Process MIDI input
     if (!midi.isEmpty())
@@ -769,25 +786,26 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     if (mix.getNumChannels() == 0)
         return;
 
-    // Pre-allocated in prepareToPlay(); guard kept as safety net.
-    if (scratchBuffer.getNumChannels() != mix.getNumChannels() || scratchBuffer.getNumSamples() < numSamples)
-    {
-        jassertfalse; // scratchBuffer should have been pre-allocated in prepareToPlay()
-        scratchBuffer.setSize(mix.getNumChannels(), numSamples, false, false, true);
-    }
-
     // §9.1  Parallel buffer processing — each buffer is rendered into its own
     // pre-allocated scratch buffer by a worker thread (or the audio thread).
     // The merge into mix / per-pad buses is done sequentially afterwards.
     const int mixChannels = mix.getNumChannels();
 
+    // A host is allowed to supply a larger block than it advertised at prepare
+    // time. Never resize from the realtime callback: return a silent block and
+    // wait for the host's next prepareToPlay instead.
+    for (const auto& scratch : perBufferScratch)
+    {
+        if (scratch.getNumChannels() < mixChannels || scratch.getNumSamples() < numSamples)
+        {
+            buffer.clear();
+            return;
+        }
+    }
+
     threadPool.processAll (AudioBufferManager::MAX_BUFFERS, [&] (int bufferIndex)
     {
         auto& scratch = perBufferScratch[(size_t) bufferIndex];
-
-        // Safety: ensure scratch is large enough (should be pre-allocated)
-        if (scratch.getNumChannels() < mixChannels || scratch.getNumSamples() < numSamples)
-            scratch.setSize (mixChannels, numSamples, false, false, true);
 
         scratch.clear();
         app.bufferManager.processSingleBuffer (bufferIndex, scratch);

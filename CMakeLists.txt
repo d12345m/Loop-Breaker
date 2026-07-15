@@ -65,6 +65,7 @@ target_sources(LoopBreaker PRIVATE
     Source/ModifierScheduler.cpp
     Source/ProjectManager.cpp
     Source/ModifierSchedulerTests.cpp
+    Source/ClickDetectionTests.cpp
     Source/ThemeEngine.cpp
 )
 

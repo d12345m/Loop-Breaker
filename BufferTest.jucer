@@ -68,6 +68,8 @@
             file="Source/MainAppComponent.cpp"/>
       <FILE id="modifierSchedulerTests" name="ModifierSchedulerTests.cpp"
             compile="1" resource="0" file="Source/ModifierSchedulerTests.cpp"/>
+      <FILE id="clickDetectionTests" name="ClickDetectionTests.cpp"
+            compile="1" resource="0" file="Source/ClickDetectionTests.cpp"/>
       <FILE id="themeEngineH" name="ThemeEngine.h" compile="0" resource="0"
             file="Source/ThemeEngine.h"/>
       <FILE id="themeEngineCpp" name="ThemeEngine.cpp" compile="1" resource="0"

@@ -131,9 +131,9 @@ public:
     // AudioAppComponent
     void prepareToPlay (int samplesPerBlockExpected, double sampleRate) override
     {
+        juce::ignoreUnused(samplesPerBlockExpected);
         hostSampleRate = sampleRate;
         app.bufferManager.prepare(sampleRate, samplesPerBlockExpected);
-        app.prepareDSP(sampleRate, samplesPerBlockExpected);
     }
 
     void getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill) override

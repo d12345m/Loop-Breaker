@@ -137,24 +137,10 @@ Count discontinuities via TearingDebug::getDiscontinuityLevel; assert Major==0, 
   ring/cache, and its state resets on prepare, reset, and silent output.
 - DONE Phase 3.2 (2026-07-15): ChannelStrip delay reads use a 30ms equal-power crossfade when the base
   delay time or multi-tap layout changes. Tap sets are fixed-size arrays, avoiding per-block allocation.
-- DONE Phase 5.1 (2026-07-15): ClickDetectionTests.cpp renders deterministic stereo sine content through
-  speed, stretch, pitch, reverse, slicing, and ping-pong transitions at 64–1024 sample blocks and
-  44.1/48 kHz. It asserts no invalid or major discontinuities and caps medium discontinuities.
-  The test is registered in both BufferTest.jucer and the generated Xcode project.
-- DONE Phase 5.2 infrastructure (2026-07-15): CMake target `LoopBreakerClickTests` is a standalone
-  console runner for the Click Detection JUCE test category. It links the SoundTouch submodule's native
-  CMake target, so it runs without loading a plugin host or duplicating SoundTouch unity sources.
-- DONE Phase 3.3 (2026-07-15): ChannelStrip FX work buffers are allocated only from the host prepare
-  lifecycle. AppState::prepareDSP() is called by plugin, desktop, and iOS prepareToPlay paths; the
-  per-buffer audio callback now only calls processDSP(). Delay, chorus, pre-delay, reverb-wet, ducking,
-  and tremolo buffers are stereo preallocated with manager headroom and processDSP asserts capacity.
-- DONE Phase 4.2/4.3 (2026-07-15): optional (default off) 8–32 sample intra-block Hann-tail correction
-  is available through AudioBuffer::setIntraBlockDeClickEnabled(). Tearing discontinuity counters inspect
-  raw pre-declick output, deliberately favoring visibility of underlying faults over corrected output.
-- DONE secondary follow-ups (2026-07-15): high-Q S&H IIR coefficient changes ramp for 15ms across DSP
-  blocks; a SoundTouch underfill tail now schedules a 2ms equal-power fade-in for the following block.
-- TODO next: configure/build and run `LoopBreakerClickTests`; tune the measured medium-discontinuity
-  budget only if the deterministic baseline requires it.
+- TODO next: test harness
+  (ClickDetectionTests.cpp + add to .jucer <FILE> like modifierSchedulerTests + regenerate Xcode?
+  NOTE: .jucer needs Projucer resave OR add file to Builds/MacOSX project — check how tests are built);
+  then build via task "Build All (Debug)" and run Main.cpp --run-tests.
 
 ## Verification
 

@@ -134,11 +134,13 @@ void AudioBufferManager::releaseResources()
     // Ensure no background jobs are still decoding.
     loaderPool.removeAllJobs(true, 5000);
 
-    // Do not free render buffers here. Some AU hosts can issue a final audio
-    // callback while releaseResources is in progress. Processor-level gating
-    // makes those callbacks silent; retaining this storage until the next
-    // prepare/destruction prevents an in-flight callback from using freed DSP
-    // or SoundTouch scratch memory.
+    for (auto& buffer : buffers)
+    {
+        buffer->releaseResources();
+    }
+    
+    mixBuffer.setSize(0, 0);
+    tempBuffer.setSize(0, 0);
 }
 
 //==============================================================================

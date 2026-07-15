@@ -249,7 +249,7 @@ public:
     bool hasAudioLoaded() const;
     bool isPlaying() const { return params.isPlaying; }
     bool isLooping() const { return params.isLooping; }
-    double getSpeed() const { return params.speed; }
+    double getSpeed() const { return atomicSpeed.load(std::memory_order_relaxed); }
     int getCurrentSlice() const;
     int getNumSlices() const { return params.numSlices; }
     bool isInContinuousRandomMode() const { return params.continuousRandomSlicing; }
@@ -323,7 +323,13 @@ private:
     std::atomic<double> stretchRatio { 1.0 }; // 1.0 = normal; <1 slower/longer; >1 faster/shorter
     std::atomic<double> pitchSemiTones { 0.0 }; // pitch shift in semitones; 0 = none
 
-    double getEffectiveSpeed() const { return params.speed * tempoMultiplier.load(); }
+    // Atomic mirror of params.speed.  params.speed is written by the message
+    // thread (setSpeed) and by the audio thread (ping-pong flips); readers on
+    // the audio thread (StretchSnapshot, getEffectiveSpeed) read this mirror
+    // so they can never observe a torn double.  Writers must update BOTH.
+    std::atomic<double> atomicSpeed { 1.0 };
+
+    double getEffectiveSpeed() const { return atomicSpeed.load(std::memory_order_relaxed) * tempoMultiplier.load(); }
 
     // T4: Smoother for speed magnitude when routed through SoundTouch rate/tempo.
     juce::SmoothedValue<double> speedMagSmoother;
@@ -366,7 +372,7 @@ private:
     StretchSnapshot takeStretchSnapshot() const
     {
         StretchSnapshot s;
-        s.speed        = params.speed;
+        s.speed        = atomicSpeed.load(std::memory_order_relaxed); // torn-read-safe mirror of params.speed
         s.stretchRatio = stretchRatio.load();
         s.pitchSemis   = pitchSemiTones.load();
         s.tempoMult    = tempoMultiplier.load();
@@ -403,6 +409,20 @@ private:
     juce::AudioBuffer<float> stretchCrossfadeSnapshot;     // captured old output at transition
     int stretchCrossfadeSnapshotLen = 0;                   // valid length in snapshot
 
+    // BUG 7 fix: multi-block transition crossfade.  The old mode-transition and
+    // T8 reset crossfades were clamped to a single host block, so at small buffer
+    // sizes (64/128) the intended 20–80ms fade couldn't fit and a residual click
+    // remained.  This state lets the fade span as many blocks as needed, replaying
+    // the tail of pre-transition output (captured from stretchOutputRing, which is
+    // now fed in BOTH playback modes) while the new signal fades in.
+    juce::AudioBuffer<float> transitionOldBuffer;          // captured pre-transition output tail
+    int  transitionFadePos = 0;
+    int  transitionFadeLen = 0;
+    bool transitionFadeActive = false;
+    bool stretcherResetThisBlock = false;                  // set by processWithTimeStretch on reset
+    void beginTransitionFade(int desiredFadeSamples);
+    void applyTransitionFade(juce::AudioBuffer<float>& buffer);
+
 private:
     // §4.2  Deferred musical start flag.
     std::atomic<bool> awaitingMusicalStart { false };
@@ -429,11 +449,22 @@ private:
     
     // Crossfading for smooth slice transitions
     int crossfadeLengthSamples = 882;
+    // BUGFIX (stacked modifiers): each crossfade captures its length at start so
+    // that in-flight crossfades are immune to crossfadeLengthSamples changing
+    // between blocks (the stretch path used to temporarily mutate the member,
+    // causing fade-gain jumps for crossfades spanning block boundaries).
+    int activeCrossfadeLen = 882;
     bool isInCrossfade = false;
     int crossfadePosition = 0;
     double previousSlicePlayheadPos = 0.0;
     int previousSliceIndex = -1;
     juce::AudioBuffer<float> crossfadeBuffer;
+    // BUGFIX (BUG 5): when a §12 lookahead pre-crossfade correctly predicted the
+    // slice jump, the input signal at the boundary is already a 50/50 blend.
+    // The post-jump crossfade must CONTINUE from that blend (linear 0.5→1.0)
+    // instead of restarting at 0% (which caused an instantaneous jump back to
+    // 100% old-slice audio at the boundary sample).
+    bool crossfadeIsLookaheadContinuation = false;
 
     // §12 Lookahead pre-priming: gradually blend next-slice audio into
     // SoundTouch's input *before* the slice boundary, so the OLA algorithm

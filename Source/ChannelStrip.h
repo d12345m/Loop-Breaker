@@ -100,34 +100,37 @@ public:
 
             // Granular capture buffer
             granular.prepare(sampleRate);
+
+            // BUG 6: reset boundary-declick state on (re)prepare.
+            declickFadeInTotal.store(0, std::memory_order_relaxed);
+            declickFadeInProgress.store(0, std::memory_order_relaxed);
+            declickStep[0] = declickStep[1] = 0.0f;
+            declickLastOut[0] = declickLastOut[1] = 0.0f;
         }
     }
 
     void processDSP(juce::AudioBuffer<float>& tempBuffer)
     {
+        processDSPChain(tempBuffer);
+
+        // BUG 6 fix: boundary de-click runs at the very end of the FX chain so
+        // it sees the final per-pad output (including any early-return path when
+        // reverb is disabled).  See applyBoundaryDeclick() for details.
+        applyBoundaryDeclick(tempBuffer);
+    }
+
+private:
+    void processDSPChain(juce::AudioBuffer<float>& tempBuffer)
+    {
         const int numSamples = tempBuffer.getNumSamples();
         const int numChannels = tempBuffer.getNumChannels();
 
-        // Declick fade-in: raised-cosine ramp from silence to unity
-        int fadeTotal = declickFadeInTotal.load(std::memory_order_relaxed);
-        if (fadeTotal > 0)
-        {
-            int progress = declickFadeInProgress.load(std::memory_order_relaxed);
-            for (int i = 0; i < numSamples; ++i)
-            {
-                if (progress < fadeTotal)
-                {
-                    float t = (float)(progress + 1) / (float)(fadeTotal + 1);
-                    float gain = 0.5f * (1.0f - std::cos(juce::MathConstants<float>::pi * t));
-                    for (int ch = 0; ch < numChannels; ++ch)
-                        tempBuffer.getWritePointer(ch)[i] *= gain;
-                    ++progress;
-                }
-            }
-            declickFadeInProgress.store(progress, std::memory_order_relaxed);
-            if (progress >= fadeTotal)
-                declickFadeInTotal.store(0, std::memory_order_relaxed);
-        }
+        // NOTE (BUG 6 fix): the old "declick fade-in" here ramped the block from
+        // SILENCE to unity, which itself created a full-amplitude step at the
+        // block boundary (prev block ended at signal level, this one started at
+        // ~0).  It has been replaced by a boundary-step correction applied after
+        // the chain — see applyBoundaryDeclick().
+
         // Precompute per-sample ducking gains from incoming signal (before FX)
         if (params.duckingEnabled && numSamples > 0)
         {
@@ -555,6 +558,62 @@ public:
         if (clipProbes) (*clipProbes)[NodeId::PostReverbLimiter].inspect(tempBuffer, numSamples);
     }
 
+    /** BUG 6 fix: boundary de-click (swan-ramp style offset correction).
+
+        When armed via requestDeclickFadeIn(), measures the step between the
+        last sample of the previous block's output and the first sample of the
+        current block, then adds a correction offset that starts at -step and
+        decays to zero with a raised-cosine shape.  Unlike the old fade-from-
+        silence, this preserves the new signal's waveform and introduces no
+        amplitude drop — it only removes the boundary discontinuity caused by
+        abrupt FX parameter swaps.
+
+        Also continuously tracks the last output sample so the measurement is
+        available whenever the declick is armed. */
+    void applyBoundaryDeclick(juce::AudioBuffer<float>& tempBuffer)
+    {
+        const int numSamples = tempBuffer.getNumSamples();
+        const int numChannels = juce::jmin(tempBuffer.getNumChannels(), 2);
+        if (numSamples <= 0 || numChannels <= 0)
+            return;
+
+        const int fadeTotal = declickFadeInTotal.load(std::memory_order_acquire);
+        if (fadeTotal > 0)
+        {
+            int progress = declickFadeInProgress.load(std::memory_order_relaxed);
+
+            // On the first block of the correction, capture the boundary step.
+            if (progress == 0)
+            {
+                for (int ch = 0; ch < numChannels; ++ch)
+                    declickStep[ch] = tempBuffer.getReadPointer(ch)[0] - declickLastOut[ch];
+            }
+
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                float* data = tempBuffer.getWritePointer(ch);
+                int p = progress;
+                for (int i = 0; i < numSamples && p < fadeTotal; ++i, ++p)
+                {
+                    // Raised-cosine decay 1 → 0 (zero slope at both ends).
+                    const float t = (float)(p + 1) / (float)(fadeTotal + 1);
+                    const float w = 0.5f * (1.0f + std::cos(juce::MathConstants<float>::pi * t));
+                    data[i] -= declickStep[ch] * w;
+                }
+            }
+
+            progress = juce::jmin(fadeTotal, progress + numSamples);
+            declickFadeInProgress.store(progress, std::memory_order_relaxed);
+            if (progress >= fadeTotal)
+                declickFadeInTotal.store(0, std::memory_order_relaxed);
+        }
+
+        // Track last output sample for the next boundary measurement.
+        for (int ch = 0; ch < numChannels; ++ch)
+            declickLastOut[ch] = tempBuffer.getReadPointer(ch)[numSamples - 1];
+    }
+
+public:
     void setAudioBuffer(AudioBuffer* b) { buffer = b; }
     AudioBuffer* getAudioBuffer() const { return buffer; }
     void setClipProbes(PadProbeSet* probes) { clipProbes = probes; }
@@ -562,8 +621,17 @@ public:
     EffectChainPlaceholder& effects() { return chain; }
     const EffectChainPlaceholder& effects() const { return chain; }
 
-    /** Request a raised-cosine fade-in ramp over the given number of samples.
-        Call after abruptly changing FX params to mask discontinuities. */
+    /** Arm the boundary de-click for the next audio block.
+        Call after abruptly changing FX params to mask discontinuities.
+
+        BUG 6 fix: the old implementation faded the next block in from SILENCE,
+        which itself created a full-amplitude step at the block boundary (the
+        loudest click in the plugin).  The new implementation measures the step
+        between the last output sample of the previous block and the first
+        sample of the new block, then adds an offset correction that starts at
+        exactly -step and decays to zero over `samples` samples with a
+        raised-cosine shape.  The new signal's waveform is preserved; only the
+        boundary discontinuity is removed.  Zero latency. */
     void requestDeclickFadeIn(int samples = 512)
     {
         declickFadeInProgress.store(0, std::memory_order_relaxed);
@@ -661,6 +729,11 @@ public:
         tempVolRamp = {};
         shPhaseBars = 0.0f;
         granular.reset();
+        // BUG 6: reset boundary-declick state.
+        declickFadeInTotal.store(0, std::memory_order_relaxed);
+        declickFadeInProgress.store(0, std::memory_order_relaxed);
+        declickStep[0] = declickStep[1] = 0.0f;
+        declickLastOut[0] = declickLastOut[1] = 0.0f;
         if (buffer) buffer->resetToDefaults();
     }
 
@@ -954,9 +1027,12 @@ private:
     static constexpr double kMaxChorusDelayMs = 30.0; // max modulated delay for chorus
     // Auto-pan LFO
     float panLfoPhase = 0.0f;
-    // Declick fade-in ramp (masks discontinuities from abrupt parameter swaps)
+    // Declick boundary-step correction (masks discontinuities from abrupt
+    // parameter swaps).  BUG 6 fix: replaces the old fade-from-silence ramp.
     std::atomic<int> declickFadeInTotal{0};
     std::atomic<int> declickFadeInProgress{0};
+    float declickStep[2] = { 0.0f, 0.0f };      // measured boundary discontinuity
+    float declickLastOut[2] = { 0.0f, 0.0f };   // last output sample per channel
     // Ducking envelope state
     float duckEnv = 0.0f;
     float duckAttackCoeff = 0.0f;

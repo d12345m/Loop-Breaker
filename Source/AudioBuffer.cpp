@@ -148,6 +148,8 @@ void AudioBuffer::prepare(double sampleRate, int samplesPerBlockExpected)
     
     // Calculate crossfade length in samples
     crossfadeLengthSamples = static_cast<int>(params.crossfadeLengthMs * sampleRate / 1000.0);
+    activeCrossfadeLen = crossfadeLengthSamples;
+    crossfadeIsLookaheadContinuation = false;
     
     // Prepare buffers for processing
     repitchBuffer.setSize(2, samplesPerBlockExpected * 4); // Extra headroom for repitching
@@ -185,6 +187,13 @@ void AudioBuffer::prepare(double sampleRate, int samplesPerBlockExpected)
     stretchOutputCrossfadePos = 0;
     stretchOutputCrossfadeLen = 0;
 
+    // BUG 7 fix: multi-block transition fade buffer (max 100ms of old audio).
+    transitionOldBuffer.setSize(2, maxOutputCrossfadeSamples, false, false, true);
+    transitionFadeActive = false;
+    transitionFadePos = 0;
+    transitionFadeLen = 0;
+    stretcherResetThisBlock = false;
+
     // §2.2A  Reset block-resampling interpolators.
     for (auto& r : blockResamplers)
         r.reset();
@@ -198,6 +207,10 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
         outputBuffer.clear();
         lastBlockUsedStretch = false;
         previousBlockValid = false;
+        // BUG 7: cancel any in-flight transition fade and invalidate the output
+        // ring — after silence there is nothing meaningful to fade from.
+        transitionFadeActive = false;
+        stretchOutputRingValidSamples = 0;
         return;
     }
 
@@ -253,18 +266,24 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
             tearingStats.modeTransitions.fetch_add(1, std::memory_order_relaxed);
     }
 #endif
-    if (transitioned && previousBlockValid)
+    // BUG 7 fix: multi-block transition crossfade.
+    // The fade is no longer clamped to a single host block — at 64/128-sample
+    // buffers the intended 20–80ms fade previously couldn't fit and left a
+    // residual click.  Old (pre-transition) audio is captured from the output
+    // ring buffer (fed at the end of every block in BOTH modes) and blended in
+    // across as many blocks as needed.
+    //
+    // Two triggers share one unified fade (no double-crossfading):
+    //  - mode transition (repitch <-> stretch)
+    //  - SoundTouch pipeline reset while already in stretch mode (old T8 path)
+    const bool resetOccurred = stretcherResetThisBlock;
+    stretcherResetThisBlock = false;
+    if ((transitioned || resetOccurred) && previousBlockValid)
     {
-        const int curSamples = outputBuffer.getNumSamples();
-        const int prevSamples = previousBlockNumSamples;
         // The crossfade must be long enough to cover SoundTouch's settle time,
         // which is the period during which its overlap-add algorithm may produce
         // audible splice artifacts.  The settle time scales with the combined
         // consumption ratio (rate × tempo × pitch-compensation).
-        //
-        // Use the same formula as the priming settle-time so the crossfade fully
-        // masks the transient.  We calculate it from the snapshot parameters
-        // directly since we don't have access to the smoothed values here.
         const double speedDev = juce::jmax(snap.speedMag(), 1.0);
         const double ratioVal = juce::jmax(snap.stretchRatio, 1.0);
         const double pitchDev = snap.usePitch() ? std::pow(2.0, std::abs(snap.pitchSemis) / 12.0) : 1.0;
@@ -274,27 +293,17 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
                                                  20.0 * juce::jmax(1.0, ratioVal)
                                                       * juce::jmax(1.0, speedDev)
                                                       * juce::jmax(1.0, pitchDev));
-        const int fadeSamples = juce::jmin(curSamples,
-                                           juce::jmin(prevSamples,
-                                                     juce::jmax(1, (int)(hostSampleRate * crossfadeMs / 1000.0))));
-
-        if (fadeSamples > 0
-            && previousBlockBuffer.getNumChannels() >= outputBuffer.getNumChannels())
-        {
-            const int prevStart = juce::jmax(0, prevSamples - fadeSamples);
-            for (int ch = 0; ch < outputBuffer.getNumChannels(); ++ch)
-            {
-                const float* prev = previousBlockBuffer.getReadPointer(ch);
-                float* curr = outputBuffer.getWritePointer(ch);
-                for (int i = 0; i < fadeSamples; ++i)
-                {
-                    const float fadeIn  = (float)(i + 1) / (float)(fadeSamples + 1);
-                    const float fadeOut = 1.0f - fadeIn;
-                    curr[i] = prev[prevStart + i] * fadeOut + curr[i] * fadeIn;
-                }
-            }
-        }
+        beginTransitionFade(juce::jmax(1, (int)(hostSampleRate * crossfadeMs / 1000.0)));
     }
+
+    // Apply any in-flight transition fade (may span multiple blocks).
+    if (transitionFadeActive)
+        applyTransitionFade(outputBuffer);
+
+    // Feed the output ring so future transitions have pre-transition audio to
+    // fade from.  Written in BOTH playback modes (repitch used to skip this).
+    writeToStretchOutputRing(outputBuffer, outputBuffer.getNumSamples());
+
     lastBlockUsedStretch = useStretcher;
 
     // Cache this block for potential transition crossfade next time.
@@ -597,11 +606,13 @@ void AudioBuffer::processWithRepitching(juce::AudioBuffer<float>& outputBuffer)
             if (ppGoingForward)
             {
                 params.speed = std::abs(params.speed);
+                atomicSpeed.store(params.speed, std::memory_order_relaxed);
                 speedSmoother.setCurrentAndTargetValue(params.speed);
             }
             else
             {
                 params.speed = -std::abs(params.speed);
+                atomicSpeed.store(params.speed, std::memory_order_relaxed);
                 speedSmoother.setCurrentAndTargetValue(params.speed);
             }
             continue; // re-evaluate with new direction
@@ -618,6 +629,8 @@ void AudioBuffer::processWithRepitching(juce::AudioBuffer<float>& outputBuffer)
             previousSlicePlayheadPos = currentPos;
             isInCrossfade = true;
             crossfadePosition = 0;
+            activeCrossfadeLen = crossfadeLengthSamples;
+            crossfadeIsLookaheadContinuation = false;
             activeSlice = tgtSlice;
             currentPos = newPos;
             sliceTrig = false;
@@ -644,6 +657,8 @@ void AudioBuffer::processWithRepitching(juce::AudioBuffer<float>& outputBuffer)
                     previousSlicePlayheadPos = currentPos;
                     isInCrossfade = true;
                     crossfadePosition = 0;
+                    activeCrossfadeLen = crossfadeLengthSamples;
+                    crossfadeIsLookaheadContinuation = false;
                     activeSlice = nextSlice;
                     currentPos = newPos;
                 }
@@ -688,33 +703,68 @@ void AudioBuffer::processWithRepitching(juce::AudioBuffer<float>& outputBuffer)
                     previousSlicePlayheadPos = currentPos;
                     isInCrossfade = true;
                     crossfadePosition = 0;
+                    activeCrossfadeLen = crossfadeLengthSamples;
+                    crossfadeIsLookaheadContinuation = false;
                     activeSlice = nextSlice;
                     currentPos = newPos;
                 }
             }
             else
             {
+                // BUGFIX (BUG 4): plain slice-loop wrap used to teleport the playhead
+                // with no crossfade, producing a click every loop cycle.  Start a
+                // boundary crossfade just like the loop-window path does.
                 if (spd > 0.0 && currentPos >= sliceEnd - 1.0)
                 {
-                    if (params.isLooping) currentPos = sliceStart;
+                    if (params.isLooping)
+                    {
+                        previousSlicePlayheadPos = currentPos;
+                        previousSliceIndex = -1;
+                        isInCrossfade = true;
+                        crossfadePosition = 0;
+                        activeCrossfadeLen = crossfadeLengthSamples;
+                        crossfadeIsLookaheadContinuation = false;
+                        currentPos = sliceStart;
+                    }
                     else { params.isPlaying = false; break; }
                 }
                 else if (spd < 0.0 && currentPos <= sliceStart)
                 {
-                    if (params.isLooping) currentPos = sliceEnd - 1.0;
+                    if (params.isLooping)
+                    {
+                        previousSlicePlayheadPos = currentPos;
+                        previousSliceIndex = -1;
+                        isInCrossfade = true;
+                        crossfadePosition = 0;
+                        activeCrossfadeLen = crossfadeLengthSamples;
+                        crossfadeIsLookaheadContinuation = false;
+                        currentPos = sliceEnd - 1.0;
+                    }
                     else { params.isPlaying = false; break; }
                 }
             }
         }
 
         // File boundary (only when NOT in slicing mode)
+        // BUGFIX (BUG 3): file-boundary wrap now starts a crossfade instead of a
+        // hard teleport — this was a known click source in repitch mode
+        // (DECLICK_REPORT §1.3).  Mirrors the loop-window wrap pattern below.
         if (!slicingOn)
         {
             if (speed > 0.0)
             {
                 if (currentPos >= fileLengthSamples - 1)
                 {
-                    if (params.isLooping) currentPos = 0.0;
+                    if (params.isLooping)
+                    {
+                        previousSlicePlayheadPos = currentPos;
+                        previousSliceIndex = -1;
+                        isInCrossfade = true;
+                        crossfadePosition = 0;
+                        activeCrossfadeLen = crossfadeLengthSamples;
+                        crossfadeIsLookaheadContinuation = false;
+                        currentPos = 0.0;
+                    }
                     else { params.isPlaying = false; break; }
                 }
             }
@@ -722,7 +772,16 @@ void AudioBuffer::processWithRepitching(juce::AudioBuffer<float>& outputBuffer)
             {
                 if (currentPos <= 0.0)
                 {
-                    if (params.isLooping) currentPos = static_cast<double>(fileLengthSamples - 1);
+                    if (params.isLooping)
+                    {
+                        previousSlicePlayheadPos = currentPos;
+                        previousSliceIndex = -1;
+                        isInCrossfade = true;
+                        crossfadePosition = 0;
+                        activeCrossfadeLen = crossfadeLengthSamples;
+                        crossfadeIsLookaheadContinuation = false;
+                        currentPos = static_cast<double>(fileLengthSamples - 1);
+                    }
                     else { params.isPlaying = false; break; }
                 }
             }
@@ -739,6 +798,8 @@ void AudioBuffer::processWithRepitching(juce::AudioBuffer<float>& outputBuffer)
                     previousSliceIndex = -1;
                     isInCrossfade = true;
                     crossfadePosition = 0;
+                    activeCrossfadeLen = crossfadeLengthSamples;
+                    crossfadeIsLookaheadContinuation = false;
                     currentPos = (double) loopStart;
                 }
                 else if (currentPos < (double) loopStart)
@@ -752,6 +813,8 @@ void AudioBuffer::processWithRepitching(juce::AudioBuffer<float>& outputBuffer)
                     previousSliceIndex = -1;
                     isInCrossfade = true;
                     crossfadePosition = 0;
+                    activeCrossfadeLen = crossfadeLengthSamples;
+                    crossfadeIsLookaheadContinuation = false;
                     currentPos = (double) loopEnd;
                 }
                 else if (currentPos > (double) loopEnd)
@@ -963,7 +1026,13 @@ void AudioBuffer::setLoadedAudioData(LoadedAudioData::Ptr newData)
 
     isInCrossfade = false;
     crossfadePosition = 0;
+    activeCrossfadeLen = crossfadeLengthSamples;
+    crossfadeIsLookaheadContinuation = false;
     previousSliceIndex = -1;
+
+    // BUG 7: cancel transition fade — new audio data invalidates old-tail capture.
+    transitionFadeActive = false;
+    stretchOutputRingValidSamples = 0;
 
     // Reset time-stretch state for a clean start.
     stretchRatio.store(1.0);
@@ -1054,6 +1123,7 @@ void AudioBuffer::setPlaying(bool shouldPlay)
 void AudioBuffer::setSpeed(double newSpeed)
 {
     params.speed = newSpeed;
+    atomicSpeed.store(newSpeed, std::memory_order_relaxed); // keep torn-read-safe mirror in sync
     // Direction changes are handled smoothly in processWithTimeStretch via
     // setWindowsForReverse(); no SoundTouch flush is needed. The source-level
     // crossfade and SoundTouch's overlap-add handle the transition naturally.
@@ -1110,6 +1180,7 @@ void AudioBuffer::resetToDefaults()
 {
     resetToBeginning();
     params.reset();
+    atomicSpeed.store(params.speed, std::memory_order_relaxed);
 
     stretchRatio.store(1.0);
     pitchSemiTones.store(0.0);
@@ -1129,6 +1200,8 @@ void AudioBuffer::resetToDefaults()
     // Reset crossfade state
     isInCrossfade = false;
     crossfadePosition = 0;
+    activeCrossfadeLen = crossfadeLengthSamples;
+    crossfadeIsLookaheadContinuation = false;
     previousSliceIndex = -1;
 
     // §12: Reset lookahead state.
@@ -1142,6 +1215,12 @@ void AudioBuffer::resetToDefaults()
     stretchOutputCrossfadeActive = false;
     stretchOutputCrossfadePos = 0;
     stretchOutputCrossfadeLen = 0;
+
+    // BUG 7: reset multi-block transition fade state.
+    transitionFadeActive = false;
+    transitionFadePos = 0;
+    transitionFadeLen = 0;
+    stretcherResetThisBlock = false;
     
     // Reset ping pong state
     pingPongEnabled.store(false);
@@ -1175,6 +1254,9 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
     // Use a longer crossfade when SoundTouch is active so that source-level
     // transitions (slice jumps, loop boundaries, direction changes) span SoundTouch's
     // overlap-add window. This avoids the need to flush SoundTouch's pipeline.
+    // NOTE: this temporary raise is safe for in-flight crossfades because every
+    // crossfade captures its own length (activeCrossfadeLen) at start — the
+    // member value only affects crossfades STARTED while it is raised (BUG 2 fix).
     const int savedCrossfadeLengthSamples = crossfadeLengthSamples;
     crossfadeLengthSamples = juce::jmax(crossfadeLengthSamples,
                                         (int)(hostSampleRate * 0.05)); // 50ms minimum
@@ -1242,7 +1324,6 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
     const double smoothedPitchSemis = pitchSemiSmoother.getNextValue();
     if (numOutputSamples > 1)
         pitchSemiSmoother.skip (numOutputSamples - 1);
-    const bool smoothedPitchActive = std::abs (smoothedPitchSemis) > 1.0e-6;
 
     const double clampedRate = juce::jlimit (0.25, 4.0, smoothedSpeedMag);
     // SoundTouch internally divides virtualTempo by virtualPitch to get effective tempo:
@@ -1482,6 +1563,8 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
             previousSliceIndex = -1;
             isInCrossfade = true;
             crossfadePosition = 0;
+            activeCrossfadeLen = crossfadeLengthSamples;
+            crossfadeIsLookaheadContinuation = false;
             currentPos = newPlayheadPos;
         };
 
@@ -1529,6 +1612,8 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                 previousSlicePlayheadPos = currentPos;
                 isInCrossfade = true;
                 crossfadePosition = 0;
+                activeCrossfadeLen = crossfadeLengthSamples;
+                crossfadeIsLookaheadContinuation = false;
                 rmsBlankingBlocksLeft = 6;
                 localActiveSlice = slice;
                 currentPos = newPos;
@@ -1575,17 +1660,34 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                             tearingStats.lookaheadMispredictions.fetch_add(1, std::memory_order_relaxed);
 #endif
                     }
+                    // The boundary consumes the lookahead state (it may still be
+                    // "holding" at 50% — see BUG 5b hold fix).
+                    isInLookaheadCrossfade = false;
 
                     previousSliceIndex = localActiveSlice;
                     previousSlicePlayheadPos = currentPos;
                     isInCrossfade = true;
                     crossfadePosition = 0;
-                    // §12: If prediction was correct, halve the post-jump crossfade length.
-                    if (lookaheadPredictionCorrect)
-                        crossfadeLengthSamples = juce::jmax(64, crossfadeLengthSamples / 2);
+                    // §12 + BUG 5 fix: when the prediction was correct, the input at
+                    // the boundary is already a 50/50 blend from the lookahead ramp.
+                    // Use a half-length crossfade that CONTINUES from 50% blend
+                    // (see crossfadeIsLookaheadContinuation in the blend code) so the
+                    // mix is continuous through the boundary sample.
+                    // BUG 2 fix: capture into activeCrossfadeLen instead of mutating
+                    // the shared member.
+                    activeCrossfadeLen = lookaheadPredictionCorrect
+                        ? juce::jmax(64, crossfadeLengthSamples / 2)
+                        : crossfadeLengthSamples;
+                    crossfadeIsLookaheadContinuation = lookaheadPredictionCorrect;
                     rmsBlankingBlocksLeft = 6;
                     localActiveSlice = nextSlice;
-                    currentPos = newPos;
+                    // BUG 5c: continue reading the new slice from where the lookahead
+                    // ramp was already reading it — restarting at the slice start would
+                    // rewind the (already audible at 50%) new-slice content, creating a
+                    // content discontinuity at the boundary sample.
+                    currentPos = lookaheadPredictionCorrect
+                        ? juce::jlimit(0.0, (double) (fileLengthSamples - 1), lookaheadNextSliceReadPos)
+                        : newPos;
 
                     // §12: Pre-compute the *following* random slice for the next lookahead cycle.
                     precomputedNextRandomSlice = random.nextInt(params.numSlices);
@@ -1649,17 +1751,24 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                             tearingStats.lookaheadMispredictions.fetch_add(1, std::memory_order_relaxed);
 #endif
                     }
+                    // The boundary consumes the lookahead state (may be holding at 50%).
+                    isInLookaheadCrossfade = false;
 
                     previousSliceIndex = localActiveSlice;
                     previousSlicePlayheadPos = currentPos;
                     isInCrossfade = true;
                     crossfadePosition = 0;
-                    // §12: If prediction was correct, halve the post-jump crossfade length.
-                    if (lookaheadPredictionCorrect)
-                        crossfadeLengthSamples = juce::jmax(64, crossfadeLengthSamples / 2);
+                    // §12 + BUG 5 fix: continue from the 50% lookahead blend (see above).
+                    activeCrossfadeLen = lookaheadPredictionCorrect
+                        ? juce::jmax(64, crossfadeLengthSamples / 2)
+                        : crossfadeLengthSamples;
+                    crossfadeIsLookaheadContinuation = lookaheadPredictionCorrect;
                     rmsBlankingBlocksLeft = 6;
                     localActiveSlice = nextSlice;
-                    currentPos = newPos;
+                    // BUG 5c: continue from the lookahead read position (see above).
+                    currentPos = lookaheadPredictionCorrect
+                        ? juce::jlimit(0.0, (double) (fileLengthSamples - 1), lookaheadNextSliceReadPos)
+                        : newPos;
                     lookaheadNextSlice = -1;
                 }
             }
@@ -1669,17 +1778,19 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                 const double sliceEnd   = getSliceEndPosition (localActiveSlice, fileLengthSamples);
                 const double speed = getEffectiveSpeed();
 
+                // BUGFIX (BUG 4): slice-loop wrap now starts a crossfade instead of
+                // teleporting the playhead (was a click on every loop cycle).
                 if (speed > 0.0 && currentPos >= sliceEnd - 1.0)
                 {
                     if (params.isLooping)
-                        currentPos = sliceStart;
+                        startBoundaryCrossfadeLocal (sliceStart);
                     else
                         params.isPlaying = false;
                 }
                 else if (speed < 0.0 && currentPos <= sliceStart)
                 {
                     if (params.isLooping)
-                        currentPos = sliceEnd - 1.0;
+                        startBoundaryCrossfadeLocal (sliceEnd - 1.0);
                     else
                         params.isPlaying = false;
                 }
@@ -1834,11 +1945,13 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                     {
                         ppGoingForward = false;
                         params.speed = -std::abs(params.speed);
+                        atomicSpeed.store(params.speed, std::memory_order_relaxed);
                     }
                     else
                     {
                         ppGoingForward = true;
                         params.speed = std::abs(params.speed);
+                        atomicSpeed.store(params.speed, std::memory_order_relaxed);
                     }
                 }
             }
@@ -1863,10 +1976,27 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                 // can't undo artifacts SoundTouch bakes in from processing
                 // a discontinuous input.  Feeding crossfaded (smooth) audio
                 // lets SoundTouch's overlap-add algorithm work normally.
+                // BUG 2 fix: progress is computed against the length captured at
+                // crossfade start (activeCrossfadeLen), immune to member changes.
+                const int fadeLenTotal = juce::jmax(1, activeCrossfadeLen);
                 const double fadeProgress = static_cast<double>(crossfadePosition)
-                                          / static_cast<double>(crossfadeLengthSamples);
-                const float fadeIn  = static_cast<float>(std::sin(fadeProgress * juce::MathConstants<double>::halfPi));
-                const float fadeOut = static_cast<float>(std::cos(fadeProgress * juce::MathConstants<double>::halfPi));
+                                          / static_cast<double>(fadeLenTotal);
+
+                float fadeIn, fadeOut;
+                if (crossfadeIsLookaheadContinuation)
+                {
+                    // BUG 5 fix: the lookahead ramp already blended 0→50% of the
+                    // new slice by the boundary.  Continue linearly from 50/50 to
+                    // 100/0 so the mix is continuous through the boundary sample.
+                    const float mix = 0.5f + 0.5f * static_cast<float>(fadeProgress); // 0.5→1.0
+                    fadeIn  = mix;
+                    fadeOut = 1.0f - mix;
+                }
+                else
+                {
+                    fadeIn  = static_cast<float>(std::sin(fadeProgress * juce::MathConstants<double>::halfPi));
+                    fadeOut = static_cast<float>(std::cos(fadeProgress * juce::MathConstants<double>::halfPi));
+                }
 
                 // Read from the old (pre-jump) position, advancing it in step.
                 const double prevPos = previousSlicePlayheadPos + crossfadePosition * step;
@@ -1883,11 +2013,12 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                 }
 
                 crossfadePosition++;
-                if (crossfadePosition >= crossfadeLengthSamples)
+                if (crossfadePosition >= fadeLenTotal)
                 {
                     isInCrossfade = false;
                     crossfadePosition = 0;
                     previousSliceIndex = -1;
+                    crossfadeIsLookaheadContinuation = false;
                 }
             }
 
@@ -1897,8 +2028,14 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
             // boundary arrives — the post-jump crossfade handles the remaining 50%.
             if (isInLookaheadCrossfade)
             {
-                const double progress = static_cast<double>(lookaheadCrossfadePosition)
-                                      / static_cast<double>(lookaheadCrossfadeSamples);
+                // BUGFIX (BUG 5b): clamp progress at 1.0 and HOLD the 50% blend when
+                // the ramp completes before the boundary arrives (happens whenever
+                // |step| < 1).  Previously the blend snapped from 50% straight back
+                // to 0% on completion — itself an audible click — and the boundary
+                // jump then restarted a full crossfade from 0%.
+                const double progress = juce::jmin(1.0,
+                    static_cast<double>(lookaheadCrossfadePosition)
+                                      / static_cast<double>(lookaheadCrossfadeSamples));
                 // Ramp from 0 → 0.5 using a smooth (sinusoidal) curve
                 const float blendFactor = static_cast<float>(
                     0.5 * std::sin(progress * juce::MathConstants<double>::halfPi));
@@ -1921,14 +2058,16 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                 lookaheadNextSliceReadPos += step;
                 lookaheadCrossfadePosition++;
 
-                if (lookaheadCrossfadePosition >= lookaheadCrossfadeSamples)
-                {
-                    isInLookaheadCrossfade = false;
+                // BUGFIX (BUG 5b): when the ramp completes before the boundary,
+                // HOLD the 50% blend (isInLookaheadCrossfade stays true; progress
+                // is clamped above) instead of ending it — ending snapped the
+                // blend from 50% back to 0%, an audible click.  The slice-jump
+                // handler consumes/clears the state at the actual boundary.
 #if JUCE_DEBUG
-                    if (tearingDebugEnabled.load())
-                        tearingStats.lookaheadPreCrossfades.fetch_add(1, std::memory_order_relaxed);
+                if (lookaheadCrossfadePosition == lookaheadCrossfadeSamples
+                    && tearingDebugEnabled.load())
+                    tearingStats.lookaheadPreCrossfades.fetch_add(1, std::memory_order_relaxed);
 #endif
-                }
             }
 
             currentPos += step;
@@ -2091,10 +2230,8 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
     if (stretchOutputCrossfadeActive && framesWritten > 0)
         applyStretchOutputCrossfade(outputBuffer, framesWritten);
 
-    // Update the ring buffer with the current (post-crossfade) output so future
-    // transitions have recent audio to crossfade from.
-    if (framesWritten > 0)
-        writeToStretchOutputRing(outputBuffer, framesWritten);
+    // NOTE (BUG 7): the output ring is now written once at the end of
+    // processBlock (after the unified transition fade), in both playback modes.
 
     // Apply fade-in if this is the first block after priming.
     //
@@ -2131,48 +2268,14 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         stretchFadeInRemaining -= fadeLen;
     }
 
-    // T8: When a SoundTouch reset occurred this block (direction flip, param
-    // change while already in stretch mode), crossfade the tail of the previous
-    // stretch block into the head of the current block.  Scale the fade length
-    // with the effective rate — extreme combos like rate=0.25+tempo=2.0 need
-    // more overlap because SoundTouch's internal pipeline takes longer to settle.
-    //
-    // IMPORTANT: Only apply when the previous block was ALSO stretch
-    // (lastBlockUsedStretch == true).  If we're transitioning from repitch → stretch,
-    // processBlock's own mode-transition crossfade already handles the blend.
-    // Firing both would double-crossfade, biasing 75% toward the old signal at the
-    // midpoint and masking the new stretch output too aggressively.
-    if (didReset && lastBlockUsedStretch && previousBlockValid
-        && previousBlockBuffer.getNumChannels() >= outputBuffer.getNumChannels())
-    {
-        const int curSamples = framesWritten;
-        const int prevSamples = previousBlockNumSamples;
-        // Use the settle-time formula to size the crossfade so it fully covers
-        // SoundTouch's post-reset overlap-add warmup.
-        const double pitchDev = smoothedPitchActive ? std::pow(2.0, std::abs(smoothedPitchSemis) / 12.0) : 1.0;
-        const double crossfadeMs = juce::jlimit(20.0, 80.0,
-                                                 20.0 * juce::jmax(1.0, std::abs(clampedRatio))
-                                                      * juce::jmax(1.0, clampedRate)
-                                                      * juce::jmax(1.0, pitchDev));
-        const int fadeSamples = juce::jmin (curSamples,
-                                            juce::jmin (prevSamples,
-                                                        juce::jmax (1, (int) (hostSampleRate * crossfadeMs / 1000.0))));
-        if (fadeSamples > 0)
-        {
-            const int prevStart = juce::jmax (0, prevSamples - fadeSamples);
-            for (int ch = 0; ch < outputBuffer.getNumChannels(); ++ch)
-            {
-                const float* prev = previousBlockBuffer.getReadPointer (ch);
-                float* curr = outputBuffer.getWritePointer (ch);
-                for (int i = 0; i < fadeSamples; ++i)
-                {
-                    const float fadeIn  = (float) (i + 1) / (float) (fadeSamples + 1);
-                    const float fadeOut = 1.0f - fadeIn;
-                    curr[i] = prev[prevStart + i] * fadeOut + curr[i] * fadeIn;
-                }
-            }
-        }
-    }
+    // T8 (revised for BUG 7): When a SoundTouch reset occurred this block
+    // (direction flip, param change while already in stretch mode), signal
+    // processBlock to run the unified multi-block transition fade.  The fade
+    // itself now lives in processBlock so it can span multiple host blocks
+    // (the old single-block blend couldn't fit 20–80ms at small buffer sizes)
+    // and can't double-fire with the mode-transition crossfade.
+    if (didReset && lastBlockUsedStretch)
+        stretcherResetThisBlock = true;
 
     // Clamp output to +/-1.0 to prevent SoundTouch's overlap-add from producing
     // peaks that cause DAW metering to clip and stay in the red.
@@ -2368,6 +2471,8 @@ void AudioBuffer::exitSlicingMode()
     // Reset crossfade state
     isInCrossfade = false;
     crossfadePosition = 0;
+    activeCrossfadeLen = crossfadeLengthSamples;
+    crossfadeIsLookaheadContinuation = false;
     previousSliceIndex = -1;
 
     // §12: Reset lookahead state.
@@ -2450,6 +2555,7 @@ juce::String AudioBuffer::getLoadedFileName() const
 void AudioBuffer::setParams(const AudioBufferParams& newParams)
 {
     params = newParams;
+    atomicSpeed.store(params.speed, std::memory_order_relaxed);
     
     // Update crossfade length if it changed
     if (hostSampleRate > 0.0)
@@ -2588,6 +2694,8 @@ void AudioBuffer::startSliceCrossfade(int newSliceIndex, double newPlayheadPos)
     // Start the crossfade
     isInCrossfade = true;
     crossfadePosition = 0;
+    activeCrossfadeLen = crossfadeLengthSamples;
+    crossfadeIsLookaheadContinuation = false;
     
     // Update to new slice
     currentActiveSlice.store(newSliceIndex);
@@ -2616,7 +2724,10 @@ void AudioBuffer::applyCrossfadeToSliceTransition(const juce::AudioBuffer<float>
         return;
         
     const int numChannels = juce::jmin(outputBuffer.getNumChannels(), sourceBuffer.getNumChannels());
-    const int remainingCrossfadeSamples = crossfadeLengthSamples - crossfadePosition;
+    // BUGFIX (BUG 2): use the length captured when THIS crossfade started, so a
+    // change to crossfadeLengthSamples between blocks can't warp the fade curve.
+    const int fadeLenTotal = juce::jmax(1, activeCrossfadeLen);
+    const int remainingCrossfadeSamples = fadeLenTotal - crossfadePosition;
     const int samplesToProcess = juce::jmin(numSamples, remainingCrossfadeSamples);
     
     if (samplesToProcess <= 0)
@@ -2635,29 +2746,39 @@ void AudioBuffer::applyCrossfadeToSliceTransition(const juce::AudioBuffer<float>
     const double pitchST = pitchSemiTones.load();
     const bool stretcherActive = (std::abs(stretch - 1.0) > 1.0e-6) || (std::abs(pitchST) > 1.0e-6);
     const double effectiveSpeed = stretcherActive
-        ? ((params.speed < 0.0 ? -1.0 : 1.0) * tempoMultiplier.load())
+        ? ((atomicSpeed.load(std::memory_order_relaxed) < 0.0 ? -1.0 : 1.0) * tempoMultiplier.load())
         : getEffectiveSpeed();
     for (int sample = 0; sample < samplesToProcess; ++sample)
     {
-        const double fadeProgress = static_cast<double>(crossfadePosition + sample) / static_cast<double>(crossfadeLengthSamples);
+        const double fadeProgress = static_cast<double>(crossfadePosition + sample) / static_cast<double>(fadeLenTotal);
         
         // Use equal-power crossfade curve
         const float fadeOut = static_cast<float>(std::cos(fadeProgress * juce::MathConstants<double>::halfPi));
         const float fadeIn = static_cast<float>(std::sin(fadeProgress * juce::MathConstants<double>::halfPi));
         
-        // Get sample from previous slice position with proper speed compensation
-        const double prevPos = previousSlicePlayheadPos + sample * effectiveSpeed * (fileSampleRate / hostSampleRate);
+        // Get sample from previous slice position with proper speed compensation.
+        // BUGFIX: advance from the TOTAL crossfade progress (crossfadePosition + sample),
+        // not the chunk-local sample index.  Using the chunk-local index caused the
+        // fade-out audio to restart from the original jump position on every chunk /
+        // block, producing an audible stutter when a crossfade spanned chunk boundaries.
+        // Clamp instead of bounds-skip: at a file-boundary wrap the old position
+        // runs past the file edge; holding the edge sample keeps the fade-out
+        // smooth rather than silently dropping the old-signal contribution
+        // (which produced a step in the blend).  Matches the stretch path.
+        const double prevPosRaw = previousSlicePlayheadPos
+                                + (crossfadePosition + sample) * effectiveSpeed * (fileSampleRate / hostSampleRate);
+        const double prevPos = juce::jlimit(0.0, static_cast<double>(fileLengthSamples - 1), prevPosRaw);
         const int prevSampleIndex = static_cast<int>(prevPos);
+        const int prevSampleIndex2 = juce::jmin(prevSampleIndex + 1, fileLengthSamples - 1);
         const double prevFraction = prevPos - prevSampleIndex;
         
-        if (prevSampleIndex >= 0 && prevSampleIndex < fileLengthSamples - 1)
         {
             for (int channel = 0; channel < numChannels; ++channel)
             {
                 // Linear interpolation for previous slice
                 const float* readPtr = sourceBuffer.getReadPointer(channel);
                 const float prevSample1 = readPtr[prevSampleIndex];
-                const float prevSample2 = readPtr[prevSampleIndex + 1];
+                const float prevSample2 = readPtr[prevSampleIndex2];
                 const float prevInterpolatedSample = prevSample1 + static_cast<float>(prevFraction) * (prevSample2 - prevSample1);
                 
                 // Apply equal-power crossfade
@@ -2671,7 +2792,7 @@ void AudioBuffer::applyCrossfadeToSliceTransition(const juce::AudioBuffer<float>
     crossfadePosition += samplesToProcess;
     
     // End crossfade if we've processed all samples
-    if (crossfadePosition >= crossfadeLengthSamples)
+    if (crossfadePosition >= fadeLenTotal)
     {
         isInCrossfade = false;
         crossfadePosition = 0;
@@ -2686,7 +2807,82 @@ void AudioBuffer::startBoundaryCrossfade(double newPlayheadPos)
     previousSliceIndex = -1;
     isInCrossfade = true;
     crossfadePosition = 0;
+    activeCrossfadeLen = crossfadeLengthSamples;
+    crossfadeIsLookaheadContinuation = false;
     playheadPosition.store(newPlayheadPos);
+}
+
+//==============================================================================
+// BUG 7 fix: multi-block transition crossfade helpers.
+//==============================================================================
+
+void AudioBuffer::beginTransitionFade(int desiredFadeSamples)
+{
+    // Snapshot the most recent pre-transition output from the ring buffer.
+    // The ring is written at the END of every processBlock, so at transition-
+    // detection time it contains only OLD (pre-transition) audio.
+    const int available = stretchOutputRingValidSamples;
+    const int len = juce::jmin(desiredFadeSamples, available,
+                               transitionOldBuffer.getNumSamples());
+    if (len <= 0 || stretchOutputRingSize <= 0)
+    {
+        transitionFadeActive = false;
+        return;
+    }
+
+    const int numCh = juce::jmin(transitionOldBuffer.getNumChannels(),
+                                 stretchOutputRing.getNumChannels());
+    // Oldest of the captured span sits at (writePos - len + ringSize) % ringSize.
+    const int readStart = (stretchOutputRingWritePos - len + stretchOutputRingSize) % stretchOutputRingSize;
+
+    for (int ch = 0; ch < numCh; ++ch)
+    {
+        const float* ringPtr = stretchOutputRing.getReadPointer(ch);
+        float* dst = transitionOldBuffer.getWritePointer(ch);
+        const int firstChunk = juce::jmin(len, stretchOutputRingSize - readStart);
+        juce::FloatVectorOperations::copy(dst, ringPtr + readStart, firstChunk);
+        if (firstChunk < len)
+            juce::FloatVectorOperations::copy(dst + firstChunk, ringPtr, len - firstChunk);
+    }
+
+    transitionFadeLen = len;
+    transitionFadePos = 0;
+    transitionFadeActive = true;
+}
+
+void AudioBuffer::applyTransitionFade(juce::AudioBuffer<float>& buffer)
+{
+    if (!transitionFadeActive || transitionFadeLen <= 0)
+        return;
+
+    const int numSamples = buffer.getNumSamples();
+    const int remaining = transitionFadeLen - transitionFadePos;
+    const int n = juce::jmin(numSamples, remaining);
+    const int numCh = juce::jmin(buffer.getNumChannels(),
+                                 transitionOldBuffer.getNumChannels());
+
+    for (int i = 0; i < n; ++i)
+    {
+        const double progress = static_cast<double>(transitionFadePos + i)
+                              / static_cast<double>(transitionFadeLen);
+        const float fadeIn  = static_cast<float>(std::sin(progress * juce::MathConstants<double>::halfPi));
+        const float fadeOut = static_cast<float>(std::cos(progress * juce::MathConstants<double>::halfPi));
+
+        for (int ch = 0; ch < numCh; ++ch)
+        {
+            float* out = buffer.getWritePointer(ch);
+            const float oldSample = transitionOldBuffer.getReadPointer(ch)[transitionFadePos + i];
+            out[i] = out[i] * fadeIn + oldSample * fadeOut;
+        }
+    }
+
+    transitionFadePos += n;
+    if (transitionFadePos >= transitionFadeLen)
+    {
+        transitionFadeActive = false;
+        transitionFadePos = 0;
+        transitionFadeLen = 0;
+    }
 }
 
 //==============================================================================
@@ -3028,6 +3224,7 @@ void AudioBuffer::setPingPongMode(bool enabled, double divisionBars, double bpm,
     if (enabled && params.speed < 0.0)
     {
         params.speed = std::abs(params.speed);
+        atomicSpeed.store(params.speed, std::memory_order_relaxed);
     }
     
     pingPongEnabled.store(enabled);
@@ -3047,6 +3244,9 @@ void AudioBuffer::setPingPongMode(bool enabled, double divisionBars, double bpm,
         
         // Make sure speed is positive
         if (params.speed < 0.0)
+        {
             params.speed = std::abs(params.speed);
+            atomicSpeed.store(params.speed, std::memory_order_relaxed);
+        }
     }
 }

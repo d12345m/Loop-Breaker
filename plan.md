@@ -137,10 +137,11 @@ Count discontinuities via TearingDebug::getDiscontinuityLevel; assert Major==0, 
   ring/cache, and its state resets on prepare, reset, and silent output.
 - DONE Phase 3.2 (2026-07-15): ChannelStrip delay reads use a 30ms equal-power crossfade when the base
   delay time or multi-tap layout changes. Tap sets are fixed-size arrays, avoiding per-block allocation.
-- TODO next: test harness
-  (ClickDetectionTests.cpp + add to .jucer <FILE> like modifierSchedulerTests + regenerate Xcode?
-  NOTE: .jucer needs Projucer resave OR add file to Builds/MacOSX project — check how tests are built);
-  then build via task "Build All (Debug)" and run Main.cpp --run-tests.
+- DONE Phase 5.1 (2026-07-15): ClickDetectionTests.cpp renders deterministic stereo sine content through
+  speed, stretch, pitch, reverse, slicing, and ping-pong transitions at 64–1024 sample blocks and
+  44.1/48 kHz. It asserts no invalid or major discontinuities and caps medium discontinuities.
+  The test is registered in both BufferTest.jucer and the generated Xcode project.
+- TODO next: run the offline test harness and tune its measured medium-discontinuity budget if necessary.
 
 ## Verification
 

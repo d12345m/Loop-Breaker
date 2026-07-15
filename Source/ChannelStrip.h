@@ -9,6 +9,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include <array>
 #include <vector>
 #include "AudioBuffer.h"
 #include "NodeClipDetector.h"
@@ -64,6 +65,9 @@ public:
             delayWritePos = 0;
             delayBuffer.setSize(2, delayBufferSize, false, false, true);
             delayBuffer.clear();
+            delayTapStateInitialised = false;
+            delayTapCrossfadeActive = false;
+            delayTapCrossfadePosition = 0;
 
             // Prepare filters
             juce::dsp::ProcessSpec filterSpec { sampleRate, (juce::uint32) blockSize, 2 };
@@ -224,27 +228,15 @@ private:
             // Update delay feedback high cut if changed (cheap no-op when unchanged)
             updateDelayHighCutCoeffs(params.delayFeedbackHighCutHz);
 
-            // Compute delay samples from params (clamped)
-            juce::Array<int> tapSamples;
-            if (delayTapTimesMs.isEmpty())
-            {
-                int single = (int) std::round((params.delayTimeMs / 1000.0) * juce::jmax(1.0, lastSampleRate));
-                single = juce::jlimit(1, delayBufferSize - 1, single);
-                tapSamples.add(single);
-            }
-            else
-            {
-                for (auto tMs : delayTapTimesMs)
-                {
-                    int s = (int) std::round((tMs / 1000.0f) * juce::jmax(1.0, lastSampleRate));
-                    s = juce::jlimit(1, delayBufferSize - 1, s);
-                    tapSamples.addIfNotAlreadyThere(s);
-                }
-            }
+            // Crossfade delay read heads when the base time or tap layout
+            // changes.  Moving a read head instantaneously selects unrelated
+            // delay-line content and produces a full-scale click.
+            std::array<int, kMaxDelayTaps> requestedTapSamples {};
+            const int requestedTapCount = getRequestedDelayTapSamples(requestedTapSamples);
+            updateDelayTapCrossfade(requestedTapSamples, requestedTapCount);
+
             float fb = juce::jlimit(0.0f, 0.95f, params.delayFeedback); // safety limit
             float wet = juce::jlimit(0.0f, 1.0f, params.delayWet);
-            int numTaps = tapSamples.size();
-            if (numTaps < 1) numTaps = 1;
 
             // Wow/Flutter precompute (in samples) and phase increments
             const float wowDepthSamples = params.wowFlutterEnabled ? (params.wowDepthMs * (float) (lastSampleRate * 0.001)) : 0.0f;
@@ -255,6 +247,14 @@ private:
             for (int i = 0; i < numSamples; ++i)
             {
                 int writePos = delayWritePos;
+                const int fadePosition = delayTapCrossfadePosition + i;
+                const float tapFade = delayTapCrossfadeActive
+                    ? juce::jlimit(0.0f, 1.0f, (float) fadePosition / (float) delayTapCrossfadeLength)
+                    : 0.0f;
+                const float oldTapGain = delayTapCrossfadeActive
+                    ? std::cos(tapFade * juce::MathConstants<float>::halfPi) : 1.0f;
+                const float newTapGain = delayTapCrossfadeActive
+                    ? std::sin(tapFade * juce::MathConstants<float>::halfPi) : 0.0f;
                 // Compute current modulation offset in samples (shared across channels)
                 float modSamples = 0.0f;
                 if (params.wowFlutterEnabled)
@@ -264,21 +264,12 @@ private:
                     auto* delayData = delayBuffer.getWritePointer(ch);
                     auto* oppDelayData = delayBuffer.getWritePointer(numChannels > 1 ? (1 - ch) : ch);
                     float inSample = tempBuffer.getSample(ch, i);
-                    float delayedSum = 0.0f;
-                    for (int tapIdx = 0; tapIdx < tapSamples.size(); ++tapIdx)
-                    {
-                        // Fractional read position with wow/flutter modulation
-                        double readPosTap = (double) writePos - (double) tapSamples[tapIdx] - (double) modSamples;
-                        while (readPosTap < 0.0) readPosTap += (double) delayBufferSize;
-                        while (readPosTap >= (double) delayBufferSize) readPosTap -= (double) delayBufferSize;
-                        int idx0 = (int) readPosTap;
-                        int idx1 = idx0 + 1; if (idx1 >= delayBufferSize) idx1 = 0;
-                        float frac = (float) (readPosTap - (double) idx0);
-                        const float* src = (params.delayPingPong && numChannels > 1) ? oppDelayData : delayData;
-                        float s = src[idx0] * (1.0f - frac) + src[idx1] * frac;
-                        delayedSum += s;
-                    }
-                    float delayedAvg = delayedSum / (float) numTaps;
+                    const float delayedAvg = readDelayTaps(delayData, oppDelayData, writePos, modSamples,
+                                                            delayActiveTapSamples, delayActiveTapCount) * oldTapGain
+                                           + (delayTapCrossfadeActive
+                                                ? readDelayTaps(delayData, oppDelayData, writePos, modSamples,
+                                                                delayTargetTapSamples, delayTargetTapCount) * newTapGain
+                                                : 0.0f);
                     // High-cut only the feedback path to tame highs
                     float fbSample = delayedAvg;
                     fbSample = delayFbHighCut[ch].processSample(fbSample);
@@ -302,6 +293,18 @@ private:
                     if (flutterPhase > juce::MathConstants<float>::twoPi) flutterPhase -= juce::MathConstants<float>::twoPi;
                 }
                 if (++delayWritePos >= delayBufferSize) delayWritePos = 0;
+            }
+
+            if (delayTapCrossfadeActive)
+            {
+                delayTapCrossfadePosition += numSamples;
+                if (delayTapCrossfadePosition >= delayTapCrossfadeLength)
+                {
+                    delayActiveTapSamples = delayTargetTapSamples;
+                    delayActiveTapCount = delayTargetTapCount;
+                    delayTapCrossfadeActive = false;
+                    delayTapCrossfadePosition = 0;
+                }
             }
 
             // Clip probe: after delay
@@ -734,6 +737,9 @@ public:
         declickFadeInProgress.store(0, std::memory_order_relaxed);
         declickStep[0] = declickStep[1] = 0.0f;
         declickLastOut[0] = declickLastOut[1] = 0.0f;
+        delayTapStateInitialised = false;
+        delayTapCrossfadeActive = false;
+        delayTapCrossfadePosition = 0;
         if (buffer) buffer->resetToDefaults();
     }
 
@@ -979,6 +985,16 @@ private:
     int delayBufferSize = 0; // allocated in prepare
     int delayWritePos = 0;
     static constexpr double kMaxDelayMs = 2000.0; // 2 seconds max
+    static constexpr int kMaxDelayTaps = 8;
+    static constexpr double kDelayTapCrossfadeMs = 30.0;
+    std::array<int, kMaxDelayTaps> delayActiveTapSamples {};
+    std::array<int, kMaxDelayTaps> delayTargetTapSamples {};
+    int delayActiveTapCount = 0;
+    int delayTargetTapCount = 0;
+    int delayTapCrossfadePosition = 0;
+    int delayTapCrossfadeLength = 0;
+    bool delayTapCrossfadeActive = false;
+    bool delayTapStateInitialised = false;
     // Multi-tap support: user may select multiple divisions (times in ms)
     juce::Array<float> delayTapTimesMs; // if empty -> single params.delayTimeMs
 public:
@@ -1000,6 +1016,88 @@ public:
         dubBurst.fallDurationBars = juce::jmax(0.0f, fallDurationBars);
     }
 private:
+    int getRequestedDelayTapSamples(std::array<int, kMaxDelayTaps>& taps) const
+    {
+        int count = 0;
+        const auto addTap = [&taps, &count](int sample)
+        {
+            for (int i = 0; i < count; ++i)
+                if (taps[(size_t) i] == sample)
+                    return;
+            if (count < kMaxDelayTaps)
+                taps[(size_t) count++] = sample;
+        };
+
+        if (delayTapTimesMs.isEmpty())
+        {
+            const int sample = juce::jlimit(1, delayBufferSize - 1,
+                (int) std::round((params.delayTimeMs / 1000.0) * juce::jmax(1.0, lastSampleRate)));
+            addTap(sample);
+        }
+        else
+        {
+            for (const auto timeMs : delayTapTimesMs)
+            {
+                const int sample = juce::jlimit(1, delayBufferSize - 1,
+                    (int) std::round((timeMs / 1000.0f) * juce::jmax(1.0, lastSampleRate)));
+                addTap(sample);
+            }
+        }
+
+        return juce::jmax(1, count);
+    }
+
+    void updateDelayTapCrossfade(const std::array<int, kMaxDelayTaps>& requestedTaps, int requestedCount)
+    {
+        const auto matches = [requestedCount, &requestedTaps](const std::array<int, kMaxDelayTaps>& existing, int existingCount)
+        {
+            if (existingCount != requestedCount)
+                return false;
+            for (int i = 0; i < requestedCount; ++i)
+                if (existing[(size_t) i] != requestedTaps[(size_t) i])
+                    return false;
+            return true;
+        };
+
+        if (!delayTapStateInitialised)
+        {
+            delayActiveTapSamples = requestedTaps;
+            delayActiveTapCount = requestedCount;
+            delayTapStateInitialised = true;
+            return;
+        }
+
+        const bool alreadyTargetingRequest = delayTapCrossfadeActive
+            && matches(delayTargetTapSamples, delayTargetTapCount);
+        if (matches(delayActiveTapSamples, delayActiveTapCount) || alreadyTargetingRequest)
+            return;
+
+        delayTargetTapSamples = requestedTaps;
+        delayTargetTapCount = requestedCount;
+        delayTapCrossfadePosition = 0;
+        delayTapCrossfadeLength = juce::jmax(1, (int) std::lround(lastSampleRate * kDelayTapCrossfadeMs / 1000.0));
+        delayTapCrossfadeActive = true;
+    }
+
+    float readDelayTaps(const float* delayData, const float* oppositeDelayData, int writePos,
+                        float modulationSamples, const std::array<int, kMaxDelayTaps>& taps, int tapCount) const
+    {
+        const float* source = (params.delayPingPong && delayBuffer.getNumChannels() > 1)
+            ? oppositeDelayData : delayData;
+        float delayedSum = 0.0f;
+        for (int tapIndex = 0; tapIndex < tapCount; ++tapIndex)
+        {
+            double readPosition = (double) writePos - (double) taps[(size_t) tapIndex] - (double) modulationSamples;
+            while (readPosition < 0.0) readPosition += (double) delayBufferSize;
+            while (readPosition >= (double) delayBufferSize) readPosition -= (double) delayBufferSize;
+            const int index0 = (int) readPosition;
+            const int index1 = (index0 + 1) % delayBufferSize;
+            const float fraction = (float) (readPosition - (double) index0);
+            delayedSum += source[index0] * (1.0f - fraction) + source[index1] * fraction;
+        }
+        return delayedSum / (float) tapCount;
+    }
+
     // Filters
     juce::dsp::IIR::Filter<float> lowPass[2];
     juce::dsp::IIR::Filter<float> highPass[2];

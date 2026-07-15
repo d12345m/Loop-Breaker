@@ -193,6 +193,7 @@ void AudioBuffer::prepare(double sampleRate, int samplesPerBlockExpected)
     transitionFadePos = 0;
     transitionFadeLen = 0;
     stretcherResetThisBlock = false;
+    deClickLastSample[0] = deClickLastSample[1] = 0.0f;
 
     // §2.2A  Reset block-resampling interpolators.
     for (auto& r : blockResamplers)
@@ -211,6 +212,7 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
         // ring — after silence there is nothing meaningful to fade from.
         transitionFadeActive = false;
         stretchOutputRingValidSamples = 0;
+        deClickLastSample[0] = deClickLastSample[1] = 0.0f;
         return;
     }
 
@@ -299,6 +301,11 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
     // Apply any in-flight transition fade (may span multiple blocks).
     if (transitionFadeActive)
         applyTransitionFade(outputBuffer);
+
+    // Final safety net for residual block-boundary steps from stacked
+    // modifiers.  This runs after structural transition crossfades, so both
+    // the output ring and the next transition cache retain the corrected audio.
+    applyDeClick(outputBuffer);
 
     // Feed the output ring so future transitions have pre-transition audio to
     // fade from.  Written in BOTH playback modes (repitch used to skip this).
@@ -1221,6 +1228,7 @@ void AudioBuffer::resetToDefaults()
     transitionFadePos = 0;
     transitionFadeLen = 0;
     stretcherResetThisBlock = false;
+    deClickLastSample[0] = deClickLastSample[1] = 0.0f;
     
     // Reset ping pong state
     pingPongEnabled.store(false);
@@ -2810,6 +2818,46 @@ void AudioBuffer::startBoundaryCrossfade(double newPlayheadPos)
     activeCrossfadeLen = crossfadeLengthSamples;
     crossfadeIsLookaheadContinuation = false;
     playheadPosition.store(newPlayheadPos);
+}
+
+//==============================================================================
+// Final block-boundary de-click safety net.
+//==============================================================================
+
+void AudioBuffer::applyDeClick(juce::AudioBuffer<float>& outputBuffer)
+{
+    const int numSamples = outputBuffer.getNumSamples();
+    const int numChannels = juce::jmin(outputBuffer.getNumChannels(), 2);
+    if (numSamples <= 0 || numChannels <= 0)
+        return;
+
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        float* data = outputBuffer.getWritePointer(ch);
+        const float boundaryStep = data[0] - deClickLastSample[ch];
+
+        if (deClickEnabled && std::abs(boundaryStep) > kDeClickThreshold)
+        {
+            // Bring the first output sample back toward the previous block's
+            // tail, then release the correction with a raised-cosine curve.
+            // Unlike multiplying the output by a gain, this preserves the
+            // incoming waveform and cannot create a new step toward silence.
+            const int rampSamples = juce::jlimit(
+                kDeClickMinRampSamples,
+                kDeClickMaxRampSamples,
+                (int) std::lround(std::abs(boundaryStep) * kDeClickRampScale));
+            const int samplesToCorrect = juce::jmin(rampSamples, numSamples);
+
+            for (int i = 0; i < samplesToCorrect; ++i)
+            {
+                const float t = (float) (i + 1) / (float) (samplesToCorrect + 1);
+                const float correctionGain = 0.5f * (1.0f + std::cos(juce::MathConstants<float>::pi * t));
+                data[i] -= boundaryStep * correctionGain;
+            }
+        }
+
+        deClickLastSample[ch] = data[numSamples - 1];
+    }
 }
 
 //==============================================================================

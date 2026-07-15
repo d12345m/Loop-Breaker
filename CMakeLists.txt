@@ -21,6 +21,7 @@ add_subdirectory(Submodules/clap-juce-extensions EXCLUDE_FROM_ALL)
 
 # ─── SoundTouch (header-only for us — sources are unity-included) ────────────
 set(SOUNDTOUCH_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/soundtouch/include")
+add_subdirectory(ThirdParty/soundtouch EXCLUDE_FROM_ALL)
 
 # ─── Binary Resources ────────────────────────────────────────────────────────
 juce_add_binary_data(LoopBreakerBinaryData
@@ -123,4 +124,44 @@ target_link_libraries(LoopBreaker
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags
+)
+
+# ─── Offline click-detection test executable ─────────────────────────────────
+# Plugin targets do not expose a process entry point for JUCE unit tests.  Keep
+# this runner separate so it can execute the deterministic AudioBuffer stress
+# suite in local development and CI without loading a plugin host.
+juce_add_console_app(LoopBreakerClickTests
+    PRODUCT_NAME "LoopBreakerClickTests"
+)
+
+target_sources(LoopBreakerClickTests PRIVATE
+    Source/ClickDetectionTestMain.cpp
+    Source/ClickDetectionTests.cpp
+    Source/AudioBuffer.cpp
+)
+
+target_include_directories(LoopBreakerClickTests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/Source"
+    "${SOUNDTOUCH_INCLUDE_DIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Submodules"
+)
+
+target_compile_definitions(LoopBreakerClickTests PRIVATE
+    JUCE_UNIT_TESTS=1
+    DONT_SET_USING_JUCE_NAMESPACE=1
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+)
+
+target_link_libraries(LoopBreakerClickTests PRIVATE
+    SoundTouch
+    juce::juce_audio_basics
+    juce::juce_audio_formats
+    juce::juce_audio_processors
+    juce::juce_core
+    juce::juce_data_structures
+    juce::juce_events
+    juce::juce_graphics
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags
 )

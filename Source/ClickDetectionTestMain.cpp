@@ -7,11 +7,7 @@ public:
     void logMessage(const juce::String& message) override
     {
         std::cout << message << std::endl;
-        if (message.containsIgnoreCase("FAILED"))
-            ++failureLines;
     }
-
-    int failureLines = 0;
 };
 
 int main()
@@ -19,5 +15,11 @@ int main()
     ConsoleUnitTestRunner runner;
     runner.setAssertOnFailure(false);
     runner.runTestsInCategory("Click Detection");
-    return runner.failureLines == 0 ? 0 : 1;
+
+    int failures = 0;
+    for (int i = 0; i < runner.getNumResults(); ++i)
+        if (const auto* result = runner.getResult(i))
+            failures += result->failures;
+
+    return failures == 0 ? 0 : 1;
 }

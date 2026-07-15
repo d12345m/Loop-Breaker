@@ -141,7 +141,11 @@ Count discontinuities via TearingDebug::getDiscontinuityLevel; assert Major==0, 
   speed, stretch, pitch, reverse, slicing, and ping-pong transitions at 64–1024 sample blocks and
   44.1/48 kHz. It asserts no invalid or major discontinuities and caps medium discontinuities.
   The test is registered in both BufferTest.jucer and the generated Xcode project.
-- TODO next: run the offline test harness and tune its measured medium-discontinuity budget if necessary.
+- DONE Phase 5.2 infrastructure (2026-07-15): CMake target `LoopBreakerClickTests` is a standalone
+  console runner for the Click Detection JUCE test category. It links the SoundTouch submodule's native
+  CMake target, so it runs without loading a plugin host or duplicating SoundTouch unity sources.
+- TODO next: configure/build and run `LoopBreakerClickTests`; tune the measured medium-discontinuity
+  budget only if the deterministic baseline requires it.
 
 ## Verification
 

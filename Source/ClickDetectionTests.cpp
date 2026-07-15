@@ -115,7 +115,7 @@ ClickDetectionResult renderWorstCaseSequence(double sampleRate, int blockSize)
 class AudioBufferClickDetectionTest : public juce::UnitTest
 {
 public:
-    AudioBufferClickDetectionTest() : juce::UnitTest("AudioBuffer Click Detection") {}
+    AudioBufferClickDetectionTest() : juce::UnitTest("AudioBuffer Click Detection", "Click Detection") {}
 
     void runTest() override
     {

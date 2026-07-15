@@ -350,15 +350,6 @@ private:
     float lastBlockDcOffset[2] = { 0.0f, 0.0f };    // Track DC offset from previous block
     int rmsBlankingBlocksLeft = 0;                    // Suppress RMS jump checks after slice transitions
 
-    // Final block-boundary safety net.  It corrects only large discontinuities
-    // left by stacked playback modifiers after their structural crossfades.
-    bool deClickEnabled = true;
-    float deClickLastSample[2] = { 0.0f, 0.0f };
-    static constexpr float kDeClickThreshold = 0.05f;
-    static constexpr int kDeClickMinRampSamples = 8;
-    static constexpr int kDeClickMaxRampSamples = 64;
-    static constexpr float kDeClickRampScale = 128.0f;
-
 
 
     // Coordinated snapshot of stretch-related parameters.
@@ -521,7 +512,6 @@ private:
     void writeToStretchOutputRing(const juce::AudioBuffer<float>& src, int numSamples);
     void snapshotStretchOutputRing();
     void applyStretchOutputCrossfade(juce::AudioBuffer<float>& outputBuffer, int numSamples);
-    void applyDeClick(juce::AudioBuffer<float>& outputBuffer);
     double getSliceStartPosition(int sliceIndex, int fileLengthSamples) const;
     double getSliceEndPosition(int sliceIndex, int fileLengthSamples) const;
 

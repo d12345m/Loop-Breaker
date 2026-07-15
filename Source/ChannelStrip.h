@@ -39,10 +39,13 @@ public:
     // DSP: simple reverb processor (per-strip). Prepare once and process temp buffers.
     void prepareDSP(double sampleRate, int blockSize)
     {
-        // Prepare once or when configuration changes; do NOT reset every audio block
+        // Called from the host's prepareToPlay path, never from processDSP().
+        // All buffers are stereo because the plug-in supports at most two channels;
+        // mono blocks simply use channel zero of these preallocated buffers.
         if (!reverbPrepared || lastSampleRate != sampleRate || lastBlockSize != blockSize)
         {
-            juce::dsp::ProcessSpec spec { sampleRate, (juce::uint32) blockSize, 2 };
+            const int bufferCapacity = blockSize + 64; // matches AudioBufferManager headroom
+            juce::dsp::ProcessSpec spec { sampleRate, (juce::uint32) bufferCapacity, 2 };
             reverb.reset();
             reverb.prepare(spec);
             limiter.prepare(spec);
@@ -54,14 +57,14 @@ public:
 
             // (Re)allocate circular pre-delay buffer: size = maxDelaySamples + blockSize + 1
             const int maxDelaySamples = (int) std::ceil((kMaxPreDelayMs / 1000.0) * juce::jmax(1.0, lastSampleRate));
-            preDelayBufferSize = maxDelaySamples + blockSize + 1; // +1 guard for modular arithmetic
+            preDelayBufferSize = maxDelaySamples + bufferCapacity + 1; // +1 guard for modular arithmetic
             preDelayWritePos = 0;
             preDelayBuffer.setSize(2, preDelayBufferSize, false, false, true);
             preDelayBuffer.clear();
 
             // (Re)allocate delay line buffer similarly (max delay + blockSize + 1)
             const int maxMainDelaySamples = (int) std::ceil((kMaxDelayMs / 1000.0) * juce::jmax(1.0, lastSampleRate));
-            delayBufferSize = maxMainDelaySamples + blockSize + 1; // +1 guard
+            delayBufferSize = maxMainDelaySamples + bufferCapacity + 1; // +1 guard
             delayWritePos = 0;
             delayBuffer.setSize(2, delayBufferSize, false, false, true);
             delayBuffer.clear();
@@ -70,7 +73,7 @@ public:
             delayTapCrossfadePosition = 0;
 
             // Prepare filters
-            juce::dsp::ProcessSpec filterSpec { sampleRate, (juce::uint32) blockSize, 2 };
+            juce::dsp::ProcessSpec filterSpec { sampleRate, (juce::uint32) bufferCapacity, 2 };
             for (int ch = 0; ch < 2; ++ch)
             {
                 lowPass[ch].reset();
@@ -87,17 +90,27 @@ public:
             updateLowPassCoeffs(params.lowPassCutoff);
             updateHighPassCoeffs(params.highPassCutoff);
             updateDelayHighCutCoeffs(params.delayFeedbackHighCutHz);
+            shLpfCutoffSmoother.reset(sampleRate, kSHHighQCoefficientRampMs / 1000.0);
+            shLpfQSmoother.reset(sampleRate, kSHHighQCoefficientRampMs / 1000.0);
+            shHpfCutoffSmoother.reset(sampleRate, kSHHighQCoefficientRampMs / 1000.0);
+            shHpfQSmoother.reset(sampleRate, kSHHighQCoefficientRampMs / 1000.0);
+            shLpfCutoffSmoother.setCurrentAndTargetValue(params.shLpfCutoff);
+            shLpfQSmoother.setCurrentAndTargetValue(params.shLpfQ);
+            shHpfCutoffSmoother.setCurrentAndTargetValue(params.shHpfCutoff);
+            shHpfQSmoother.setCurrentAndTargetValue(params.shHpfQ);
             updateSHLowPassCoeffs(params.shLpfCutoff, params.shLpfQ);
             updateSHHighPassCoeffs(params.shHpfCutoff, params.shHpfQ);
 
             // §6.3  Pre-allocate ducking gains buffer so processDSP never
             // calls resize() on the audio thread.
-            duckGains.resize((size_t) blockSize);
-            tremoloGainTable.resize((size_t) blockSize);
+            duckGains.resize((size_t) bufferCapacity);
+            tremoloGainTable.resize((size_t) bufferCapacity);
+            reverbWetBuffer.setSize(2, bufferCapacity, false, false, true);
+            reverbWetBuffer.clear();
 
             // (Re)allocate chorus delay buffer
             const int maxChorusDelaySamples = (int) std::ceil((kMaxChorusDelayMs / 1000.0) * juce::jmax(1.0, lastSampleRate));
-            chorusDelayBufferSize = maxChorusDelaySamples + blockSize + 1;
+            chorusDelayBufferSize = maxChorusDelaySamples + bufferCapacity + 1;
             chorusDelayWritePos = 0;
             chorusDelayBuffer.setSize(2, chorusDelayBufferSize, false, false, true);
             chorusDelayBuffer.clear();
@@ -115,6 +128,12 @@ public:
 
     void processDSP(juce::AudioBuffer<float>& tempBuffer)
     {
+        jassert(reverbPrepared);
+        jassert(tempBuffer.getNumChannels() <= 2);
+        jassert(tempBuffer.getNumSamples() <= lastBlockSize + 64);
+        if (!reverbPrepared || tempBuffer.getNumChannels() > 2 || tempBuffer.getNumSamples() > lastBlockSize + 64)
+            return;
+
         processDSPChain(tempBuffer);
 
         // BUG 6 fix: boundary de-click runs at the very end of the FX chain so
@@ -128,6 +147,7 @@ private:
     {
         const int numSamples = tempBuffer.getNumSamples();
         const int numChannels = tempBuffer.getNumChannels();
+        currentDSPBlockSamples = numSamples;
 
         // NOTE (BUG 6 fix): the old "declick fade-in" here ramped the block from
         // SILENCE to unity, which itself created a full-amplitude step at the
@@ -138,9 +158,6 @@ private:
         // Precompute per-sample ducking gains from incoming signal (before FX)
         if (params.duckingEnabled && numSamples > 0)
         {
-            // Pre-allocated in prepareDSP(); guard kept as safety net.
-            if ((int)duckGains.size() < numSamples)
-                duckGains.resize((size_t) numSamples);
             // compute attack/release coeffs from sample rate and release param
             updateDuckingCoeffs(params.duckReleaseMs);
             for (int i = 0; i < numSamples; ++i)
@@ -217,14 +234,6 @@ private:
     // --- Delay Processing (post-S&H filters) ---
         if (effects().delayEnabled)
         {
-            // Allocate delay line if needed
-            if (delayBuffer.getNumChannels() != numChannels || delayBuffer.getNumSamples() != delayBufferSize)
-            {
-                delayBuffer.setSize(numChannels, delayBufferSize, false, false, true);
-                delayBuffer.clear();
-                delayWritePos = 0;
-            }
-
             // Update delay feedback high cut if changed (cheap no-op when unchanged)
             updateDelayHighCutCoeffs(params.delayFeedbackHighCutHz);
 
@@ -321,9 +330,6 @@ private:
             const float oneMinusDepth = 1.0f - depth;
 
             // Pre-compute per-sample gain table (shared across channels)
-            if ((int)tremoloGainTable.size() < numSamples)
-                tremoloGainTable.resize((size_t)numSamples);
-
             float phase = tremoloPhase;
             for (int i = 0; i < numSamples; ++i)
             {
@@ -349,14 +355,6 @@ private:
         // --- Chorus Processing (modulated short delay) ---
         if (effects().chorusEnabled && chorusDelayBufferSize > 0)
         {
-            // Ensure chorus buffer matches channel count
-            if (chorusDelayBuffer.getNumChannels() != numChannels || chorusDelayBuffer.getNumSamples() != chorusDelayBufferSize)
-            {
-                chorusDelayBuffer.setSize(numChannels, chorusDelayBufferSize, false, false, true);
-                chorusDelayBuffer.clear();
-                chorusDelayWritePos = 0;
-            }
-
             const float baseDelaySamples = (float)((params.chorusDelayMs / 1000.0) * juce::jmax(1.0, lastSampleRate));
             const float maxModSamples = (float)((params.chorusDepth * 5.0 / 1000.0) * juce::jmax(1.0, lastSampleRate)); // up to 5ms modulation
             const float lfoInc = (float)(2.0 * juce::MathConstants<double>::pi * juce::jmax(0.01f, params.chorusRateHz) / juce::jmax(1.0, lastSampleRate));
@@ -478,25 +476,7 @@ private:
         if (!effects().reverbEnabled)
             return; // skip reverb portion if disabled (delay may still have processed)
 
-        // Ensure pre-delay buffer matches channel count (reallocate if channel count changed)
-        if (preDelayBuffer.getNumChannels() != numChannels)
-        {
-            juce::AudioBuffer<float> newBuf(numChannels, preDelayBufferSize);
-            newBuf.clear();
-            // copy existing channel data where possible (up to min channels)
-            const int copyCh = juce::jmin(preDelayBuffer.getNumChannels(), newBuf.getNumChannels());
-            for (int ch = 0; ch < copyCh; ++ch)
-                newBuf.copyFrom(ch, 0, preDelayBuffer, ch, 0, preDelayBufferSize);
-            preDelayBuffer = std::move(newBuf);
-        }
-
-        // Prepare wet buffer (delayed input) size without per-block allocation
-        if (reverbWetBuffer.getNumChannels() != numChannels || reverbWetBuffer.getNumSamples() < numSamples)
-        {
-            // allocate only when channel count or block size grows; allow shrinking without realloc
-            reverbWetBuffer.setSize(numChannels, numSamples, false, false, true);
-        }
-        reverbWetBuffer.clear();
+        reverbWetBuffer.clear(0, numSamples);
 
         // Compute desired pre-delay samples from params (circular buffer based, continuous across blocks)
         const int delaySamples = (int) juce::jlimit(0.0, (kMaxPreDelayMs / 1000.0) * lastSampleRate,
@@ -1109,6 +1089,19 @@ private:
     float lastSHLpfQ = 0.0f;
     float lastSHHpfCutoff = 0.0f;
     float lastSHHpfQ = 0.0f;
+    float targetSHLpfCutoff = 0.0f;
+    float targetSHLpfQ = 0.0f;
+    float targetSHHpfCutoff = 0.0f;
+    float targetSHHpfQ = 0.0f;
+    juce::SmoothedValue<float> shLpfCutoffSmoother;
+    juce::SmoothedValue<float> shLpfQSmoother;
+    juce::SmoothedValue<float> shHpfCutoffSmoother;
+    juce::SmoothedValue<float> shHpfQSmoother;
+    bool shLpfCoefficientRampActive = false;
+    bool shHpfCoefficientRampActive = false;
+    int currentDSPBlockSamples = 0;
+    static constexpr float kSHHighQThreshold = 2.0f;
+    static constexpr double kSHHighQCoefficientRampMs = 15.0;
     float shPhaseBars = 0.0f;      // accumulated bars since last S&H trigger
     juce::Random shRng;             // per-strip RNG for S&H randomization
     float lastLowPassCutoff = 0.0f;
@@ -1207,6 +1200,37 @@ public:
     {
         cutoff = juce::jlimit(20.0f, 20000.0f, cutoff);
         q = juce::jlimit(0.1f, 10.0f, q);
+        const bool targetChanged = std::abs(cutoff - targetSHLpfCutoff) >= 1.0f
+                                || std::abs(q - targetSHLpfQ) >= 0.01f;
+        if (targetChanged)
+        {
+            targetSHLpfCutoff = cutoff;
+            targetSHLpfQ = q;
+            shLpfCoefficientRampActive = lastSHLpfCutoff > 0.0f
+                && juce::jmax(q, lastSHLpfQ) >= kSHHighQThreshold;
+            if (shLpfCoefficientRampActive)
+            {
+                shLpfCutoffSmoother.setTargetValue(cutoff);
+                shLpfQSmoother.setTargetValue(q);
+            }
+            else
+            {
+                shLpfCutoffSmoother.setCurrentAndTargetValue(cutoff);
+                shLpfQSmoother.setCurrentAndTargetValue(q);
+            }
+        }
+        if (shLpfCoefficientRampActive)
+        {
+            cutoff = shLpfCutoffSmoother.getNextValue();
+            q = shLpfQSmoother.getNextValue();
+            if (currentDSPBlockSamples > 1)
+            {
+                shLpfCutoffSmoother.skip(currentDSPBlockSamples - 1);
+                shLpfQSmoother.skip(currentDSPBlockSamples - 1);
+            }
+            shLpfCoefficientRampActive = shLpfCutoffSmoother.isSmoothing()
+                || shLpfQSmoother.isSmoothing();
+        }
         if (std::abs(cutoff - lastSHLpfCutoff) < 1.0f && std::abs(q - lastSHLpfQ) < 0.01f) return;
         auto coeff = juce::dsp::IIR::Coefficients<float>::makeLowPass(lastSampleRate, cutoff, q);
         for (int ch = 0; ch < 2; ++ch) *shLowPass[ch].coefficients = *coeff;
@@ -1217,6 +1241,37 @@ public:
     {
         cutoff = juce::jlimit(20.0f, 20000.0f, cutoff);
         q = juce::jlimit(0.1f, 10.0f, q);
+        const bool targetChanged = std::abs(cutoff - targetSHHpfCutoff) >= 1.0f
+                                || std::abs(q - targetSHHpfQ) >= 0.01f;
+        if (targetChanged)
+        {
+            targetSHHpfCutoff = cutoff;
+            targetSHHpfQ = q;
+            shHpfCoefficientRampActive = lastSHHpfCutoff > 0.0f
+                && juce::jmax(q, lastSHHpfQ) >= kSHHighQThreshold;
+            if (shHpfCoefficientRampActive)
+            {
+                shHpfCutoffSmoother.setTargetValue(cutoff);
+                shHpfQSmoother.setTargetValue(q);
+            }
+            else
+            {
+                shHpfCutoffSmoother.setCurrentAndTargetValue(cutoff);
+                shHpfQSmoother.setCurrentAndTargetValue(q);
+            }
+        }
+        if (shHpfCoefficientRampActive)
+        {
+            cutoff = shHpfCutoffSmoother.getNextValue();
+            q = shHpfQSmoother.getNextValue();
+            if (currentDSPBlockSamples > 1)
+            {
+                shHpfCutoffSmoother.skip(currentDSPBlockSamples - 1);
+                shHpfQSmoother.skip(currentDSPBlockSamples - 1);
+            }
+            shHpfCoefficientRampActive = shHpfCutoffSmoother.isSmoothing()
+                || shHpfQSmoother.isSmoothing();
+        }
         if (std::abs(cutoff - lastSHHpfCutoff) < 1.0f && std::abs(q - lastSHHpfQ) < 0.01f) return;
         auto coeff = juce::dsp::IIR::Coefficients<float>::makeHighPass(lastSampleRate, cutoff, q);
         for (int ch = 0; ch < 2; ++ch) *shHighPass[ch].coefficients = *coeff;

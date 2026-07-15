@@ -155,6 +155,7 @@ void MainAppComponent::prepareToPlay (int samplesPerBlockExpected, double sample
 {
     hostSampleRate = sampleRate;
     app.bufferManager.prepare(sampleRate, samplesPerBlockExpected);
+    app.prepareDSP(sampleRate, samplesPerBlockExpected);
 }
 
 void MainAppComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill)

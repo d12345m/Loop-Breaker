@@ -261,6 +261,10 @@ public:
     void resetTearingStats() { tearingStats.reset(); }
     void setTearingDebugEnabled(bool enabled) { tearingDebugEnabled.store(enabled); }
     bool isTearingDebugEnabled() const { return tearingDebugEnabled.load(); }
+    // Optional CPU-heavy safety net for severe SoundTouch OLA discontinuities
+    // that occur within a block. Disabled by default to preserve transients.
+    void setIntraBlockDeClickEnabled(bool enabled) { deClickIntraBlockEnabled.store(enabled); }
+    bool isIntraBlockDeClickEnabled() const { return deClickIntraBlockEnabled.load(); }
     
     //==============================================================================
     // Timing and position
@@ -345,6 +349,7 @@ private:
     TearingDebugStats tearingStats;
     std::atomic<bool> tearingDebugEnabled { true }; // Enable by default in debug builds
     float lastOutputSample[2] = { 0.0f, 0.0f };     // Track last sample for discontinuity detection
+    float lastRawOutputSample[2] = { 0.0f, 0.0f };  // Pre-declick diagnostic history
     int consecutiveZeroSamples = 0;                  // Counter for zero sample runs
     float lastBlockRms[2] = { 0.0f, 0.0f };         // Track RMS from previous block
     float lastBlockDcOffset[2] = { 0.0f, 0.0f };    // Track DC offset from previous block
@@ -353,11 +358,15 @@ private:
     // Final block-boundary safety net.  It corrects only large discontinuities
     // left by stacked playback modifiers after their structural crossfades.
     bool deClickEnabled = true;
+    std::atomic<bool> deClickIntraBlockEnabled { false };
     float deClickLastSample[2] = { 0.0f, 0.0f };
     static constexpr float kDeClickThreshold = 0.05f;
     static constexpr int kDeClickMinRampSamples = 8;
     static constexpr int kDeClickMaxRampSamples = 64;
     static constexpr float kDeClickRampScale = 128.0f;
+    static constexpr float kIntraBlockDeClickThreshold = 0.30f;
+    static constexpr int kIntraBlockDeClickMinRampSamples = 8;
+    static constexpr int kIntraBlockDeClickMaxRampSamples = 32;
 
 
 
@@ -400,6 +409,7 @@ private:
     juce::AudioBuffer<float> stretchInterleavedOut;
     std::atomic<int> timeStretchUnderfills { 0 };
     int stretchFadeInRemaining = 0; // samples of fade-in left to apply on first stretch block
+    int stretchUnderfillFadeInRemaining = 0; // starts on the block after an underfill tail
     std::atomic<bool> stretcherNeedsReset { false }; // deferred reset flag for thread safety
     bool lastBlockUsedStretch = false; // track mode transitions between repitch/stretch
 
@@ -522,6 +532,8 @@ private:
     void snapshotStretchOutputRing();
     void applyStretchOutputCrossfade(juce::AudioBuffer<float>& outputBuffer, int numSamples);
     void applyDeClick(juce::AudioBuffer<float>& outputBuffer);
+    void applyIntraBlockDeClick(juce::AudioBuffer<float>& outputBuffer);
+    void inspectRawDiscontinuities(const juce::AudioBuffer<float>& outputBuffer);
     double getSliceStartPosition(int sliceIndex, int fileLengthSamples) const;
     double getSliceEndPosition(int sliceIndex, int fileLengthSamples) const;
 

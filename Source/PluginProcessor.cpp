@@ -213,6 +213,7 @@ void BufferTestAudioProcessor::changeProgramName (int, const juce::String&)
 void BufferTestAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     app.bufferManager.prepare(sampleRate, samplesPerBlock);
+    app.prepareDSP(sampleRate, samplesPerBlock);
 
     // §6.1  Pre-allocate per-block scratch buffer used in processBlock to avoid
     // heap allocation on the audio thread.  2 channels covers stereo output.

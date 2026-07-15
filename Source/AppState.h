@@ -51,13 +51,21 @@ struct AppState : public ModifierSchedulerListener
         // Hook per-buffer processor into AudioBufferManager to apply strip DSP (e.g., reverb)
         bufferManager.setPerBufferProcessor([this](int idx, juce::AudioBuffer<float>& temp, double sampleRate){
             if (!juce::isPositiveAndBelow(idx, channelStrips.size())) return;
-            // Ensure DSP prepared (block size from temp buffer)
-            channelStrips[idx]->prepareDSP(sampleRate, temp.getNumSamples());
+            juce::ignoreUnused(sampleRate);
             // Update envelopes were advanced per block already; process with current params
             channelStrips[idx]->processDSP(temp);
         });
 
         scheduler.addListener(this);
+    }
+
+    // Host lifecycle hook. Must be called before audio processing starts so
+    // ChannelStrip's delay, chorus, and pre-delay buffers never allocate in a
+    // real-time callback.
+    void prepareDSP(double sampleRate, int samplesPerBlock)
+    {
+        for (auto* strip : channelStrips)
+            strip->prepareDSP(sampleRate, samplesPerBlock);
     }
     // Parts API
     void setActivePart(int partIndex)

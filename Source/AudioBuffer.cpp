@@ -303,9 +303,17 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
         applyTransitionFade(outputBuffer);
 
     // Final safety net for residual block-boundary steps from stacked
-    // modifiers.  This runs after structural transition crossfades, so both
-    // the output ring and the next transition cache retain the corrected audio.
+    // modifiers. Discontinuity counters deliberately inspect this raw signal
+    // first, so the debug panel remains an honest view of underlying faults.
+#if JUCE_DEBUG
+    if (tearingDebugEnabled.load())
+        inspectRawDiscontinuities(outputBuffer);
+#endif
+
+    // These run after structural transition crossfades, so both the output
+    // ring and the next transition cache retain the corrected audio.
     applyDeClick(outputBuffer);
+    applyIntraBlockDeClick(outputBuffer);
 
     // Feed the output ring so future transitions have pre-transition audio to
     // fade from.  Written in BOTH playback modes (repitch used to skip this).
@@ -428,44 +436,6 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
                 if (TearingDebug::isClipped(sample))
                 {
                     tearingStats.clippedSamples.fetch_add(1, std::memory_order_relaxed);
-                }
-                
-                // Check for discontinuity with multiple severity levels
-                if (i > 0 || (ch < 2 && std::abs(lastOutputSample[ch]) > 1.0e-10f))
-                {
-                    const auto level = TearingDebug::getDiscontinuityLevel(lastValid, sample);
-                    if (level != TearingDebug::DiscontinuityLevel::None)
-                    {
-                        tearingStats.lastTearingEventTime.store(juce::Time::getMillisecondCounterHiRes());
-                        const float delta = std::abs(sample - lastValid);
-                        
-                        switch (level)
-                        {
-                            case TearingDebug::DiscontinuityLevel::Major:
-                                tearingStats.discontinuities.fetch_add(1, std::memory_order_relaxed);
-                                DBG("[AudioBuffer " + juce::String(bufferIndex) + "] TEARING [MAJOR]: Discontinuity ch="
-                                    + juce::String(ch) + " idx=" + juce::String(i)
-                                    + " prev=" + juce::String(lastValid, 4) + " curr=" + juce::String(sample, 4)
-                                    + " delta=" + juce::String(delta, 4));
-                                break;
-                            case TearingDebug::DiscontinuityLevel::Medium:
-                                tearingStats.mediumDiscontinuities.fetch_add(1, std::memory_order_relaxed);
-                                DBG("[AudioBuffer " + juce::String(bufferIndex) + "] TEARING [MEDIUM]: Discontinuity ch="
-                                    + juce::String(ch) + " idx=" + juce::String(i)
-                                    + " prev=" + juce::String(lastValid, 4) + " curr=" + juce::String(sample, 4)
-                                    + " delta=" + juce::String(delta, 4));
-                                break;
-                            case TearingDebug::DiscontinuityLevel::Minor:
-                                tearingStats.minorDiscontinuities.fetch_add(1, std::memory_order_relaxed);
-                                DBG("[AudioBuffer " + juce::String(bufferIndex) + "] TEARING [MINOR]: Discontinuity ch="
-                                    + juce::String(ch) + " idx=" + juce::String(i)
-                                    + " prev=" + juce::String(lastValid, 4) + " curr=" + juce::String(sample, 4)
-                                    + " delta=" + juce::String(delta, 4));
-                                break;
-                            default:
-                                break;
-                        }
-                    }
                 }
                 
                 // Track consecutive zeros
@@ -1048,6 +1018,7 @@ void AudioBuffer::setLoadedAudioData(LoadedAudioData::Ptr newData)
     stretcherNeedsReset.store(false);
     lastBlockUsedStretch = false;
     stretchFadeInRemaining = 0;
+    stretchUnderfillFadeInRemaining = 0;
     stretcher.reset();
     stretchSmoother.setCurrentAndTargetValue(1.0);
     speedMagSmoother.setCurrentAndTargetValue(1.0);
@@ -1081,6 +1052,8 @@ void AudioBuffer::play()
         consecutiveZeroSamples = 0;
         lastOutputSample[0] = 0.0f;
         lastOutputSample[1] = 0.0f;
+        lastRawOutputSample[0] = 0.0f;
+        lastRawOutputSample[1] = 0.0f;
         lastBlockRms[0] = 0.0f;
         lastBlockRms[1] = 0.0f;
         lastBlockDcOffset[0] = 0.0f;
@@ -1293,6 +1266,7 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         stretcherPrepared = false;
         stretcherPrimed = false;
         stretchFadeInRemaining = 0;
+        stretchUnderfillFadeInRemaining = 0;
         // §12: Reset lookahead state on pipeline reset.
         resetLookaheadState();
         // §2.2A  Invalidate block-resampler state on pipeline resets so the
@@ -2276,6 +2250,24 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         stretchFadeInRemaining -= fadeLen;
     }
 
+    // An underfilled block fades its tail to silence. Start the following
+    // block with a short equal-power fade-in so silence cannot jump directly
+    // to full-scale output before the boundary de-clicker gets involved.
+    if (stretchUnderfillFadeInRemaining > 0 && framesWritten > 0)
+    {
+        const int fadeLen = juce::jmin(stretchUnderfillFadeInRemaining, framesWritten);
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            float* out = outputBuffer.getWritePointer(ch);
+            for (int i = 0; i < fadeLen; ++i)
+            {
+                const float t = (float) (i + 1) / (float) (fadeLen + 1);
+                out[i] *= std::sin(t * juce::MathConstants<float>::halfPi);
+            }
+        }
+        stretchUnderfillFadeInRemaining -= fadeLen;
+    }
+
     // T8 (revised for BUG 7): When a SoundTouch reset occurred this block
     // (direction flip, param change while already in stretch mode), signal
     // processBlock to run the unified multi-block transition fade.  The fade
@@ -2324,6 +2316,7 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         }
 
         timeStretchUnderfills.fetch_add (1, std::memory_order_relaxed);
+        stretchUnderfillFadeInRemaining = juce::jmax(1, (int) (hostSampleRate * 0.002));
 #if JUCE_DEBUG
         // T10: Log underruns.
         DBG ("[AudioBuffer " + juce::String(bufferIndex) + "] SoundTouch UNDERRUN: wrote "
@@ -2857,6 +2850,84 @@ void AudioBuffer::applyDeClick(juce::AudioBuffer<float>& outputBuffer)
         }
 
         deClickLastSample[ch] = data[numSamples - 1];
+    }
+}
+
+void AudioBuffer::applyIntraBlockDeClick(juce::AudioBuffer<float>& outputBuffer)
+{
+    if (!deClickIntraBlockEnabled.load(std::memory_order_relaxed))
+        return;
+
+    const int numSamples = outputBuffer.getNumSamples();
+    const int numChannels = juce::jmin(outputBuffer.getNumChannels(), 2);
+    if (numSamples < 2 || numChannels <= 0)
+        return;
+
+    // This is intentionally opt-in: it detects only major within-block steps
+    // and applies the falling half of a Hann window as a local correction.
+    // The correction begins at the offending sample and decays to zero, which
+    // avoids a hard splice while limiting transient softening to 8–32 samples.
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        float* data = outputBuffer.getWritePointer(ch);
+        for (int i = 1; i < numSamples; ++i)
+        {
+            const float step = data[i] - data[i - 1];
+            if (std::abs(step) <= kIntraBlockDeClickThreshold)
+                continue;
+
+            const int rampSamples = juce::jlimit(
+                kIntraBlockDeClickMinRampSamples,
+                kIntraBlockDeClickMaxRampSamples,
+                (int) std::lround(std::abs(step) * kDeClickRampScale));
+            const int samplesToCorrect = juce::jmin(rampSamples, numSamples - i);
+            for (int j = 0; j < samplesToCorrect; ++j)
+            {
+                const float t = (float) (j + 1) / (float) (samplesToCorrect + 1);
+                const float hannTail = 0.5f * (1.0f + std::cos(juce::MathConstants<float>::pi * t));
+                data[i + j] -= step * hannTail;
+            }
+            i += samplesToCorrect - 1;
+        }
+    }
+}
+
+void AudioBuffer::inspectRawDiscontinuities(const juce::AudioBuffer<float>& outputBuffer)
+{
+    const int numSamples = outputBuffer.getNumSamples();
+    const int numChannels = juce::jmin(outputBuffer.getNumChannels(), 2);
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        const float* data = outputBuffer.getReadPointer(ch);
+        float previous = lastRawOutputSample[ch];
+        for (int i = 0; i < numSamples; ++i)
+        {
+            const float sample = data[i];
+            if (i > 0 || std::abs(previous) > 1.0e-10f)
+            {
+                const auto level = TearingDebug::getDiscontinuityLevel(previous, sample);
+                if (level != TearingDebug::DiscontinuityLevel::None)
+                {
+                    tearingStats.lastTearingEventTime.store(juce::Time::getMillisecondCounterHiRes());
+                    switch (level)
+                    {
+                        case TearingDebug::DiscontinuityLevel::Major:
+                            tearingStats.discontinuities.fetch_add(1, std::memory_order_relaxed);
+                            break;
+                        case TearingDebug::DiscontinuityLevel::Medium:
+                            tearingStats.mediumDiscontinuities.fetch_add(1, std::memory_order_relaxed);
+                            break;
+                        case TearingDebug::DiscontinuityLevel::Minor:
+                            tearingStats.minorDiscontinuities.fetch_add(1, std::memory_order_relaxed);
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            }
+            previous = sample;
+        }
+        lastRawOutputSample[ch] = previous;
     }
 }
 

@@ -92,7 +92,10 @@ BufferTestAudioProcessor::BufferTestAudioProcessor()
              == SessionSettings::kNumModifierTypes);
 }
 
-BufferTestAudioProcessor::~BufferTestAudioProcessor() = default;
+BufferTestAudioProcessor::~BufferTestAudioProcessor()
+{
+    resourcesPrepared.store (false, std::memory_order_release);
+}
 
 void BufferTestAudioProcessor::requestPlayAll()
 {
@@ -212,6 +215,8 @@ void BufferTestAudioProcessor::changeProgramName (int, const juce::String&)
 
 void BufferTestAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    resourcesPrepared.store (false, std::memory_order_release);
+
     app.bufferManager.prepare(sampleRate, samplesPerBlock);
 
     // §6.1  Pre-allocate per-block scratch buffer used in processBlock to avoid
@@ -230,10 +235,14 @@ void BufferTestAudioProcessor::prepareToPlay (double sampleRate, int samplesPerB
     // Some hosts may call setStateInformation before prepareToPlay; reload on the audio thread.
     if (pendingRestoreReload.exchange(false))
         reloadBuffersFromPadPaths();
+
+    resourcesPrepared.store (true, std::memory_order_release);
 }
 
 void BufferTestAudioProcessor::releaseResources()
 {
+    resourcesPrepared.store (false, std::memory_order_release);
+
     // Check if there are pad paths that need reloading before killing jobs.
     // releaseResources kills background loader threads, so we must re-arm
     // the reload flag so that the next prepareToPlay / processBlock cycle
@@ -292,6 +301,12 @@ bool BufferTestAudioProcessor::isBusesLayoutSupported (const BusesLayout& layout
 void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
+
+    if (! resourcesPrepared.load (std::memory_order_acquire))
+    {
+        buffer.clear();
+        return;
+    }
 
     // Process MIDI input
     if (!midi.isEmpty())

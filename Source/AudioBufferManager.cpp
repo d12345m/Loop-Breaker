@@ -134,13 +134,9 @@ void AudioBufferManager::releaseResources()
     // Ensure no background jobs are still decoding.
     loaderPool.removeAllJobs(true, 5000);
 
-    for (auto& buffer : buffers)
-    {
-        buffer->releaseResources();
-    }
-    
-    mixBuffer.setSize(0, 0);
-    tempBuffer.setSize(0, 0);
+    // Some AU hosts issue a final render callback while releaseResources() is
+    // in progress. The processor gates that callback to silence, while these
+    // buffers remain valid until the next prepare or processor destruction.
 }
 
 //==============================================================================

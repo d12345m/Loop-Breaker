@@ -170,6 +170,10 @@ private:
     std::array<juce::AudioBuffer<float>, AudioBufferManager::MAX_BUFFERS> perBufferScratch;
     RealtimeThreadPool threadPool { 3 };  // 3 workers + audio thread = 4-way parallelism
 
+    // AU hosts can issue a final render callback during release/reconfiguration.
+    // Keep that callback silent rather than touching DSP state that is not prepared.
+    std::atomic<bool> resourcesPrepared { false };
+
     std::atomic<bool> transportPlaybackEnabled { true }; // user-facing enable/disable
     std::atomic<bool> startRequested { false };          // start on next audio block (or immediately if host already playing)
     std::atomic<bool> stopRequested { false };           // stop on next audio block

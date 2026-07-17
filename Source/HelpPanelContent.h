@@ -11,6 +11,7 @@
 #include <JuceHeader.h>
 #include "ThemeEngine.h"
 #include "ThemeFonts.h"
+#include "BuildInfo.h"
 
 class HelpPanelContent : public juce::Component
 {
@@ -382,6 +383,17 @@ private:
                 "the pad shows an error state and outputs silence.\n\n"
                 "- Use the Master Volume knob to compensate if the default -12 dB "
                 "per-pad headroom reduction makes the mix too quiet.";
+            contentHolder.sections.push_back(s);
+        }
+
+        // ---- Version / build info ----
+        {
+            Section s;
+            s.heading = "About";
+            s.table = {
+                { "Version",     LOOP_BREAKER_VERSION },
+                { "Built",       LOOP_BREAKER_BUILD_TIMESTAMP },
+            };
             contentHolder.sections.push_back(s);
         }
 

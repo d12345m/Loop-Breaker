@@ -10,6 +10,16 @@ import datetime
 
 OUTPUT_PATH = os.path.join(os.path.dirname(__file__), "Loop_Breaker_User_Manual.pdf")
 
+_VERSION_FILE = os.path.join(os.path.dirname(__file__), "VERSION")
+
+def _read_version() -> str:
+    """Return the release version from the VERSION file, falling back to '1.0.0'."""
+    try:
+        with open(_VERSION_FILE) as _f:
+            return _f.read().strip()
+    except OSError:
+        return "1.0.0"
+
 
 class ManualPDF(FPDF):
     """Custom FPDF subclass for the Loop Breaker manual."""
@@ -207,7 +217,8 @@ def build_manual():
     pdf.set_font("Helvetica", "I", 9)
     pdf.set_text_color(150, 150, 150)
     today = datetime.date.today().strftime("%B %Y")
-    pdf.cell(0, 6, f"Manual Version 1.0  |  {today}", align="C", new_x="LMARGIN", new_y="NEXT")
+    _ver = _read_version()
+    pdf.cell(0, 6, f"v{_ver}  |  {today}", align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.cell(0, 6, "Copyright (c) 2025-2026 Glow Machine, LLC. All rights reserved.",
              align="C", new_x="LMARGIN", new_y="NEXT")
 

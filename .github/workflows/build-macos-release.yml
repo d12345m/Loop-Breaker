@@ -21,11 +21,16 @@ jobs:
           submodules: recursive
           fetch-depth: 0 # Needed for version tags
 
-      # ── Setup Build Environment ───────────────────────────────────────────
-      - name: Setup Xcode
-        uses: maxim-lobanov/setup-xcode@v1
+      # ── Setup Python for manual generation ────────────────────────────────
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          xcode-version: latest-stable
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: |
+          pip install fpdf2
 
       # ── Cache JUCE ────────────────────────────────────────────────────────
       - name: Cache JUCE
@@ -43,16 +48,17 @@ jobs:
           mv JUCE-* JUCE || mv juce-* JUCE || true
           rm juce.zip
 
-      # ── Build with CMake (VST3, AU, CLAP) ────────────────────────────────
+      # ── Build with CMake (VST3, AU) ──────────────────────────────────────
       - name: Configure CMake
         run: |
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DJUCE_DIR="${{ github.workspace }}/JUCE"
 
-      - name: Build all formats (VST3, AU, CLAP)
+      - name: Build VST3 and AU
         run: |
-          cmake --build build --config Release --parallel
+          cmake --build build --config Release --target LoopBreaker_VST3 --parallel
+          cmake --build build --config Release --target LoopBreaker_AU --parallel
 
       # ── Prepare builds for installer ──────────────────────────────────────
       - name: Copy builds to expected locations
@@ -60,29 +66,16 @@ jobs:
           # Create the directory structure expected by build_installer.sh
           mkdir -p Builds/MacOSX/build/Release
 
-          # Copy VST3 and AU from CMake output to Xcode-expected location
-          cp -R build/LoopBreaker_artefacts/Release/VST3/*.vst3 Builds/MacOSX/build/Release/ || true
-          cp -R build/LoopBreaker_artefacts/Release/AU/*.component Builds/MacOSX/build/Release/ || true
-
-          # CLAP stays in build/ as expected by the script
-          mkdir -p build/LoopBreaker_artefacts/Release/CLAP
-          cp -R build/LoopBreaker_artefacts/Release/CLAP/*.clap build/LoopBreaker_artefacts/Release/CLAP/ || true
-
+          cp -R build/LoopBreaker_artefacts/Release/VST3/*.vst3 Builds/MacOSX/build/Release/
+          cp -R build/LoopBreaker_artefacts/Release/AU/*.component Builds/MacOSX/build/Release/
+          
           # Verify builds exist
-          echo "VST3 builds:"
-          ls -la build/LoopBreaker_artefacts/Release/VST3/ || echo "No VST3 found"
-          echo "AU builds:"
-          ls -la build/LoopBreaker_artefacts/Release/AU/ || echo "No AU found"
-          echo "CLAP builds:"
-          ls -la build/LoopBreaker_artefacts/Release/CLAP/ || echo "No CLAP found"
-          echo "Xcode-compatible location:"
-          ls -la Builds/MacOSX/build/Release/ || echo "Nothing copied yet"
-
-      # ── Build Installer ───────────────────────────────────────────────────
-      - name: Build macOS Installer
-        run: |
-          # Update CMAKE_BUILD_DIR to point to our build directory
-          bash Installer/build_installer.sh --skip-build
+          echo "✅ VST3 builds:"
+          ls -la build/LoopBreaker_artefacts/Release/VST3/
+          echo "✅ AU builds:"
+          ls -la build/LoopBreaker_artefacts/Release/AU/
+          echo "✅ Xcode-compatible location:"
+          ls -la Builds/MacOSX/build/Release/sh Installer/build_installer.sh --skip-build
         env:
           CMAKE_BUILD_DIR: ${{ github.workspace }}/build
 
@@ -130,7 +123,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # ── Upload Build Artifact (backup) ────────────────────────────────────
-      - name: Upload installer as workflow artifact
+      - name: User Manual PDFas workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: LoopBreaker-macOS-Installer

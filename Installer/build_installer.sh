@@ -94,10 +94,6 @@ if [ "$SKIP_BUILD" = false ]; then
         build \
         2>&1 | tail -5
     cd "$PROJECT_ROOT"
-
-    info "Building ${PLUGIN_NAME} CLAP (Release) via CMake..."
-    cmake -S "$PROJECT_ROOT" -B "$CMAKE_BUILD_DIR" -DCMAKE_BUILD_TYPE=Release 2>&1 | tail -5
-    cmake --build "$CMAKE_BUILD_DIR" --target LoopBreaker_CLAP --config Release 2>&1 | tail -10
 else
     info "Skipping build (--skip-build)"
 fi
@@ -114,18 +110,11 @@ if [ ! -d "$AU_BUNDLE" ]; then
 fi
 info "Found AU bundle: $AU_BUNDLE"
 
-# Verify the CLAP bundle exists
-if [ ! -d "$CLAP_BUNDLE" ]; then
-    fail "CLAP bundle not found at: $CLAP_BUNDLE"
-fi
-info "Found CLAP bundle: $CLAP_BUNDLE"
-
 # ─── Step 2: Prepare Staging Area ────────────────────────────────────────────
 info "Preparing staging area..."
 rm -rf "$STAGING_DIR" "$OUTPUT_DIR"
 mkdir -p "$STAGING_DIR/vst3-payload/Library/Audio/Plug-Ins/VST3"
 mkdir -p "$STAGING_DIR/au-payload/Library/Audio/Plug-Ins/Components"
-mkdir -p "$STAGING_DIR/clap-payload/Library/Audio/Plug-Ins/CLAP"
 mkdir -p "$OUTPUT_DIR"
 
 # Copy the VST3 bundle into the payload
@@ -135,10 +124,6 @@ info "Staged VST3 to /Library/Audio/Plug-Ins/VST3/${PLUGIN_FILENAME}.vst3"
 # Copy the AU bundle into the payload
 cp -R "$AU_BUNDLE" "$STAGING_DIR/au-payload/Library/Audio/Plug-Ins/Components/"
 info "Staged AU to /Library/Audio/Plug-Ins/Components/${PLUGIN_FILENAME}.component"
-
-# Copy the CLAP bundle into the payload
-cp -R "$CLAP_BUNDLE" "$STAGING_DIR/clap-payload/Library/Audio/Plug-Ins/CLAP/"
-info "Staged CLAP to /Library/Audio/Plug-Ins/CLAP/Loop Breaker.clap"
 
 # ─── Step 3: Build Component Package ─────────────────────────────────────────
 info "Building VST3 component package..."
@@ -157,14 +142,6 @@ pkgbuild \
     --install-location "/" \
     "$AU_COMPONENT_PKG"
 
-info "Building CLAP component package..."
-pkgbuild \
-    --root "$STAGING_DIR/clap-payload" \
-    --identifier "${BUNDLE_ID}.clap" \
-    --version "$VERSION" \
-    --install-location "/" \
-    "$CLAP_COMPONENT_PKG"
-
 # ─── Step 4: Generate Distribution XML ───────────────────────────────────────
 # The distribution.xml is checked into the repo, but we regenerate a version-
 # stamped copy in the staging dir if the template doesn't exist yet.
@@ -181,20 +158,15 @@ if [ ! -f "$DISTRIBUTION_XML" ]; then
     <conclusion file="conclusion.html"/>
     <choices-outline>
         <line choice="vst3"/>
-        <line choice="clap"/>
         <line choice="au"/>
     </choices-outline>
     <choice id="vst3" title="${PLUGIN_NAME} VST3">
         <pkg-ref id="${BUNDLE_ID}.vst3"/>
     </choice>
-    <choice id="clap" title="${PLUGIN_NAME} CLAP">
-        <pkg-ref id="${BUNDLE_ID}.clap"/>
-    </choice>
     <choice id="au" title="${PLUGIN_NAME} AU">
         <pkg-ref id="${BUNDLE_ID}.au"/>
     </choice>
     <pkg-ref id="${BUNDLE_ID}.vst3" version="${VERSION}" onConclusion="none">LoopBreakerVST3.pkg</pkg-ref>
-    <pkg-ref id="${BUNDLE_ID}.clap" version="${VERSION}" onConclusion="none">LoopBreakerCLAP.pkg</pkg-ref>
     <pkg-ref id="${BUNDLE_ID}.au" version="${VERSION}" onConclusion="none">LoopBreakerAU.pkg</pkg-ref>
 </installer-gui-script>
 DISTEOF

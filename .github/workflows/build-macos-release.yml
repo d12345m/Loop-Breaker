@@ -186,3 +186,7 @@ jobs:
           name: LoopBreaker-macOS-Installer
           path: Installer/output/LoopBreaker-macOS-Installer.zip
           if-no-files-found: error
+
+      # ── Trigger Netlify rebuild ───────────────────────────────────────────
+      - name: Trigger Netlify rebuild
+        run: curl -X POST -d '{}' "${{ secrets.NETLIFY_BUILD_HOOK_URL }}"

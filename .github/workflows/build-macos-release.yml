@@ -65,8 +65,8 @@ jobs:
           # Create the directory structure expected by build_installer.sh
           mkdir -p Builds/MacOSX/build/Release
 
-          cp -R build/LoopBreaker_artefacts/Release/VST3/*.vst3 Builds/MacOSX/build/Release/
-          cp -R build/LoopBreaker_artefacts/Release/AU/*.component Builds/MacOSX/build/Release/
+          cp -R "build/LoopBreaker_artefacts/Release/VST3/Loop Breaker.vst3" Builds/MacOSX/build/Release/LoopBreaker.vst3
+          cp -R "build/LoopBreaker_artefacts/Release/AU/Loop Breaker.component" Builds/MacOSX/build/Release/LoopBreaker.component
 
           # Verify builds exist
           echo "✅ VST3 builds:"

@@ -59,15 +59,15 @@ jobs:
         run: |
           # Create the directory structure expected by build_installer.sh
           mkdir -p Builds/MacOSX/build/Release
-          
+
           # Copy VST3 and AU from CMake output to Xcode-expected location
           cp -R build/LoopBreaker_artefacts/Release/VST3/*.vst3 Builds/MacOSX/build/Release/ || true
           cp -R build/LoopBreaker_artefacts/Release/AU/*.component Builds/MacOSX/build/Release/ || true
-          
+
           # CLAP stays in build/ as expected by the script
           mkdir -p build/LoopBreaker_artefacts/Release/CLAP
           cp -R build/LoopBreaker_artefacts/Release/CLAP/*.clap build/LoopBreaker_artefacts/Release/CLAP/ || true
-          
+
           # Verify builds exist
           echo "VST3 builds:"
           ls -la build/LoopBreaker_artefacts/Release/VST3/ || echo "No VST3 found"

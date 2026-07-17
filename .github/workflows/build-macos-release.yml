@@ -74,7 +74,12 @@ jobs:
           echo "✅ AU builds:"
           ls -la build/LoopBreaker_artefacts/Release/AU/
           echo "✅ Xcode-compatible location:"
-          ls -la Builds/MacOSX/build/Release/sh Installer/build_installer.sh --skip-build
+          ls -la Builds/MacOSX/build/Release/
+
+      # ── Build Installer ───────────────────────────────────────────────────
+      - name: Build macOS Installer
+        run: |
+          bash Installer/build_installer.sh --skip-build
         env:
           CMAKE_BUILD_DIR: ${{ github.workspace }}/build
 

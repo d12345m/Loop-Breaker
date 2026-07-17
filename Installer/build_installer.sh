@@ -196,9 +196,19 @@ if [ "$NOTARIZE" = true ]; then
         fail "Notarization requires --sign"
     fi
     info "Submitting for notarization..."
-    xcrun notarytool submit "$FINAL_PKG" \
-        --keychain-profile "notarization-profile" \
-        --wait
+    # Prefer explicit env var credentials (CI) over a stored keychain profile (local).
+    # Set APPLE_ID, APPLE_TEAM_ID, and APPLE_NOTARY_PASSWORD to use env var mode.
+    if [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ] && [ -n "${APPLE_NOTARY_PASSWORD:-}" ]; then
+        xcrun notarytool submit "$FINAL_PKG" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_NOTARY_PASSWORD" \
+            --wait
+    else
+        xcrun notarytool submit "$FINAL_PKG" \
+            --keychain-profile "notarization-profile" \
+            --wait
+    fi
     info "Stapling notarization ticket..."
     xcrun stapler staple "$FINAL_PKG"
 fi

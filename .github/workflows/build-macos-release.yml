@@ -12,14 +12,14 @@ on:
 jobs:
   build-macos-installer:
     runs-on: macos-latest
-    
+
     steps:
       # ── Checkout ──────────────────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: recursive
-          fetch-depth: 0  # Needed for version tags
+          fetch-depth: 0 # Needed for version tags
 
       # ── Setup Build Environment ───────────────────────────────────────────
       - name: Setup Xcode
@@ -67,21 +67,21 @@ jobs:
           name: Loop Breaker - Latest Build
           body: |
             # Loop Breaker - macOS Installer
-            
+
             **Automated build from commit:** ${{ github.sha }}
             **Build date:** ${{ github.event.head_commit.timestamp }}
-            
+
             ## Installation
             1. Download `LoopBreaker-macOS-Installer.zip`
             2. Extract the zip file
             3. Run `LoopBreaker-Installer.pkg`
             4. Follow the installation wizard
-            
+
             ## What's Included
             - Loop Breaker VST3
             - Loop Breaker AU (Audio Unit)
             - Loop Breaker CLAP
-            
+
             ---
             Latest commit: ${{ github.event.head_commit.message }}
           files: |

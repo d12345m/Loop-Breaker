@@ -15,6 +15,7 @@ permissions:
 jobs:
   build-macos-installer:
     runs-on: macos-latest
+    environment: Production
 
     steps:
       # ── Checkout ──────────────────────────────────────────────────────────

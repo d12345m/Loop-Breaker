@@ -2,5 +2,5 @@
 // Re-generated on every build.  Commit VERSION, not this file.
 #pragma once
 
-#define LOOP_BREAKER_VERSION         "1.0.0"
-#define LOOP_BREAKER_BUILD_TIMESTAMP "Jul 17 2026  01:43 PM EDT"
+#define LOOP_BREAKER_VERSION         "1.0.6"
+#define LOOP_BREAKER_BUILD_TIMESTAMP "Jul 17 2026  01:59 PM EDT"

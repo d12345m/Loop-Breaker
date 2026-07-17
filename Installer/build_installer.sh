@@ -17,11 +17,11 @@ PLUGIN_NAME="Loop Breaker"
 PLUGIN_FILENAME="LoopBreaker"                      # .vst3 bundle name
 BUNDLE_ID="com.glowmachineaudio.LoopBreaker"
 COMPANY="GlowMachineAudio"
-VERSION="1.0.0"
 
-# Paths (relative to project root)
+# Read version from project-root VERSION file (single source of truth)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+VERSION="$(cat "$PROJECT_ROOT/VERSION" | tr -d '[:space:]')"
 XCODE_PROJECT="$PROJECT_ROOT/Builds/MacOSX/${PLUGIN_FILENAME}.xcodeproj"
 BUILD_DIR="$PROJECT_ROOT/Builds/MacOSX/build/Release"
 VST3_BUNDLE="$BUILD_DIR/${PLUGIN_FILENAME}.vst3"
@@ -33,11 +33,11 @@ CLAP_BUNDLE="$CMAKE_BUILD_DIR/LoopBreaker_artefacts/Release/CLAP/Loop Breaker.cl
 INSTALLER_DIR="$SCRIPT_DIR"
 RESOURCES_DIR="$INSTALLER_DIR/resources"
 STAGING_DIR="$INSTALLER_DIR/staging"
+STAGED_RESOURCES_DIR="$STAGING_DIR/resources"
 OUTPUT_DIR="$INSTALLER_DIR/output"
 VST3_COMPONENT_PKG="$STAGING_DIR/LoopBreakerVST3.pkg"
 AU_COMPONENT_PKG="$STAGING_DIR/LoopBreakerAU.pkg"
 CLAP_COMPONENT_PKG="$STAGING_DIR/LoopBreakerCLAP.pkg"
-DISTRIBUTION_XML="$INSTALLER_DIR/distribution.xml"
 
 SKIP_BUILD=false
 SIGN_IDENTITY=""
@@ -117,6 +117,12 @@ mkdir -p "$STAGING_DIR/vst3-payload/Library/Audio/Plug-Ins/VST3"
 mkdir -p "$STAGING_DIR/au-payload/Library/Audio/Plug-Ins/Components"
 mkdir -p "$OUTPUT_DIR"
 
+# Stage a version-patched copy of the installer resources (welcome.html, etc.)
+# so we never modify the tracked source files.
+cp -R "$RESOURCES_DIR" "$STAGED_RESOURCES_DIR"
+sed -i '' "s/Version [0-9][0-9.A-Za-z]*/Version ${VERSION}/" "$STAGED_RESOURCES_DIR/welcome.html"
+info "Staged resources with version ${VERSION}"
+
 # Copy the VST3 bundle into the payload
 cp -R "$VST3_BUNDLE" "$STAGING_DIR/vst3-payload/Library/Audio/Plug-Ins/VST3/"
 info "Staged VST3 to /Library/Audio/Plug-Ins/VST3/${PLUGIN_FILENAME}.vst3"
@@ -143,11 +149,9 @@ pkgbuild \
     "$AU_COMPONENT_PKG"
 
 # ─── Step 4: Generate Distribution XML ───────────────────────────────────────
-# The distribution.xml is checked into the repo, but we regenerate a version-
-# stamped copy in the staging dir if the template doesn't exist yet.
-if [ ! -f "$DISTRIBUTION_XML" ]; then
-    warn "distribution.xml not found — generating default"
-    cat > "$DISTRIBUTION_XML" <<DISTEOF
+# Always regenerate a version-stamped distribution.xml in the staging dir.
+STAGED_DISTRIBUTION_XML="$STAGING_DIR/distribution.xml"
+cat > "$STAGED_DISTRIBUTION_XML" <<DISTEOF
 <?xml version="1.0" encoding="UTF-8"?>
 <installer-gui-script minSpecVersion="2">
     <title>${PLUGIN_NAME}</title>
@@ -170,15 +174,15 @@ if [ ! -f "$DISTRIBUTION_XML" ]; then
     <pkg-ref id="${BUNDLE_ID}.au" version="${VERSION}" onConclusion="none">LoopBreakerAU.pkg</pkg-ref>
 </installer-gui-script>
 DISTEOF
-fi
+info "Generated distribution.xml for v${VERSION}"
 
 # ─── Step 5: Build Product Archive ───────────────────────────────────────────
 FINAL_PKG="$STAGING_DIR/LoopBreaker-macOS.pkg"
 
 info "Building product installer..."
 PRODUCTBUILD_ARGS=(
-    --distribution "$DISTRIBUTION_XML"
-    --resources "$RESOURCES_DIR"
+    --distribution "$STAGED_DISTRIBUTION_XML"
+    --resources "$STAGED_RESOURCES_DIR"
     --package-path "$STAGING_DIR"
     "$FINAL_PKG"
 )

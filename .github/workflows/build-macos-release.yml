@@ -1,0 +1,101 @@
+# ──────────────────────────────────────────────────────────────────────────────
+#  Build Loop Breaker macOS Installer & Publish as Release
+#  Triggered on push to main — creates/updates a GitHub release with the installer
+# ──────────────────────────────────────────────────────────────────────────────
+name: Build macOS Installer
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  build-macos-installer:
+    runs-on: macos-latest
+    
+    steps:
+      # ── Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0  # Needed for version tags
+
+      # ── Setup Build Environment ───────────────────────────────────────────
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      # ── Build VST3 & AU (Release) ─────────────────────────────────────────
+      - name: Build VST3 (Release)
+        run: |
+          cd Builds/MacOSX
+          xcodebuild -project LoopBreaker.xcodeproj \
+            -scheme "LoopBreaker - VST3" \
+            -configuration Release \
+            build
+
+      - name: Build AU (Release)
+        run: |
+          cd Builds/MacOSX
+          xcodebuild -project LoopBreaker.xcodeproj \
+            -scheme "LoopBreaker - AU" \
+            -configuration Release \
+            build
+
+      # ── Build Installer ───────────────────────────────────────────────────
+      - name: Build macOS Installer
+        run: |
+          bash Installer/build_installer.sh --skip-build
+
+      # ── Verify Installer Output ──────────────────────────────────────────
+      - name: Verify installer zip exists
+        run: |
+          if [ ! -f "Installer/output/LoopBreaker-macOS-Installer.zip" ]; then
+            echo "❌ Installer zip not found!"
+            exit 1
+          fi
+          echo "✅ Installer zip created successfully"
+          ls -lh Installer/output/LoopBreaker-macOS-Installer.zip
+
+      # ── Create/Update Release ─────────────────────────────────────────────
+      - name: Create or Update Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: latest
+          name: Loop Breaker - Latest Build
+          body: |
+            # Loop Breaker - macOS Installer
+            
+            **Automated build from commit:** ${{ github.sha }}
+            **Build date:** ${{ github.event.head_commit.timestamp }}
+            
+            ## Installation
+            1. Download `LoopBreaker-macOS-Installer.zip`
+            2. Extract the zip file
+            3. Run `LoopBreaker-Installer.pkg`
+            4. Follow the installation wizard
+            
+            ## What's Included
+            - Loop Breaker VST3
+            - Loop Breaker AU (Audio Unit)
+            - Loop Breaker CLAP
+            
+            ---
+            Latest commit: ${{ github.event.head_commit.message }}
+          files: |
+            Installer/output/LoopBreaker-macOS-Installer.zip
+          draft: false
+          prerelease: false
+          overwrite: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Upload Build Artifact (backup) ────────────────────────────────────
+      - name: Upload installer as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LoopBreaker-macOS-Installer
+          path: Installer/output/LoopBreaker-macOS-Installer.zip
+          if-no-files-found: error

@@ -220,7 +220,7 @@ fi
 # ─── Step 7: Generate Manual ──────────────────────────────────────────────────
 info "Generating user manual PDF..."
 MANUAL_SCRIPT="$PROJECT_ROOT/generate_manual.py"
-MANUAL_PDF="$PROJECT_ROOT/Loop_Breaker_User_Manual.pdf"
+MANUAL_PDF="$PROJECT_ROOT/docs/user-guide/Loop_Breaker_User_Manual.pdf"
 if [ -f "$MANUAL_SCRIPT" ]; then
     python3 "$MANUAL_SCRIPT"
     if [ ! -f "$MANUAL_PDF" ]; then

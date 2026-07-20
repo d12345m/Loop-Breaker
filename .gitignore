@@ -3,3 +3,6 @@ build*/
 Installer/output/
 Installer/staging/
 JuceLibraryCode
+.DS_Store
+.venv/
+__pycache__/

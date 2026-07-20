@@ -8,7 +8,9 @@ from fpdf import FPDF
 import os
 import datetime
 
-OUTPUT_PATH = os.path.join(os.path.dirname(__file__), "Loop_Breaker_User_Manual.pdf")
+OUTPUT_PATH = os.path.join(
+    os.path.dirname(__file__), "docs", "user-guide", "Loop_Breaker_User_Manual.pdf"
+)
 
 _VERSION_FILE = os.path.join(os.path.dirname(__file__), "VERSION")
 
@@ -19,6 +21,9 @@ def _read_version() -> str:
             return _f.read().strip()
     except OSError:
         return "1.0.0"
+
+
+os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
 
 
 class ManualPDF(FPDF):

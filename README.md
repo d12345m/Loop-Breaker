@@ -2,6 +2,16 @@
 
 Loop Breaker is a JUCE-based audio instrument for transforming and performing with audio buffers. It supports variable-speed playback, time stretching, slicing, MIDI control, and VST3/AU/AUv3/CLAP plug-in targets.
 
+## How it works
+
+Loop Breaker works with up to eight audio buffers (pads). During playback, it periodically places a modifier in a queue. You can assign that modifier to a pad, or let Loop Breaker select an eligible pad automatically. Modifiers accumulate, allowing each loop to develop independently over time.
+
+Modifiers can change playback behavior or add processing. Playback modifiers include speed changes, reverse playback, time stretching, re-pitching, loop-part changes, and slice shuffling, arpeggiation, and repetition. Processing modifiers include reverb, delay, chorus, filters, granular effects, auto-pan, and tremolo. Parameters and onset timing are chosen as modifiers are applied.
+
+The probability system controls both the chance that each modifier type appears and the chance that a pad is selected automatically. These probability controls are exposed as automatable parameters and can be mapped to MIDI CC messages, so they can be changed from a controller, DAW automation, or a modulation source.
+
+Modifier-stack presets can be saved and recalled between DAW sessions, with MIDI note mappings available for preset recall. The plug-in also provides a main stereo mix plus eight optional stereo output buses, allowing each pad to be recorded, edited, and mixed separately in a DAW.
+
 ## Build
 
 Requirements: CMake 3.22 or later, a C++17 compiler, and a local JUCE checkout.
@@ -34,4 +44,4 @@ The [documentation index](docs/README.md) links to the user guide, DSP architect
 
 ## License
 
-This repository does not yet include a license. Add an explicit license file before accepting outside contributions or redistribution.
+Loop Breaker is licensed under the [GNU General Public License, version 3 or later](LICENSE).

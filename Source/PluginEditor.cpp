@@ -246,7 +246,7 @@ public:
 
             // Build glyph arrangement for precise clipping
             juce::GlyphArrangement glyphs;
-            const float textW = static_cast<float> (font.getStringWidth(logoText));
+            const float textW = juce::GlyphArrangement::getStringWidth(font, logoText);
             const float textX = brandArea.getX() + (brandArea.getWidth() - textW) * 0.5f;
             glyphs.addLineOfText(font, logoText, textX, brandArea.getY() + font.getAscent() + (brandArea.getHeight() - font.getHeight()) * 0.5f);
 
@@ -292,7 +292,7 @@ public:
             {
                 const juce::String loopStr("LOOP ");
                 const juce::String breakerStr("BREAKER");
-                const float loopW = static_cast<float> (font.getStringWidth(loopStr));
+                const float loopW = juce::GlyphArrangement::getStringWidth(font, loopStr);
 
                 g.setColour(Theme::accent());
                 g.drawText(loopStr, juce::Rectangle<float>(textX, brandArea.getY(), loopW, brandArea.getHeight()),

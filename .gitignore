@@ -2,7 +2,23 @@ Builds
 build*/
 Installer/output/
 Installer/staging/
+website/downloads/*.zip
 JuceLibraryCode
 .DS_Store
 .venv/
 __pycache__/
+
+# Local configuration and release-signing material. Keep `.env.example` tracked.
+.env
+.env.*
+!.env.example
+*.p12
+*.pfx
+*.pem
+*.key
+*.cer
+*.crt
+*.der
+*.mobileprovision
+*.provisionprofile
+*.keychain

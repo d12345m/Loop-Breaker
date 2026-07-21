@@ -469,7 +469,7 @@ bool MainAppComponent::isTransportRunning() const
 
 void MainAppComponent::saveProjectClicked()
 {
-    juce::File initialDir = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("BufferTestProjects");
+    juce::File initialDir = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("LoopBreakerProjects");
     initialDir.createDirectory();
     fileChooser = std::make_unique<juce::FileChooser>("Select project folder to save", initialDir, juce::String());
     auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories;
@@ -485,7 +485,7 @@ void MainAppComponent::saveProjectClicked()
 
 void MainAppComponent::loadProjectClicked()
 {
-    juce::File initialDir = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("BufferTestProjects");
+    juce::File initialDir = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("LoopBreakerProjects");
     initialDir.createDirectory();
     fileChooser = std::make_unique<juce::FileChooser>("Select project file (.json)", initialDir, "*.json");
     auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;

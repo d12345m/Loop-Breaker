@@ -1,7 +1,7 @@
 /*
   ==============================================================================
 
-    BufferTestIntegration.h
+    LoopBreakerIntegration.h
     
     Example showing how to integrate the AudioBufferProcessor into a larger project.
     This demonstrates the clean API and professional architecture.

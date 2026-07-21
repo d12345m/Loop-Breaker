@@ -1,4 +1,4 @@
-# Visual Design Overhaul — BufferTest Plugin
+# Visual Design Overhaul — Loop Breaker Plugin
 
 > **Status:** In Progress — Phase 1 Complete, Phase 2 Complete, Phase 3 Complete, Phase 4 Complete, Phase 5 Complete, Phase 6 Complete  
 > **Date:** 2025-02-27  

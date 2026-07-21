@@ -26,7 +26,7 @@ Legend:
 
 The project is pivoting from “iOS-first app” to “VST3 plugin-first”. Standalone and iOS targets are being retired; new work should prioritize plugin requirements:
 
-- [ ] Re-export/regenerate the macOS Xcode project from Projucer so old Standalone targets disappear (open BufferTest.jucer in Projucer and re-save/re-export)
+- [ ] Re-export/regenerate the macOS Xcode project from Projucer so old Standalone targets disappear (open LoopBreaker.jucer in Projucer and re-save/re-export)
 - [ ] Decide whether to delete standalone-only source files (e.g. Source/Main.cpp, Source/MainAppComponent.\*) or keep them in-repo but excluded from the build
 - [ ] Enable VST3 target in Projucer (.jucer)
 - [ ] Define plugin bus layout for multi-output (8 buffers -> 8 distinct DAW outputs)
@@ -274,7 +274,7 @@ Third-party alternatives popular in the JUCE community:
 **Decision (2026-02-18): Use [Moonbase.sh](https://moonbase.sh) as the licensing, storefront, and payment provider.** Rationale: turnkey end-to-end solution (storefront, RSA-signed license tokens, online/offline activation, trials, Merchant of Record with VAT handling). Free tier is sufficient during development. Avoids building and hosting a custom server backend.
 
 - [x] Decide licensing strategy → **Moonbase.sh**
-- [x] Create Moonbase account & set up product for BufferTest
+- [x] Create Moonbase account & set up product for Loop Breaker
 - [x] Integrate Moonbase SDK into the plugin (license validation on startup)
 - [x] Implement in-plugin activation UI (email/key entry overlay in plugin editor)
 - [x] Support offline license activation (Moonbase RSA-signed tokens)

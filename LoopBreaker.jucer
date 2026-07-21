@@ -2,8 +2,7 @@
 
 <JUCERPROJECT id="vFjAY7" name="LoopBreaker" projectType="audioplug" useAppConfig="0"
               addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1" companyName="Glow Machine Audio"
-              pluginName="Loop Breaker"
-              pluginDesc="Loop Breaker" pluginManufacturer="Glow Machine Audio"
+              pluginName="Loop Breaker" pluginDesc="Loop Breaker" pluginManufacturer="Glow Machine Audio"
               pluginManufacturerCode="GloM" pluginCode="LpBr" pluginIsSynth="1"
               pluginWantsMidiIn="1" pluginProducesMidiOut="0" pluginIsMidiEffectPlugin="0"
               pluginEditorRequiresKeys="0" pluginAUExportPrefix="LoopBreakerAU"
@@ -74,22 +73,21 @@
             file="Source/ThemeEngine.cpp"/>
       <FILE id="themeLookAndFeelH" name="ThemeLookAndFeel.h" compile="0"
             resource="0" file="Source/ThemeLookAndFeel.h"/>
-      <FILE id="animatorH" name="Animator.h" compile="0"
-            resource="0" file="Source/Animator.h"/>
+      <FILE id="animatorH" name="Animator.h" compile="0" resource="0" file="Source/Animator.h"/>
       <FILE id="backgroundAnimatorH" name="BackgroundAnimator.h" compile="0"
             resource="0" file="Source/BackgroundAnimator.h"/>
       <FILE id="settingsPanelH" name="SettingsPanelContent.h" compile="0"
             resource="0" file="Source/SettingsPanelContent.h"/>
-      <FILE id="themeFontsH" name="ThemeFonts.h" compile="0"
-            resource="0" file="Source/ThemeFonts.h"/>
+      <FILE id="themeFontsH" name="ThemeFonts.h" compile="0" resource="0"
+            file="Source/ThemeFonts.h"/>
       <FILE id="nodeClipDetectorH" name="NodeClipDetector.h" compile="0"
             resource="0" file="Source/NodeClipDetector.h"/>
       <FILE id="nodeClipDebugPanelH" name="NodeClipDebugPanel.h" compile="0"
             resource="0" file="Source/NodeClipDebugPanel.h"/>
     </GROUP>
     <GROUP id="{RESOURCES_GROUP}" name="Resources">
-      <FILE id="fontRajdhaniBold" name="Rajdhani-Bold.ttf" compile="0"
-            resource="1" file="Resources/Fonts/Rajdhani-Bold.ttf"/>
+      <FILE id="fontRajdhaniBold" name="Rajdhani-Bold.ttf" compile="0" resource="1"
+            file="Resources/Fonts/Rajdhani-Bold.ttf"/>
       <FILE id="fontRajdhaniRegular" name="Rajdhani-Regular.ttf" compile="0"
             resource="1" file="Resources/Fonts/Rajdhani-Regular.ttf"/>
       <FILE id="fontJetBrainsMono" name="JetBrainsMono-Regular.ttf" compile="0"
@@ -105,6 +103,8 @@
     <MODULE id="juce_audio_plugin_client" showAllCode="1" useLocalCopy="0"
             useGlobalPath="1"/>
     <MODULE id="juce_audio_processors" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_audio_processors_headless" showAllCode="1" useLocalCopy="0"
+            useGlobalPath="1"/>
     <MODULE id="juce_audio_utils" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_core" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_cryptography" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
@@ -115,10 +115,10 @@
     <MODULE id="juce_gui_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_gui_extra" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
   </MODULES>
-  <JUCEOPTIONS JUCE_STRICT_REFCOUNTEDPOINTER="1"/>
+  <JUCEOPTIONS JUCE_STRICT_REFCOUNTEDPOINTER="1" JUCE_IGNORE_VST3_MISMATCHED_PARAMETER_ID_WARNING="1"/>
   <EXPORTFORMATS>
     <XCODE_MAC targetFolder="Builds/MacOSX" bundleIdentifier="com.glowmachineaudio.LoopBreaker"
-              extraCompilerFlags="-I$(SRCROOT)/../../Submodules">
+               extraCompilerFlags="-I$(SRCROOT)/../../Submodules">
       <CONFIGURATIONS>
         <CONFIGURATION isDebug="1" name="Debug" defines="JUCE_UNIT_TESTS=1" headerPath="$(SRCROOT)/../../ThirdParty/soundtouch/include"/>
         <CONFIGURATION isDebug="0" name="Release" headerPath="$(SRCROOT)/../../ThirdParty/soundtouch/include"/>
@@ -138,6 +138,7 @@
         <MODULEPATH id="juce_gui_basics" path="../../JUCE/modules"/>
         <MODULEPATH id="juce_gui_extra" path="../../JUCE/modules"/>
         <MODULEPATH id="juce_cryptography" path="../../JUCE/modules"/>
+        <MODULEPATH id="juce_audio_processors_headless" path="../../../JUCE/modules"/>
       </MODULEPATHS>
     </XCODE_MAC>
   </EXPORTFORMATS>

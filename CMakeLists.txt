@@ -4,6 +4,14 @@ project(LoopBreaker VERSION 1.0.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Default to Release if no build type is set (single-config generators only).
+# Without this, the VST3 SDK's fdebug.h errors because none of DEVELOPMENT,
+# RELEASE, _DEBUG, or NDEBUG is defined.
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    message(STATUS "No build type specified — defaulting to Release")
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+
 # ─── JUCE ─────────────────────────────────────────────────────────────────────
 # CI sets JUCE_DIR; local dev falls back to a sibling JUCE checkout.
 if(NOT DEFINED JUCE_DIR)

@@ -52,6 +52,9 @@ jobs:
           rm juce.zip
 
       # ── Build with CMake (VST3, AU) ──────────────────────────────────────
+      - name: Generate build info
+        run: bash gen_build_info.sh
+
       - name: Configure CMake
         run: |
           cmake -B build \

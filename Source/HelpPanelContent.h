@@ -176,7 +176,7 @@ private:
             Section s;
             s.heading = "Important: Set DAW Buffer Size to Maximum";
             s.body =
-                "BufferTest performs time-stretching and pitch-shifting in real time on the audio "
+                "Loop Breaker performs time-stretching and pitch-shifting in real time on the audio "
                 "thread.  These operations need large, contiguous blocks of samples to work "
                 "correctly.\n\n"
                 "Set your DAW's audio buffer size to the LARGEST available value "

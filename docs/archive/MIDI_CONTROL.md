@@ -1,6 +1,6 @@
 # MIDI Control for Pads
 
-The BufferTest plugin now supports MIDI input to control pad selection.
+The Loop Breaker plugin now supports MIDI input to control pad selection.
 
 ## MIDI Note Mapping
 
@@ -26,7 +26,7 @@ The plugin uses the **General MIDI drum map layout** for pad control:
 ## Usage
 
 1. Connect a MIDI controller to your DAW
-2. Route MIDI to the BufferTest plugin track
+2. Route MIDI to the Loop Breaker plugin track
 3. Play notes 36-43 to toggle pad selections
 4. Selected pads will be targeted by the next modifier
 

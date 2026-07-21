@@ -17,8 +17,8 @@ Modifier-stack presets can be saved and recalled between DAW sessions, with MIDI
 Requirements: CMake 3.22 or later, a C++17 compiler, and a local JUCE checkout.
 
 ```sh
-git clone --recurse-submodules https://github.com/d12345m/BufferTest.git
-cd BufferTest
+git clone --recurse-submodules https://github.com/d12345m/Loop-Breaker.git
+cd Loop-Breaker
 cmake -B build -DJUCE_DIR=/path/to/JUCE
 cmake --build build --config Release
 ```

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The BufferTest application now includes advanced buffer slicing functionality that allows for sophisticated playback manipulation, similar to what you'd find in professional music production software and samplers.
+The Loop Breaker application includes advanced buffer slicing functionality that allows for sophisticated playback manipulation, similar to what you'd find in professional music production software and samplers.
 
 ## Key Features
 

@@ -89,7 +89,7 @@ The speed dial provides intuitive control:
 
 ## Building and Running
 
-1. Open `BufferTest.jucer` in Projucer
+1. Open `LoopBreaker.jucer` in Projucer
 2. Generate project files for your platform
 3. Build using Xcode (macOS) or Visual Studio (Windows)
 4. Run the application

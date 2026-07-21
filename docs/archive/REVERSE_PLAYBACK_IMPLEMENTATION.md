@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document explains the industry-standard reverse playback implementation that replaced the problematic buffer-based approach in the BufferTest JUCE application.
+This document explains the industry-standard reverse playback implementation that replaced the problematic buffer-based approach in the Loop Breaker JUCE application.
 
 ## Previous Issues
 

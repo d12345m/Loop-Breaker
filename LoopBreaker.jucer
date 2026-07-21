@@ -10,7 +10,7 @@
               pluginAAXIdentifier="com.glowmachineaudio.LoopBreaker" pluginRTASCategory=""
               pluginVSTCategory="kPlugCategSynth" pluginVST3Category="Instrument"
               pluginFormats="buildAU,buildVST3" pluginCharacteristicsValue="pluginIsSynth,pluginWantsMidiIn">
-  <MAINGROUP id="b0GUwa" name="BufferTest">
+  <MAINGROUP id="b0GUwa" name="Loop Breaker">
     <GROUP id="{7BFC662E-934B-675C-15EB-563C5EAA4BD7}" name="Source">
       <FILE id="DUFUk8" name="Main.cpp" compile="0" resource="0" file="Source/Main.cpp"/>
       <FILE id="pluginProcH" name="PluginProcessor.h" compile="0" resource="0"
@@ -26,8 +26,8 @@
       <FILE id="xFmXoI" name="MainComponent.h" compile="0" resource="0" file="Source/MainComponent.h"/>
       <FILE id="cxAeBh" name="MainComponent.cpp" compile="0" resource="0"
             file="Source/MainComponent.cpp"/>
-      <FILE id="intExa" name="BufferTestIntegration.h" compile="0" resource="0"
-            file="Source/BufferTestIntegration.h"/>
+      <FILE id="intExa" name="LoopBreakerIntegration.h" compile="0" resource="0"
+            file="Source/LoopBreakerIntegration.h"/>
       <FILE id="audioBuffer1" name="AudioBuffer.h" compile="0" resource="0"
             file="Source/AudioBuffer.h"/>
       <FILE id="audioBuffer2" name="AudioBuffer.cpp" compile="1" resource="0"

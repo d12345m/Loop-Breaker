@@ -29,6 +29,10 @@ The CMake project creates platform-appropriate plug-in targets. To validate the 
 cmake --build build --config Release --target validate
 ```
 
+## Release credentials
+
+The macOS release workflow needs signing, notarization, and Netlify credentials. Their names and non-sensitive setup notes are in [`.env.example`](.env.example); GitHub Actions reads the actual values from the `Production` environment's secrets. Copy the example to a local `.env` only when running release tooling locally, and never commit the populated file, certificates, or keychains.
+
 ## Documentation
 
 The [documentation index](docs/README.md) links to the user guide, DSP architecture, technical reports, implementation plans, and historical project notes.
@@ -44,4 +48,6 @@ The [documentation index](docs/README.md) links to the user guide, DSP architect
 
 ## License
 
-Loop Breaker is licensed under the [GNU General Public License, version 3 or later](LICENSE).
+Copyright (c) 2026 Glow Machine Audio.
+
+Loop Breaker is licensed under the [GNU General Public License, version 3](LICENSE) (`GPL-3.0-only`). The repository includes third-party submodules and bundled fonts under their own licenses; retain their included license and attribution files when redistributing builds.

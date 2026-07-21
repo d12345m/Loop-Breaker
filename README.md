@@ -29,6 +29,28 @@ The CMake project creates platform-appropriate plug-in targets. To validate the 
 cmake --build build --config Release --target validate
 ```
 
+### macOS: signing and installation
+
+Built plugins are not copied to system directories automatically. On macOS, unsigned bundles are blocked by Gatekeeper and will not appear in DAWs. After building, ad-hoc sign each format and copy it to the appropriate location:
+
+```sh
+codesign --force --deep --sign - "build/LoopBreaker_artefacts/Release/VST3/Loop Breaker.vst3"
+codesign --force --deep --sign - "build/LoopBreaker_artefacts/Release/AU/Loop Breaker.component"
+codesign --force --deep --sign - "build/LoopBreaker_artefacts/Release/CLAP/Loop Breaker.clap"
+
+cp -r "build/LoopBreaker_artefacts/Release/VST3/Loop Breaker.vst3" ~/Library/Audio/Plug-Ins/VST3/
+cp -r "build/LoopBreaker_artefacts/Release/AU/Loop Breaker.component" ~/Library/Audio/Plug-Ins/Components/
+cp -r "build/LoopBreaker_artefacts/Release/CLAP/Loop Breaker.clap" ~/Library/Audio/Plug-Ins/CLAP/
+```
+
+After copying the AU, refresh the audio component cache so hosts pick it up:
+
+```sh
+killall -9 AudioComponentRegistrar
+```
+
+If `~/Library/Audio/Plug-Ins/CLAP/` does not exist, create it first with `mkdir -p`.
+
 ## Release credentials
 
 The macOS release workflow needs signing, notarization, and Netlify credentials. Their names and non-sensitive setup notes are in [`.env.example`](.env.example); GitHub Actions reads the actual values from the `Production` environment's secrets. Copy the example to a local `.env` only when running release tooling locally, and never commit the populated file, certificates, or keychains.

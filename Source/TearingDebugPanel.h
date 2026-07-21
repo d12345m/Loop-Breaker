@@ -23,7 +23,7 @@ public:
     juce::Rectangle<int> getTooltipBounds(const juce::String& text, juce::Point<int> screenPos, juce::Rectangle<int> parentArea) override
     {
         auto font = juce::Font(12.0f);
-        auto w = juce::jmin(400, (int)font.getStringWidthFloat(text) + 16);
+        auto w = juce::jmin(400, font.getStringWidth(text) + 16);
         auto h = 22;
         return { screenPos.x > parentArea.getCentreX() ? screenPos.x - w - 4 : screenPos.x + 8,
                  screenPos.y + 18, w, h };

@@ -266,19 +266,23 @@ void AudioBufferManager::enqueuePendingLoad(PendingLoadedBuffer&& p)
     pendingFifo.finishedWrite(1);
 }
 
-bool AudioBufferManager::requestLoadAudioFile(int bufferIndex, const juce::File& file)
+bool AudioBufferManager::requestLoadAudioFile(int bufferIndex, const juce::File& file,
+                                              AudioLoadIntent intent)
 {
     if (!isValidBufferIndex(bufferIndex) || !file.existsAsFile())
         return false;
 
     struct LoadJob final : public juce::ThreadPoolJob
     {
-        LoadJob(AudioBufferManager& mgr, int idx, juce::File f, double targetSR)
+        LoadJob(AudioBufferManager& mgr, int idx, juce::File f, double targetSR,
+                uint64_t requestGeneration, AudioLoadIntent loadIntent)
             : juce::ThreadPoolJob("Load sample")
             , manager(mgr)
             , bufferIndex(idx)
             , file(std::move(f))
             , targetSampleRate(targetSR)
+            , generation(requestGeneration)
+            , intent(loadIntent)
         {
         }
 
@@ -287,6 +291,8 @@ bool AudioBufferManager::requestLoadAudioFile(int bufferIndex, const juce::File&
             PendingLoadedBuffer p;
             p.bufferIndex = bufferIndex;
             p.sourcePath = file.getFullPathName();
+            p.generation = generation;
+            p.intent = intent;
             p.data = decodeFileToLoadedData(file, targetSampleRate);
             p.ok = (p.data != nullptr);
             manager.enqueuePendingLoad(std::move(p));
@@ -297,9 +303,13 @@ bool AudioBufferManager::requestLoadAudioFile(int bufferIndex, const juce::File&
         int bufferIndex;
         juce::File file;
         double targetSampleRate;
+        uint64_t generation;
+        AudioLoadIntent intent;
     };
 
-    loaderPool.addJob(new LoadJob(*this, bufferIndex, file, resampleTargetRate.load()), true);
+    const auto generation = latestLoadGeneration[(size_t) bufferIndex].fetch_add(1) + 1;
+    loaderPool.addJob(new LoadJob(*this, bufferIndex, file, resampleTargetRate.load(),
+                                  generation, intent), true);
     return true;
 }
 
@@ -324,16 +334,29 @@ juce::Array<int> AudioBufferManager::applyPendingLoads(bool transportPlaying)
             if (!isValidBufferIndex(p.bufferIndex))
                 continue;
 
+            if (p.generation != latestLoadGeneration[(size_t) p.bufferIndex].load())
+            {
+                juce::Logger::writeToLog("Sample loader: discarded stale result for pad "
+                                         + juce::String(p.bufferIndex + 1) + " from " + p.sourcePath);
+                continue;
+            }
+
             if (!p.ok || p.data == nullptr)
             {
                 juce::Logger::writeToLog("Sample loader: failed to decode pad "
                                          + juce::String(p.bufferIndex + 1) + " from " + p.sourcePath);
-                clearBuffer(p.bufferIndex);
                 continue;
             }
 
             if (auto* buffer = getBuffer(p.bufferIndex))
             {
+                if (p.intent == AudioLoadIntent::MissingDataRecovery && buffer->hasAudioLoaded())
+                {
+                    juce::Logger::writeToLog("Sample loader: recovery no longer needed for pad "
+                                             + juce::String(p.bufferIndex + 1));
+                    continue;
+                }
+
                 // §4.2  If the transport is already running, stop the buffer
                 // before swapping in the new data so it doesn't continue
                 // playing immediately.  The awaitingMusicalStart flag will

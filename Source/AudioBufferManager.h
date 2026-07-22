@@ -33,6 +33,13 @@ enum class NodeId;          // Forward declaration
 class AudioBufferManager : public AudioBufferListener
 {
 public:
+    enum class AudioLoadIntent
+    {
+        UserReplacement,
+        SessionRestore,
+        MissingDataRecovery
+    };
+
     static constexpr int MAX_BUFFERS = 8; // Match the MPC-style interface from DesignDoc
     
     AudioBufferManager();
@@ -63,7 +70,8 @@ public:
     //==============================================================================
     // File loading
     bool loadAudioFile(int bufferIndex, const juce::File& file, juce::AudioFormatManager& formatManager);
-    bool requestLoadAudioFile(int bufferIndex, const juce::File& file);
+    bool requestLoadAudioFile(int bufferIndex, const juce::File& file,
+                              AudioLoadIntent intent = AudioLoadIntent::UserReplacement);
     // Applies completed background decode jobs.  When transportPlaying is true,
     // newly loaded buffers are flagged for musically-deferred start (they will
     // not begin playing until the next bar boundary or modifier trigger).
@@ -144,6 +152,8 @@ private:
       int bufferIndex = -1;
       AudioBuffer::LoadedAudioData::Ptr data;
       juce::String sourcePath;
+      uint64_t generation = 0;
+      AudioLoadIntent intent = AudioLoadIntent::UserReplacement;
       bool ok = false;
     };
 
@@ -151,6 +161,7 @@ private:
     juce::ThreadPool loaderPool { 1 };
     juce::AbstractFifo pendingFifo { maxPendingLoads };
     std::array<PendingLoadedBuffer, (size_t) maxPendingLoads> pendingLoads;
+    std::array<std::atomic<uint64_t>, MAX_BUFFERS> latestLoadGeneration {};
 
     void enqueuePendingLoad(PendingLoadedBuffer&& p);
     

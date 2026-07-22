@@ -200,9 +200,10 @@ private:
     std::atomic<int> prepareGraceBlocks { 0 };
 
     // State restore: defer disk I/O until we are on the audio thread.
-    std::atomic<bool> pendingRestoreReload { false };
+    std::atomic<bool> pendingSessionStateRestore { false };
 
-    void reloadBuffersFromPadPaths();
+    void restoreBuffersFromSessionState();
+    void recoverMissingBuffersFromPadPaths();
 
     // MIDI pad control: atomic flags for toggle requests (written on audio thread, read/cleared on UI thread)
     std::atomic<bool> midiPadToggleRequests[8] { {false}, {false}, {false}, {false}, {false}, {false}, {false}, {false} };

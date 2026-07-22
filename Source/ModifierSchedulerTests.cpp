@@ -2,6 +2,7 @@
 #include <JuceHeader.h>
 #include "ModifierScheduler.h"
 #include "ModifierRegistry.h"
+#include "ModifierVariantFormatter.h"
 #include "SessionSettings.h"
 #include "AppState.h"
 #include "TimeStretchSoundTouch.h"
@@ -9,7 +10,7 @@
 class ModifierRegistryTest : public juce::UnitTest
 {
 public:
-    ModifierRegistryTest() : juce::UnitTest ("Modifier Registry") {}
+    ModifierRegistryTest() : juce::UnitTest ("Modifier Registry", "LoopBreaker") {}
 
     void runTest() override
     {
@@ -79,10 +80,39 @@ public:
 
 static ModifierRegistryTest modifierRegistryTestInstance;
 
+class ModifierVariantFormatterTest : public juce::UnitTest
+{
+public:
+    ModifierVariantFormatterTest() : juce::UnitTest ("Modifier Variant Formatter", "LoopBreaker") {}
+
+    void runTest() override
+    {
+        beginTest ("Structured slice and sample-hold plans have concise labels");
+        auto arp = ModifierRegistry::makeDescriptor (ModifierType::ArpSlice);
+        arp.plannedArpSequenceLength = 4;
+        arp.plannedArpTotalSlices = 32;
+        arp.plannedArpRepeatBars = 2;
+        expectEquals (ModifierVariantFormatter::full (arp), juce::String ("4 STEP  /  32 GRID  /  2 BARS"));
+        expectEquals (ModifierVariantFormatter::compact (arp), juce::String ("4/32"));
+
+        auto sampleHold = ModifierRegistry::makeDescriptor (ModifierType::BufferSHLowPassOn);
+        sampleHold.plannedSHDivisionBars = 0.125;
+        expectEquals (ModifierVariantFormatter::full (sampleHold), juce::String ("HOLD 1/8"));
+
+        beginTest ("Switch Part exposes its frozen destination");
+        auto switchPart = ModifierRegistry::makeDescriptor (ModifierType::SwitchPart);
+        switchPart.plannedDestinationPart = 2;
+        expectEquals (ModifierVariantFormatter::full (switchPart), juce::String ("PART C"));
+        expectEquals (ModifierVariantFormatter::compact (switchPart), juce::String ("PART C"));
+    }
+};
+
+static ModifierVariantFormatterTest modifierVariantFormatterTestInstance;
+
 class ModifierSchedulerPlannedQueueTest : public juce::UnitTest
 {
 public:
-    ModifierSchedulerPlannedQueueTest() : juce::UnitTest ("ModifierScheduler Planned Queue") {}
+    ModifierSchedulerPlannedQueueTest() : juce::UnitTest ("ModifierScheduler Planned Queue", "LoopBreaker") {}
 
     static bool sameTargets (const juce::Array<int>& a, const juce::Array<int>& b)
     {
@@ -139,6 +169,27 @@ public:
                 expect (! planned.targets.isEmpty());
         }
 
+        beginTest ("Switch Part destinations stay explicit and advance through queue order");
+        SessionSettings switchSettings;
+        switchSettings.parts.numParts = 4;
+        switchSettings.parts.activePart = 0;
+        ModifierScheduler switchScheduler (switchSettings);
+        switchScheduler.setRandomSeed (4321);
+        switchScheduler.start();
+        switchScheduler.forcePlannedModifier (0, ModifierType::SwitchPart);
+        switchScheduler.forcePlannedModifier (1, ModifierType::SwitchPart);
+        auto switchQueue = switchScheduler.getPlannedQueueSnapshot();
+        expect (switchQueue[0].descriptor.plannedDestinationPart.has_value());
+        expect (switchQueue[1].descriptor.plannedDestinationPart.has_value());
+        expectEquals (*switchQueue[0].descriptor.plannedDestinationPart, 1);
+        expectEquals (*switchQueue[1].descriptor.plannedDestinationPart, 2);
+
+        switchSettings.parts.activePart = 2;
+        switchScheduler.refreshPlannedPartDestinations();
+        switchQueue = switchScheduler.getPlannedQueueSnapshot();
+        expectEquals (*switchQueue[0].descriptor.plannedDestinationPart, 3);
+        expectEquals (*switchQueue[1].descriptor.plannedDestinationPart, 0);
+
         beginTest ("Skip pops the front and preserves already planned entries");
         scheduler.skipUpcoming();
         auto afterSkip = scheduler.getPlannedQueueSnapshot();
@@ -167,6 +218,7 @@ public:
         scheduler.stop();
         scheduler.setUserSelectedBuffers ({ 1, 3 });
         scheduler.start();
+        scheduler.forceUpcomingModifier (ModifierType::Reverse);
         scheduler.setUserSelectedBuffers ({ 7 });
         const auto retargetedFront = scheduler.getPlannedQueueSnapshot().front();
         CaptureListener capture;
@@ -249,19 +301,29 @@ static ModifierSchedulerPlannedQueueTest modifierSchedulerPlannedQueueTestInstan
 
 class ModifierSchedulerQuantizeTest : public juce::UnitTest {
 public:
-    ModifierSchedulerQuantizeTest() : juce::UnitTest("ModifierScheduler Quantization") {}
+    ModifierSchedulerQuantizeTest() : juce::UnitTest("ModifierScheduler Quantization", "LoopBreaker") {}
+    struct Capture : ModifierSchedulerListener
+    {
+        int triggerCount = 0;
+        void modifierTriggered (const ModifierDescriptor&, const juce::Array<int>&) override
+        {
+            ++triggerCount;
+        }
+    };
+
     void runTest() override {
         beginTest("Quantized trigger snaps to expected beat grid");
         SessionSettings settings; // default: 120 BPM, 4/4, barsBetweenModifiers=4
         settings.barsBetweenModifiers = 1; // easier window
         ModifierScheduler scheduler(settings);
         scheduler.setRandomSeed(12345);
+        Capture capture;
+        scheduler.addListener (&capture);
         scheduler.start();
         // Enable quantization to beats (4 per bar)
         scheduler.setQuantizationEnabled(true);
         scheduler.setQuantizationSubdivision(4);
         // Simulate audio time advancing in small increments until just before trigger
-        double sr = 48000.0;
         // We'll advance half a beat then ensure trigger not yet fired prematurely
         double secondsPerBeat = settings.getSecondsPerBeat();
         double step = secondsPerBeat / 8.0; // 32nd note increments
@@ -270,18 +332,16 @@ public:
         while (accumulated < secondsPerBeat * 0.49) {
             scheduler.updateTime(step);
             accumulated += step;
-            if (scheduler.getProgressToNextTrigger() >= 1.0) {
+            if (capture.triggerCount > 0) {
                 triggeredEarly = true; break;
             }
         }
         expect(!triggeredEarly, "Scheduler triggered before quantized boundary");
 
         // Advance to just after beat boundary; ensure trigger occurs
-        while (scheduler.getProgressToNextTrigger() < 1.0) {
+        for (int i = 0; i < 64 && capture.triggerCount == 0; ++i)
             scheduler.updateTime(step);
-        }
-        // Force any pending trigger check
-        scheduler.updateTime(0.0);
+        expectEquals (capture.triggerCount, 1, "Scheduler did not trigger at the quantized boundary");
         // After trigger, progress should reset near 0
         expect(scheduler.getProgressToNextTrigger() < 0.2, "Progress did not reset after trigger");
 
@@ -291,6 +351,7 @@ public:
         scheduler.setQuantizationSubdivision(16); // even finer
         double after = scheduler.getSecondsUntilNextTrigger();
         expect(after <= before + 0.5, "Resnap should not push trigger excessively far");
+        scheduler.removeListener (&capture);
     }
 };
 
@@ -300,7 +361,7 @@ static ModifierSchedulerQuantizeTest modifierSchedulerQuantizeTestInstance;
 
 class ModifierSchedulerVariantsTest : public juce::UnitTest {
 public:
-    ModifierSchedulerVariantsTest() : juce::UnitTest("ModifierScheduler Variants") {}
+    ModifierSchedulerVariantsTest() : juce::UnitTest("ModifierScheduler Variants", "LoopBreaker") {}
     void runTest() override {
         beginTest("forceUpcomingVariant sets structured fields (Speed)");
         {
@@ -387,7 +448,7 @@ static ModifierSchedulerVariantsTest modifierSchedulerVariantsTestInstance;
 // New test: ensure AppState handles multiple simultaneous targets without crashes.
 class AppStateMultipleTargetsTest : public juce::UnitTest {
 public:
-    AppStateMultipleTargetsTest() : juce::UnitTest("AppState Multiple Targets Safety") {}
+    AppStateMultipleTargetsTest() : juce::UnitTest("AppState Multiple Targets Safety", "LoopBreaker") {}
 
     void runTest() override {
         beginTest("Applying Reverse and Speed to multiple targets is safe (no crash)");
@@ -423,7 +484,7 @@ static AppStateMultipleTargetsTest appStateMultipleTargetsTestInstance;
 
 class ModifierSchedulerEveryNBarsTest : public juce::UnitTest {
 public:
-    ModifierSchedulerEveryNBarsTest() : juce::UnitTest("ModifierScheduler Every N Bars") {}
+    ModifierSchedulerEveryNBarsTest() : juce::UnitTest("ModifierScheduler Every N Bars", "LoopBreaker") {}
     
     struct CaptureListener : public ModifierSchedulerListener {
         ModifierScheduler& sched;
@@ -476,7 +537,7 @@ static ModifierSchedulerEveryNBarsTest modifierSchedulerEveryNBarsTestInstance;
 
 class SoundTouchSmokeTest : public juce::UnitTest {
 public:
-    SoundTouchSmokeTest() : juce::UnitTest("SoundTouch Smoke") {}
+    SoundTouchSmokeTest() : juce::UnitTest("SoundTouch Smoke", "LoopBreaker") {}
 
     void runTest() override {
         beginTest("SoundTouch can time-stretch a mono buffer (basic output)");

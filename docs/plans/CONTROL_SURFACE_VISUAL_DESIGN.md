@@ -1,6 +1,6 @@
 # Loop Breaker — Control Surface Visual Design Brief
 
-- Status: implementation in progress; visual foundation, first glyph pass, canonical registry, planned queue, and first Session geometry pass complete
+- Status: implementation in progress; visual foundation, first glyph pass, canonical registry, planned queue, first Session geometry pass, and headless test runner complete
 - Branch: `codex/hieroglyph-ui-concepts`
 - Last implementation review: 2026-07-22
 - Primary visual reference: `docs/concepts/hieroglyph-ui/07-control-surface.png`
@@ -333,9 +333,9 @@ for the performance audit before release.
 - [x] Reset/start/stop behavior is deterministic in the implemented queue lifecycle.
 - [x] Seeded randomness produces reproducible full queues.
 - [x] Queue never contains `Unknown`; all-zero probability produces an empty queue and a musical cue.
-- [ ] Planned variants shown in the UI exactly match triggered variants.
+- [x] Structured planned variants shown in the UI come from the same frozen descriptor consumed at trigger time. Switch Part now freezes and displays an explicit destination; remaining unplanned modifier parameters are tracked as polish work.
 - [x] Planned targets shown in the UI exactly match triggered targets; only loaded pads are eligible, and loaded-pad/selection changes refresh the preview before firing.
-- [x] Add unit tests for fill, trigger/pop, skip, force, suppression, seed reproducibility, and settings changes. These compile in Debug; the Xcode project still needs a runnable test-host scheme to execute them from the command line.
+- [x] Add unit tests for fill, trigger/pop, skip, force, suppression, seed reproducibility, settings changes, variant labels, and Switch Part destinations. The `LoopBreakerTests` CMake target runs them headlessly through CTest.
 
 ### 8.4 Modifier registry status
 
@@ -436,10 +436,13 @@ Implemented on `codex/hieroglyph-ui-concepts` as of 2026-07-22:
 - Animation-disabled mode renders a deterministic representative frame as the reduced-motion option.
 - The debug-only Glyph Lab and fixed-phase contact-sheet exporter are implemented.
 - The Debug VST3 target builds successfully with the renderer and Glyph Lab.
+- A CMake/CTest console runner now executes the Loop Breaker JUCE test category without a DAW or Xcode test-host scheme.
+- NEXT and compact queue labels now share one structured variant formatter, covering Arp Slice, Slice Repeater, S&H filters, chorus, auto-pan, granular, filters, and explicit Switch Part destinations.
+- Speed, Stretch, Arp Slice, Auto-Pan, and Switch Part glyph geometry now responds to its frozen plan where that response remains legible at queue size.
 
 Not yet implemented:
 
-- a runnable command-line test-host scheme and a final audit that every downstream modifier consumes its planned variant without re-randomizing;
+- a final audit of modifier parameters that are still unplanned or intentionally randomized downstream;
 - production-size visual review and adjustment of the Session geometry;
 - complete variant-to-geometry mapping, accessibility review, and performance validation.
 
@@ -469,7 +472,7 @@ Not yet implemented:
 - [x] Add snapshot/listener APIs with message-thread queue delivery.
 - [x] Update force/skip/reset/suppression semantics.
 - [x] Add independent Debug-panel forcing for NEXT, QUEUE 1, and QUEUE 2.
-- [x] Add scheduler queue and registry tests. A runnable Xcode test-host scheme remains to be added.
+- [x] Add scheduler queue and registry tests plus a runnable CMake/CTest console host.
 
 ### Milestone 4 — Session layout
 
@@ -483,7 +486,7 @@ Not yet implemented:
 ### Milestone 5 — Remaining glyphs and polish
 
 - [x] Complete an initial vector and motion pass for every glyph in Section 7.2.
-- [ ] Map all meaningful planned variants into visuals and concise labels. Slice and granular parameters are partially mapped.
+- [ ] Map all meaningful planned variants into visuals and concise labels. Shared labels now cover every structured plan; glyph geometry responds to Speed, Stretch, Arp Slice, Auto-Pan, granular density, and Switch Part destination, with remaining geometry mappings still to review.
 - [ ] Add mild pad-trigger overlays where useful.
 - [ ] Tune performance at minimum and maximum editor sizes.
 - [x] Add and visually expose reduced-motion mode through the production renderer and Glyph Lab.
@@ -493,7 +496,7 @@ Not yet implemented:
 ### 10.1 Ordered next steps
 
 1. **Review the production control board and first glyph pass.** Inspect the new NEXT/QUEUE 1/QUEUE 2 layout at minimum and maximum editor sizes, then export a current contact sheet and resolve clipping, centering, ambiguous motion, and color-only distinctions.
-2. **Close the remaining queue verification gaps.** Add a runnable Xcode test-host scheme and audit downstream application code so every displayed planned variant is exactly what the modifier consumes. Add an explicit planned destination for Switch Part if it remains previewable.
+2. **Close the remaining queue verification gaps.** Keep the CMake/CTest runner green and audit downstream application code so any newly displayed planned variant is exactly what the modifier consumes. Switch Part now has an explicit frozen destination.
 3. **Review and tune Session geometry and motion.** Reload the installed VST, verify saved-versus-empty A–H presets, the wordmark fill and modifier-board progress rule, animated NEXT glyphs at several speeds, the reduced-motion toggle, ivory/black pad treatment, filenames, and non-perimeter state cues, then correct any production-size spacing, contrast, or motion issues.
 4. **Finish variant, accessibility, and performance work.** Map the remaining planned fields, verify reduced motion and color-independent state, test minimum/maximum editor sizes, and review queue planning/allocation cost before final contact-sheet approval.
 

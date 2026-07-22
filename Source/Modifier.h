@@ -123,6 +123,7 @@ struct ModifierDescriptor
     std::optional<double> plannedGrainPitchSpread; // pitch spread in semitones, quantized to octaves (0, 12, 24)
     std::optional<double> plannedGrainMix;         // wet/dry mix 0..1
     std::optional<double> plannedGrainTexture;     // window shape 0=smooth..1=sharp
+    std::optional<int> plannedDestinationPart;     // SwitchPart: frozen zero-based destination
 };
 
 // Execution context passed to modifiers when ultimately applied.

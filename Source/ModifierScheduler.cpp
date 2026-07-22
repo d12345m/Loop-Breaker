@@ -445,6 +445,7 @@ void ModifierScheduler::fillPlannedQueue()
         plannedQueue.push_back (std::move (*planned));
     }
 
+    updatePlannedPartDestinations();
     broadcastUpcoming();
 }
 
@@ -506,6 +507,32 @@ void ModifierScheduler::refreshPlannedTargets()
     broadcastUpcoming();
 }
 
+void ModifierScheduler::refreshPlannedPartDestinations()
+{
+    updatePlannedPartDestinations();
+    broadcastUpcoming();
+}
+
+void ModifierScheduler::updatePlannedPartDestinations()
+{
+    const int numParts = juce::jmax (1, settings.parts.getNumParts());
+    int simulatedPart = juce::jlimit (0, numParts - 1, settings.parts.activePart);
+
+    const juce::SpinLock::ScopedLockType lock (plannedQueueLock);
+    for (auto& planned : plannedQueue)
+    {
+        if (planned.descriptor.type != ModifierType::SwitchPart)
+            continue;
+
+        const int destination = numParts == 1 ? 0 : (simulatedPart + 1) % numParts;
+        planned.descriptor.plannedDestinationPart = destination;
+        planned.descriptor.description = ModifierRegistry::get (ModifierType::SwitchPart).description
+                                       + juce::String (" -> Part ")
+                                       + juce::String::charToString (static_cast<juce::juce_wchar> ('A' + destination));
+        simulatedPart = destination;
+    }
+}
+
 void ModifierScheduler::triggerNow()
 {
     if (!running || !getUpcomingModifier().has_value()) return;
@@ -555,6 +582,7 @@ void ModifierScheduler::forcePlannedModifier (int queueIndex, ModifierType type)
                     return;
                 plannedQueue[index] = std::move (replacement);
             }
+            updatePlannedPartDestinations();
             broadcastUpcoming();
             return;
         }
@@ -833,8 +861,12 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
     }
     else if (base.type == ModifierType::SwitchPart)
     {
-        // Planned field: none; App will choose target part != current at trigger time
-        modified.description = base.description + " -> Switch Part";
+        const int numParts = juce::jmax (1, settings.parts.getNumParts());
+        const int current = juce::jlimit (0, numParts - 1, settings.parts.activePart);
+        const int destination = numParts == 1 ? 0 : (current + 1) % numParts;
+        modified.plannedDestinationPart = destination;
+        modified.description = base.description + " -> Part "
+                             + juce::String::charToString (static_cast<juce::juce_wchar> ('A' + destination));
     }
     else if (base.type == ModifierType::MasterLowPassOn || base.type == ModifierType::MasterHighPassOn)
     {

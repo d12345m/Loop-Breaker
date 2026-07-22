@@ -82,6 +82,10 @@ public:
     // Updating availability retargets queued descriptors before they can fire.
     void setAvailableTargetMask (uint32_t mask);
 
+    // Re-freeze queued Switch Part destinations after the active part or part
+    // count changes. Destinations are simulated through the queue in order.
+    void refreshPlannedPartDestinations();
+
     // Deterministic randomness (optional). Call before start() for reproducible sequences.
     void setRandomSeed(int64_t seed);
 
@@ -167,6 +171,7 @@ private:
     void replaceFrontPlannedModifier(PlannedModifier replacement);
     void clearPlannedQueue();
     void refreshPlannedTargets();
+    void updatePlannedPartDestinations();
     ModifierDescriptor pickRandomDescriptor() const;
     juce::Array<int> selectTargetBuffers(const ModifierDescriptor& desc) const;
     void maybeResnapQuantized();

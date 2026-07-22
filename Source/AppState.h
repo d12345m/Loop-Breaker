@@ -63,6 +63,7 @@ struct AppState : public ModifierSchedulerListener
     void setActivePart(int partIndex)
     {
         settings.parts.activePart = juce::jlimit(0, settings.parts.getNumParts() - 1, partIndex);
+        scheduler.refreshPlannedPartDestinations();
         // Compute per-buffer loop windows based on each buffer's own duration and the number of parts.
         auto loaded = bufferManager.getLoadedBufferIndices();
         int numParts = settings.parts.getNumParts();
@@ -496,26 +497,13 @@ struct AppState : public ModifierSchedulerListener
                 break;
             case ModifierType::SwitchPart:
             {
-                // Choose a different part than current and switch immediately
                 int num = settings.parts.getNumParts();
                 if (num >= 1)
                 {
                     int current = settings.parts.activePart;
-                    int target = current;
-                    if (num == 1)
-                        target = 0; // only one part -> A
-                    else
-                    {
-                        // Pick a different index
-                        juce::Random r;
-                        for (int attempt = 0; attempt < 8; ++attempt)
-                        {
-                            int cand = r.nextInt(num);
-                            if (cand != current) { target = cand; break; }
-                        }
-                        if (target == current)
-                            target = (current + 1) % num; // deterministic fallback
-                    }
+                    const int target = desc.plannedDestinationPart.has_value()
+                                           ? juce::jlimit (0, num - 1, *desc.plannedDestinationPart)
+                                           : (num == 1 ? 0 : (current + 1) % num);
                     setActivePart(target);
                 }
                 break;

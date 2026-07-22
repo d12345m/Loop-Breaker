@@ -130,9 +130,11 @@ void drawReverse (GlyphCanvas& c, float phase)
     c.line (22.0f, 77.0f, 78.0f, 77.0f, 2.0f);
 }
 
-void drawSpeed (GlyphCanvas& c, float phase)
+void drawSpeed (GlyphCanvas& c, float phase, const ModifierDescriptor& descriptor)
 {
     c.colour (c.p.ink);
+    const float speed = static_cast<float> (juce::jlimit (0.5, 2.0, descriptor.plannedSpeed.value_or (1.0)));
+    phase *= speed;
     const float breathe = triangle (phase) * 5.0f;
     const float positions[] = { 18.0f, 30.0f + breathe, 45.0f + breathe * 0.5f, 64.0f, 82.0f };
     for (int i = 0; i < 5; ++i)
@@ -142,9 +144,11 @@ void drawSpeed (GlyphCanvas& c, float phase)
     c.arrowHead (82.0f, 80.0f, 0.0f, 6.0f);
 }
 
-void drawStretch (GlyphCanvas& c, float phase)
+void drawStretch (GlyphCanvas& c, float phase, const ModifierDescriptor& descriptor)
 {
-    const float spread = 4.0f * triangle (phase);
+    const float ratio = static_cast<float> (juce::jlimit (0.25, 2.0, descriptor.plannedStretch.value_or (1.0)));
+    const float plannedSpread = juce::jlimit (-8.0f, 8.0f, std::log2 (ratio) * 6.0f);
+    const float spread = plannedSpread + 3.0f * triangle (phase);
     const float left = 20.0f - spread;
     const float right = 80.0f + spread;
     c.colour (c.p.ink);
@@ -185,6 +189,8 @@ void drawSliceBlocks (GlyphCanvas& c, float phase, ModifierType type, const Modi
     int count = 4;
     if (type == ModifierType::BeatSliceRandom && d.plannedSliceDivision.isNotEmpty())
         count = juce::jlimit (4, 8, d.plannedSliceDivision.getTrailingIntValue());
+    else if (type == ModifierType::ArpSlice && d.plannedArpSequenceLength.has_value())
+        count = juce::jlimit (2, 8, *d.plannedArpSequenceLength);
     const float gap = 3.0f;
     const float width = (76.0f - gap * (count - 1)) / static_cast<float> (count);
     const float traversal = wrapped (phase) * static_cast<float> (count);
@@ -456,7 +462,7 @@ void drawChorus (GlyphCanvas& c, float phase)
     }
 }
 
-void drawAutoPan (GlyphCanvas& c, float phase)
+void drawAutoPan (GlyphCanvas& c, float phase, const ModifierDescriptor& descriptor)
 {
     c.colour (c.p.ink);
     juce::Path arc;
@@ -465,7 +471,9 @@ void drawAutoPan (GlyphCanvas& c, float phase)
     c.stroke (arc, 2.0f);
     c.line (14.0f, 30.0f, 14.0f, 70.0f, 2.0f);
     c.line (86.0f, 30.0f, 86.0f, 70.0f, 2.0f);
-    c.dot (18.0f + triangle (phase) * 64.0f, 50.0f, 5.0f, c.p.vermilion);
+    const float depth = static_cast<float> (juce::jlimit (0.0, 1.0, descriptor.plannedPanDepth.value_or (1.0)));
+    const float travel = 64.0f * depth;
+    c.dot (50.0f - travel * 0.5f + triangle (phase) * travel, 50.0f, 5.0f, c.p.vermilion);
 }
 
 void drawDucking (GlyphCanvas& c, float phase)
@@ -500,7 +508,7 @@ void drawGranular (GlyphCanvas& c, float phase, bool momentary, const ModifierDe
     c.stroke (wavePath (c, 24.0f, 76.0f, 50.0f, 5.0f, 2.0f), 1.5f);
 }
 
-void drawSwitchPart (GlyphCanvas& c, float phase)
+void drawSwitchPart (GlyphCanvas& c, float phase, const ModifierDescriptor& descriptor)
 {
     const float shift = triangle (phase) * 6.0f;
     c.colour (c.p.mutedInk);
@@ -509,7 +517,9 @@ void drawSwitchPart (GlyphCanvas& c, float phase)
     c.g.fillRect (c.rect (22.0f + shift, 32.0f, 42.0f, 48.0f));
     c.colour (c.p.raisedTile);
     c.g.setFont (juce::Font (juce::FontOptions().withHeight (c.u (22.0f))).boldened());
-    c.g.drawText ("02", c.rect (22.0f + shift, 32.0f, 42.0f, 48.0f), juce::Justification::centred);
+    const auto destination = descriptor.plannedDestinationPart.value_or (1);
+    const auto partLabel = juce::String::charToString (static_cast<juce::juce_wchar> ('A' + juce::jlimit (0, 25, destination)));
+    c.g.drawText (partLabel, c.rect (22.0f + shift, 32.0f, 42.0f, 48.0f), juce::Justification::centred);
     c.colour (c.p.vermilion);
     c.line (38.0f, 88.0f, 72.0f, 88.0f, 2.0f);
     c.arrowHead (77.0f, 88.0f, 0.0f, 5.0f);
@@ -587,8 +597,8 @@ void ModifierGlyphRenderer::draw (juce::Graphics& g,
     switch (state.descriptor.type)
     {
         case ModifierType::Reverse:                    drawReverse (c, phase); break;
-        case ModifierType::Speed:                      drawSpeed (c, phase); break;
-        case ModifierType::Stretch:                    drawStretch (c, phase); break;
+        case ModifierType::Speed:                      drawSpeed (c, phase, state.descriptor); break;
+        case ModifierType::Stretch:                    drawStretch (c, phase, state.descriptor); break;
         case ModifierType::PitchUpOctave:              drawPitch (c, phase, true); break;
         case ModifierType::PitchDownOctave:            drawPitch (c, phase, false); break;
         case ModifierType::BeatSliceRandom:
@@ -603,7 +613,7 @@ void ModifierGlyphRenderer::draw (juce::Graphics& g,
         case ModifierType::BufferVolumeRampDown:        drawVolumeRamp (c, phase); break;
         case ModifierType::BufferTremolo:               drawTremolo (c, phase); break;
         case ModifierType::BufferChorusOn:              drawChorus (c, phase); break;
-        case ModifierType::BufferAutoPan:               drawAutoPan (c, phase); break;
+        case ModifierType::BufferAutoPan:               drawAutoPan (c, phase, state.descriptor); break;
         case ModifierType::BufferDuckingOn:             drawDucking (c, phase); break;
         case ModifierType::BufferSHLowPassOn:           drawFilter (c, phase, false, true, false); break;
         case ModifierType::BufferSHHighPassOn:          drawFilter (c, phase, true, true, false); break;
@@ -611,7 +621,7 @@ void ModifierGlyphRenderer::draw (juce::Graphics& g,
         case ModifierType::BufferGranularMomentary:     drawGranular (c, phase, true, state.descriptor); break;
         case ModifierType::MasterHighPassOn:            drawFilter (c, phase, true, false, true); break;
         case ModifierType::MasterLowPassOn:             drawFilter (c, phase, false, false, true); break;
-        case ModifierType::SwitchPart:                  drawSwitchPart (c, phase); break;
+        case ModifierType::SwitchPart:                  drawSwitchPart (c, phase, state.descriptor); break;
         case ModifierType::QuarterNoteBurst:            drawQuarterBurst (c, phase); break;
         case ModifierType::SwapModifierStack:           drawSwap (c, phase); break;
         case ModifierType::ResetAll:                    drawReset (c, phase); break;

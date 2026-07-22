@@ -151,3 +151,43 @@ target_link_libraries(LoopBreaker
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags
 )
+
+# ─── Unit-test runner ─────────────────────────────────────────────────────────
+# The tests already compile into Debug plug-in builds for in-host diagnostics.
+# This console target makes the same suite runnable from CMake/CTest without a
+# DAW or an Xcode test-host scheme.
+option(LOOP_BREAKER_BUILD_TESTS "Build the Loop Breaker unit-test runner" ON)
+if(LOOP_BREAKER_BUILD_TESTS)
+    enable_testing()
+    juce_add_console_app(LoopBreakerTests PRODUCT_NAME "Loop Breaker Tests")
+    juce_generate_juce_header(LoopBreakerTests)
+    target_sources(LoopBreakerTests PRIVATE
+        Source/UnitTestMain.cpp
+        Source/ModifierSchedulerTests.cpp
+    )
+    target_include_directories(LoopBreakerTests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/Source"
+        "${SOUNDTOUCH_INCLUDE_DIR}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/Submodules"
+    )
+    target_compile_definitions(LoopBreakerTests PRIVATE
+        JUCE_UNIT_TESTS=1
+        DONT_SET_USING_JUCE_NAMESPACE=1
+        JUCE_STRICT_REFCOUNTEDPOINTER=1
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0
+    )
+    target_link_libraries(LoopBreakerTests PRIVATE
+        LoopBreaker
+        LoopBreakerBinaryData
+        juce::juce_audio_formats
+        juce::juce_audio_utils
+        juce::juce_core
+        juce::juce_events
+        juce::juce_graphics
+        juce::juce_gui_basics
+        juce::juce_recommended_config_flags
+        juce::juce_recommended_warning_flags
+    )
+    add_test(NAME LoopBreakerTests COMMAND LoopBreakerTests)
+endif()

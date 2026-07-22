@@ -7,13 +7,30 @@ name: Build macOS Installer
 on:
   push:
     branches: [main]
-  workflow_dispatch: # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: Version component to increment
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
 
 permissions:
   contents: write
 
+concurrency:
+  group: release-version-main
+  cancel-in-progress: false
+
 jobs:
   build-macos-installer:
+    # A GITHUB_TOKEN push normally does not start another workflow run. This
+    # guard also prevents a loop if that GitHub behavior or token changes.
+    if: github.actor != 'github-actions[bot]'
     runs-on: macos-latest
     environment: Production
 
@@ -24,6 +41,19 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0 # Needed for version tags
+
+      # VERSION is the release version's single source of truth. Push builds
+      # default to patch; manual runs may select patch, minor, or major.
+      - name: Increment release version
+        id: version
+        env:
+          BUMP_TYPE: ${{ inputs.bump_type || 'patch' }}
+        run: |
+          git pull --ff-only origin main
+          bash bump_version.sh "$BUMP_TYPE"
+          version="$(tr -d '[:space:]' < VERSION)"
+          echo "bump_type=$BUMP_TYPE" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       # ── Setup Python for manual generation ────────────────────────────────
       - name: Setup Python
@@ -155,9 +185,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: Loop Breaker - Latest Build
+          name: Loop Breaker v${{ steps.version.outputs.version }}
           body: |
-            # Loop Breaker - macOS Installer
+            # Loop Breaker v${{ steps.version.outputs.version }} - macOS Installer
 
             **Automated build from commit:** ${{ github.sha }}
             **Build date:** ${{ github.event.head_commit.timestamp }}
@@ -181,6 +211,16 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Do not consume a version number unless the installer was successfully
+      # built and published.
+      - name: Persist release version
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add VERSION Source/BuildInfo.h
+          git commit -m "Bump release version to ${{ steps.version.outputs.version }} [skip ci]"
+          git push origin HEAD:main
 
       # ── Upload Build Artifact (backup) ────────────────────────────────────
       - name: User Manual PDFas workflow artifact

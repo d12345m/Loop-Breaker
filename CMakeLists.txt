@@ -1,5 +1,13 @@
 cmake_minimum_required(VERSION 3.22)
-project(LoopBreaker VERSION 1.0.0 LANGUAGES C CXX)
+
+# Keep JUCE bundle/plugin metadata in sync with the version displayed in-app
+# and used by the installer.
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" LOOP_BREAKER_VERSION LIMIT_COUNT 1)
+if(NOT LOOP_BREAKER_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
+    message(FATAL_ERROR "VERSION must contain a semantic version (for example, 1.0.7)")
+endif()
+
+project(LoopBreaker VERSION "${LOOP_BREAKER_VERSION}" LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

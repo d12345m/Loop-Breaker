@@ -71,6 +71,7 @@ public:
 
     // Preset learn-mode sentinel indices (9..16 → preset 0..7)
     static constexpr int kPresetLearnIndexBase = 9;
+    static constexpr int kProbabilityActionLearnIndexBase = kPresetLearnIndexBase + 8;
 
     // Check and clear a pending MIDI preset-recall request (call from UI thread)
     bool checkAndClearPresetRecall(int slotIndex)
@@ -84,6 +85,8 @@ public:
     {
         midiLearnEnabled.store(enabled);
         midiLearnPadIndex.store(padIndex);
+        if (enabled)
+            midiControlCCLearnTarget.store (-1);
     }
 
     int getMidiLearnPadIndex() const { return midiLearnPadIndex.load(); }
@@ -104,6 +107,8 @@ public:
     void setMidiCCLearnMode(int paramIndex)
     {
         midiCCLearnParamIndex.store(paramIndex);
+        if (paramIndex >= 0)
+            midiControlCCLearnTarget.store (-1);
     }
 
     int getMidiCCLearnParamIndex() const { return midiCCLearnParamIndex.load(); }
@@ -121,6 +126,8 @@ public:
     void setMidiPadProbCCLearnMode(int padIndex)
     {
         midiPadProbCCLearnIndex.store(padIndex);
+        if (padIndex >= 0)
+            midiControlCCLearnTarget.store (-1);
     }
 
     int getMidiPadProbCCLearnIndex() const { return midiPadProbCCLearnIndex.load(); }
@@ -130,6 +137,26 @@ public:
     {
         return learnedPadProbMidiCC.exchange(-1);
     }
+
+    static constexpr int kProbabilityActionZero = 0;
+    static constexpr int kProbabilityActionRandomize = 1;
+    static constexpr int kProbabilityActionReset = 2;
+    static constexpr int kMasterVolumeCCLearnTarget = 3;
+
+    void setMidiControlCCLearnTarget (int target)
+    {
+        midiControlCCLearnTarget.store (target);
+        if (target >= 0)
+        {
+            midiCCLearnParamIndex.store (-1);
+            midiPadProbCCLearnIndex.store (-1);
+            midiLearnEnabled.store (false);
+            midiLearnPadIndex.store (-1);
+        }
+    }
+
+    int getMidiControlCCLearnTarget() const { return midiControlCCLearnTarget.load(); }
+    bool isMidiControlCCLearnActive() const { return getMidiControlCCLearnTarget() >= 0; }
 
     enum class HostTransportState : int
     {
@@ -204,6 +231,7 @@ private:
 
     void restoreBuffersFromSessionState();
     void recoverMissingBuffersFromPadPaths();
+    void applyMidiProbabilityAction (int actionIndex);
 
     // MIDI pad control: atomic flags for toggle requests (written on audio thread, read/cleared on UI thread)
     std::atomic<bool> midiPadToggleRequests[8] { {false}, {false}, {false}, {false}, {false}, {false}, {false}, {false} };
@@ -223,6 +251,10 @@ private:
     // MIDI CC learn state for pad target probability sliders
     std::atomic<int> midiPadProbCCLearnIndex { -1 }; // which pad index is being learned
     std::atomic<int> learnedPadProbMidiCC { -1 };    // the CC# just captured (UI polls & clears)
+
+    // MIDI CC learn state for continuous master-volume control.
+    std::atomic<int> midiControlCCLearnTarget { -1 };
+    juce::Random midiProbabilityActionRandom;
 
     // MIDI preset recall requests (written on audio thread, polled from UI thread)
     std::atomic<bool> midiPresetRecallRequests[8] { {false}, {false}, {false}, {false}, {false}, {false}, {false}, {false} };

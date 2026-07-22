@@ -171,23 +171,6 @@ private:
             contentHolder.sections.push_back(s);
         }
 
-        // ---- Important: DAW buffer size ----
-        {
-            Section s;
-            s.heading = "Important: Set DAW Buffer Size to Maximum";
-            s.body =
-                "Loop Breaker performs time-stretching and pitch-shifting in real time on the audio "
-                "thread.  These operations need large, contiguous blocks of samples to work "
-                "correctly.\n\n"
-                "Set your DAW's audio buffer size to the LARGEST available value "
-                "(typically 2048 or 4096 samples).  "
-                "Using a small buffer (e.g. 64 or 128 samples) will cause audible glitching, "
-                "clicking, and tearing when speed or pitch modifiers are active.\n\n"
-                "In most DAWs this is found under:\n"
-                "  Preferences > Audio > Buffer Size  (or Block Size / Device Buffer).";
-            contentHolder.sections.push_back(s);
-        }
-
         // ---- Pad interactions ----
         {
             Section s;

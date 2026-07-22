@@ -310,9 +310,16 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                 DBG("MIDI Note On: " + juce::String(note));
                 
                 // MIDI learn mode: capture note for assignment
-                if (learnMode && learnPad >= 0 && learnPad <= (kPresetLearnIndexBase + 7))
+                if (learnMode && learnPad >= 0
+                    && learnPad < (kProbabilityActionLearnIndexBase
+                                   + SessionSettings::kNumProbabilityActions))
                 {
                     DBG("Capturing note " + juce::String(note) + " for pad " + juce::String(learnPad));
+                    if (learnPad >= kProbabilityActionLearnIndexBase)
+                    {
+                        const int actionIndex = learnPad - kProbabilityActionLearnIndexBase;
+                        app.settings.midiProbabilityActionNoteMap[static_cast<size_t> (actionIndex)] = note;
+                    }
                     learnedMidiNote.store(note);
                     midiLearnEnabled.store(false);  // Disable learn mode after capturing
                     continue;
@@ -334,6 +341,12 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                     }
                 }
 
+                // Probability action buttons behave like pads: a mapped Note On
+                // fires the action once, independent of note velocity.
+                for (int i = 0; i < SessionSettings::kNumProbabilityActions; ++i)
+                    if (app.settings.midiProbabilityActionNoteMap[static_cast<size_t> (i)] == note)
+                        applyMidiProbabilityAction (i);
+
                 // Normal mode: check if note matches any pad mapping
                 const auto& noteMap = app.settings.midiNoteMap;
                 for (int i = 0; i < 8; ++i)
@@ -353,7 +366,16 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
 
                 const int learnIdx = midiCCLearnParamIndex.load();
                 const int padLearnIdx = midiPadProbCCLearnIndex.load();
-                if (learnIdx >= 0)
+                const int controlLearnTarget = midiControlCCLearnTarget.load();
+                if (controlLearnTarget >= 0)
+                {
+                    if (controlLearnTarget == kMasterVolumeCCLearnTarget)
+                    {
+                        app.settings.masterVolumeMidiCC = cc;
+                    }
+                    midiControlCCLearnTarget.store (-1);
+                }
+                else if (learnIdx >= 0)
                 {
                     // CC learn mode: record which CC was moved and assign it
                     const auto& types = ModifierProbabilityManager::allModifierTypes();
@@ -401,6 +423,10 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                                 param->setValueNotifyingHost (normValue);
                         }
                     }
+
+                    if (app.settings.masterVolumeMidiCC == cc)
+                        if (auto* param = apvts.getParameter ("masterVolume"))
+                            param->setValueNotifyingHost (normValue);
                 }
             }
 
@@ -408,15 +434,27 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
         }
     }
 
-    // Sync APVTS parameter values → probManager (trivial: 22 atomic float reads per block)
+    // Sync APVTS parameter values → probManager (trivial: 22 atomic float reads per block).
+    // Queue entries freeze their descriptor when planned, so rebuild the entire queue
+    // once after any batch of probability changes. With no eligible non-zero weights,
+    // rebuilding deliberately leaves the queue empty.
     {
+        bool probabilitiesChanged = false;
         const auto& types = ModifierProbabilityManager::allModifierTypes();
         for (auto type : types)
         {
             const juce::String id = "prob_" + juce::String (static_cast<int> (type));
             if (auto* rawVal = apvts.getRawParameterValue (id))
-                app.settings.modifierProbabilities.setWeight (type, rawVal->load());
+            {
+                const float newWeight = rawVal->load();
+                probabilitiesChanged = probabilitiesChanged
+                                    || app.settings.modifierProbabilities.getWeight (type) != newWeight;
+                app.settings.modifierProbabilities.setWeight (type, newWeight);
+            }
         }
+
+        if (probabilitiesChanged)
+            app.scheduler.refreshPlannedQueueForProbabilityChange();
     }
 
     // Sync APVTS pad target probability values → settings
@@ -907,6 +945,16 @@ void BufferTestAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
         obj->setProperty ("midiPadProbCC", juce::var (ccArr));
     }
 
+    // MIDI note mappings for Probability-page actions, plus master-volume CC
+    {
+        juce::Array<juce::var> actionNotes;
+        actionNotes.ensureStorageAllocated (SessionSettings::kNumProbabilityActions);
+        for (int note : app.settings.midiProbabilityActionNoteMap)
+            actionNotes.add (note);
+        obj->setProperty ("midiProbabilityActionNotes", juce::var (actionNotes));
+        obj->setProperty ("masterVolumeMidiCC", app.settings.masterVolumeMidiCC);
+    }
+
     // Session settings
     obj->setProperty("bpm", app.settings.bpm);
     obj->setProperty("barsBetweenModifiers", app.settings.barsBetweenModifiers);
@@ -1059,6 +1107,21 @@ void BufferTestAudioProcessor::setStateInformation (const void* data, int sizeIn
         }
     }
 
+    if (obj->hasProperty ("midiProbabilityActionNotes"))
+    {
+        auto notesVar = obj->getProperty ("midiProbabilityActionNotes");
+        if (auto* notes = notesVar.getArray())
+        {
+            const int n = juce::jmin (static_cast<int> (notes->size()),
+                                      SessionSettings::kNumProbabilityActions);
+            for (int i = 0; i < n; ++i)
+                app.settings.midiProbabilityActionNoteMap[static_cast<size_t> (i)] =
+                    static_cast<int> (notes->getReference (i));
+        }
+    }
+    if (obj->hasProperty ("masterVolumeMidiCC"))
+        app.settings.masterVolumeMidiCC = static_cast<int> (obj->getProperty ("masterVolumeMidiCC"));
+
     // Restore session settings (v2+)
     if (obj->hasProperty("bpm"))
         app.settings.bpm = (double) obj->getProperty("bpm");
@@ -1153,6 +1216,32 @@ void BufferTestAudioProcessor::setStateInformation (const void* data, int sizeIn
 
     // Defer reloading buffers until we are on the audio thread (prepareToPlay/processBlock).
     pendingSessionStateRestore.store(true);
+}
+
+void BufferTestAudioProcessor::applyMidiProbabilityAction (int actionIndex)
+{
+    if (! juce::isPositiveAndBelow (actionIndex, SessionSettings::kNumProbabilityActions))
+        return;
+
+    auto setParameter = [this] (const juce::String& id, float normalizedValue)
+    {
+        if (auto* parameter = apvts.getParameter (id))
+            parameter->setValueNotifyingHost (normalizedValue);
+    };
+
+    const bool randomize = actionIndex == kProbabilityActionRandomize;
+    const float fixedValue = actionIndex == kProbabilityActionZero ? 0.0f : 1.0f;
+
+    for (auto type : ModifierProbabilityManager::allModifierTypes())
+    {
+        const float value = randomize ? midiProbabilityActionRandom.nextFloat() : fixedValue;
+        setParameter ("prob_" + juce::String (static_cast<int> (type)), value);
+    }
+    for (int i = 0; i < SessionSettings::kNumPads; ++i)
+    {
+        const float value = randomize ? midiProbabilityActionRandom.nextFloat() : fixedValue;
+        setParameter ("padProb_" + juce::String (i), value);
+    }
 }
 
 void BufferTestAudioProcessor::restoreBuffersFromSessionState()

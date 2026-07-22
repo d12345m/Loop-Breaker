@@ -5,6 +5,7 @@
 #include "ModifierVariantFormatter.h"
 #include "SessionSettings.h"
 #include "AppState.h"
+#include "PluginProcessor.h"
 #include "TimeStretchSoundTouch.h"
 
 class ModifierRegistryTest : public juce::UnitTest
@@ -317,16 +318,16 @@ public:
         for (size_t i = 0; i < juce::jmin (queueA.size(), queueB.size()); ++i)
             expect (samePlan (queueA[i], queueB[i]));
 
-        beginTest ("Probability changes affect only newly appended entries");
-        auto beforeProbabilityChange = schedulerA.getPlannedQueueSnapshot();
+        beginTest ("Probability changes rebuild every queue position");
         for (auto type : ModifierProbabilityManager::allModifierTypes())
             settingsA.modifierProbabilities.setWeight (type, 0.0f);
         settingsA.modifierProbabilities.setWeight (ModifierType::Reverse, 1.0f);
-        schedulerA.skipUpcoming();
-        auto afterProbabilityChange = schedulerA.getPlannedQueueSnapshot();
-        expect (samePlan (afterProbabilityChange[0], beforeProbabilityChange[1]));
-        expect (samePlan (afterProbabilityChange[1], beforeProbabilityChange[2]));
-        expect (afterProbabilityChange[2].descriptor.type == ModifierType::Reverse);
+        schedulerA.refreshPlannedQueueForProbabilityChange();
+        const auto afterProbabilityChange = schedulerA.getPlannedQueueSnapshot();
+        expectEquals (static_cast<int> (afterProbabilityChange.size()),
+                      ModifierScheduler::kPlannedQueueDepth);
+        for (const auto& planned : afterProbabilityChange)
+            expect (planned.descriptor.type == ModifierType::Reverse);
 
         beginTest ("Suppression advances the queue without firing a modifier");
         const auto suppressedFront = schedulerB.getPlannedQueueSnapshot().front();
@@ -357,6 +358,28 @@ public:
         expect (mutedScheduler.getPlannedQueueSnapshot().empty());
         mutedScheduler.removeListener (&mutedCapture);
 
+        beginTest ("Live probability changes clear and fully repopulate the queue");
+        SessionSettings liveProbabilitySettings;
+        ModifierScheduler liveProbabilityScheduler (liveProbabilitySettings);
+        liveProbabilityScheduler.setRandomSeed (9753);
+        liveProbabilityScheduler.start();
+        expectEquals (static_cast<int> (liveProbabilityScheduler.getPlannedQueueSnapshot().size()),
+                      ModifierScheduler::kPlannedQueueDepth);
+
+        for (auto type : ModifierProbabilityManager::allModifierTypes())
+            liveProbabilitySettings.modifierProbabilities.setWeight (type, 0.0f);
+        liveProbabilityScheduler.refreshPlannedQueueForProbabilityChange();
+        expect (liveProbabilityScheduler.getPlannedQueueSnapshot().empty());
+        expect (! liveProbabilityScheduler.getUpcomingModifier().has_value());
+
+        liveProbabilitySettings.modifierProbabilities.setWeight (ModifierType::Reverse, 1.0f);
+        liveProbabilityScheduler.refreshPlannedQueueForProbabilityChange();
+        const auto repopulatedQueue = liveProbabilityScheduler.getPlannedQueueSnapshot();
+        expectEquals (static_cast<int> (repopulatedQueue.size()),
+                      ModifierScheduler::kPlannedQueueDepth);
+        for (const auto& planned : repopulatedQueue)
+            expect (planned.descriptor.type == ModifierType::Reverse);
+
         beginTest ("Retired master filters cannot fill the scheduler queue");
         SessionSettings retiredSettings;
         for (auto type : ModifierProbabilityManager::allModifierTypes())
@@ -370,6 +393,79 @@ public:
 };
 
 static ModifierSchedulerPlannedQueueTest modifierSchedulerPlannedQueueTestInstance;
+
+class MidiAssignableControlTest : public juce::UnitTest
+{
+public:
+    MidiAssignableControlTest() : juce::UnitTest ("MIDI Assignable Controls", "LoopBreaker") {}
+
+    static void processController (BufferTestAudioProcessor& processor, int cc, int value)
+    {
+        juce::AudioBuffer<float> audio (processor.getTotalNumOutputChannels(), 64);
+        juce::MidiBuffer midi;
+        midi.addEvent (juce::MidiMessage::controllerEvent (1, cc, value), 0);
+        processor.processBlock (audio, midi);
+    }
+
+    static void processNoteOn (BufferTestAudioProcessor& processor, int note, float velocity = 1.0f)
+    {
+        juce::AudioBuffer<float> audio (processor.getTotalNumOutputChannels(), 64);
+        juce::MidiBuffer midi;
+        midi.addEvent (juce::MidiMessage::noteOn (1, note, velocity), 0);
+        processor.processBlock (audio, midi);
+    }
+
+    void runTest() override
+    {
+        BufferTestAudioProcessor processor;
+        processor.prepareToPlay (48000.0, 64);
+
+        beginTest ("Probability actions learn notes and fire on Note On like pads");
+        processor.setMidiLearnMode (
+            true, BufferTestAudioProcessor::kProbabilityActionLearnIndexBase
+                      + BufferTestAudioProcessor::kProbabilityActionZero);
+        processNoteOn (processor, 70);
+        expectEquals (processor.getAppState().settings.midiProbabilityActionNoteMap[0], 70);
+        expect (! processor.isMidiLearnEnabled());
+
+        processNoteOn (processor, 70);
+        const auto firstType = ModifierProbabilityManager::allModifierTypes().front();
+        const juce::String firstProbabilityId =
+            "prob_" + juce::String (static_cast<int> (firstType));
+        auto* firstProbability = processor.getAPVTS().getParameter (firstProbabilityId);
+        expect (firstProbability != nullptr);
+        if (firstProbability != nullptr)
+            expectWithinAbsoluteError (firstProbability->getValue(), 0.0f, 0.001f);
+
+        if (firstProbability != nullptr)
+            firstProbability->setValueNotifyingHost (1.0f);
+        processNoteOn (processor, 70, 0.25f);
+        if (firstProbability != nullptr)
+            expectWithinAbsoluteError (firstProbability->getValue(), 0.0f, 0.001f);
+
+        beginTest ("Master volume learns a CC and follows its continuous value");
+        processor.setMidiControlCCLearnTarget (BufferTestAudioProcessor::kMasterVolumeCCLearnTarget);
+        processController (processor, 71, 64);
+        expectEquals (processor.getAppState().settings.masterVolumeMidiCC, 71);
+        processController (processor, 71, 127);
+        if (auto* value = processor.getAPVTS().getRawParameterValue ("masterVolume"))
+            expectWithinAbsoluteError (value->load(), 12.0f, 0.001f);
+        else
+            expect (false, "Master-volume parameter is missing");
+
+        beginTest ("New MIDI mappings persist in plugin state");
+        juce::MemoryBlock state;
+        processor.getStateInformation (state);
+        BufferTestAudioProcessor restored;
+        restored.setStateInformation (state.getData(), static_cast<int> (state.getSize()));
+        expectEquals (restored.getAppState().settings.midiProbabilityActionNoteMap[0], 70);
+        expectEquals (restored.getAppState().settings.masterVolumeMidiCC, 71);
+
+        processor.releaseResources();
+    }
+};
+
+static MidiAssignableControlTest midiAssignableControlTestInstance;
 
 class ModifierSchedulerQuantizeTest : public juce::UnitTest {
 public:

@@ -623,14 +623,19 @@ void drawQuarterBurst (GlyphCanvas& c, float phase)
 void drawSwap (GlyphCanvas& c, float phase)
 {
     const float shift = triangle (phase) * 8.0f;
+    constexpr float stackWidth = 34.0f;
+    constexpr float layerInset = 5.0f;
+    constexpr float layerWidth = stackWidth - layerInset * 2.0f;
     c.colour (c.p.ink);
-    c.g.drawRect (c.rect (12.0f, 22.0f, 27.0f, 54.0f), c.u (2.0f));
-    c.g.drawRect (c.rect (61.0f, 22.0f, 27.0f, 54.0f), c.u (2.0f));
+    c.g.drawRect (c.rect (5.0f, 22.0f, stackWidth, 54.0f), c.u (2.0f));
+    c.g.drawRect (c.rect (61.0f, 22.0f, stackWidth, 54.0f), c.u (2.0f));
     for (int i = 0; i < 3; ++i)
     {
         c.colour (i == 0 ? c.p.vermilion : (i == 1 ? c.p.ultramarine : c.p.safetyYellow));
-        c.g.fillRect (c.rect (17.0f + shift * (i == 0 ? 1.0f : 0.0f), 30.0f + i * 14.0f, 17.0f, 6.0f));
-        c.g.fillRect (c.rect (66.0f - shift * (i == 2 ? 1.0f : 0.0f), 30.0f + i * 14.0f, 17.0f, 6.0f));
+        c.g.fillRect (c.rect (5.0f + layerInset + shift * (i == 0 ? 1.0f : 0.0f),
+                              30.0f + i * 14.0f, layerWidth, 6.0f));
+        c.g.fillRect (c.rect (61.0f + layerInset - shift * (i == 2 ? 1.0f : 0.0f),
+                              30.0f + i * 14.0f, layerWidth, 6.0f));
     }
     c.colour (c.p.ink);
     c.line (42.0f, 18.0f, 58.0f, 82.0f, 1.5f);

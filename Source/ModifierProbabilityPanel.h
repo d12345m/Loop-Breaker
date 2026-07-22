@@ -49,16 +49,19 @@ public:
         zeroButton.setTooltip ("Set every modifier and pad-target probability to 0%.");
         zeroButton.onClick = [this] { setAllProbabilities (0.0f); };
         addAndMakeVisible (zeroButton);
+        zeroButton.addMouseListener (this, false);
 
         randomizeButton.setButtonText ("RANDOMIZE");
         randomizeButton.setTooltip ("Assign a new random value to every modifier and pad-target probability.");
         randomizeButton.onClick = [this] { randomizeAllProbabilities(); };
         addAndMakeVisible (randomizeButton);
+        randomizeButton.addMouseListener (this, false);
 
         resetButton.setButtonText ("SET ALL 100%");
         resetButton.setTooltip ("Set every modifier and pad-target probability to 100%.");
         resetButton.onClick = [this] { resetAllToDefault(); };
         addAndMakeVisible (resetButton);
+        resetButton.addMouseListener (this, false);
 
         applyTheme();
         startTimerHz (10);
@@ -72,6 +75,9 @@ public:
             if (row.slider) row.slider->removeMouseListener (this);
         for (auto& pr : padRows)
             if (pr.slider) pr.slider->removeMouseListener (this);
+        zeroButton.removeMouseListener (this);
+        randomizeButton.removeMouseListener (this);
+        resetButton.removeMouseListener (this);
     }
 
     void resized() override
@@ -184,6 +190,26 @@ private:
         }
     };
 
+    struct ActionButton : public juce::TextButton
+    {
+        using juce::TextButton::TextButton;
+        void mouseDown (const juce::MouseEvent& e) override
+        {
+            if (e.mods.isPopupMenu()) return;
+            juce::TextButton::mouseDown (e);
+        }
+        void mouseDrag (const juce::MouseEvent& e) override
+        {
+            if (e.mods.isPopupMenu()) return;
+            juce::TextButton::mouseDrag (e);
+        }
+        void mouseUp (const juce::MouseEvent& e) override
+        {
+            if (e.mods.isPopupMenu()) return;
+            juce::TextButton::mouseUp (e);
+        }
+    };
+
     struct Row
     {
         ModifierType type;
@@ -212,9 +238,9 @@ private:
         }
     } content;
     std::vector<Row>                        rows;
-    juce::TextButton                        zeroButton;
-    juce::TextButton                        randomizeButton;
-    juce::TextButton                        resetButton;
+    ActionButton                            zeroButton;
+    ActionButton                            randomizeButton;
+    ActionButton                            resetButton;
     juce::Rectangle<int>                    presetStripBounds;
     juce::Rectangle<int>                    viewportBounds;
     juce::Rectangle<int>                    actionStripBounds;
@@ -602,6 +628,7 @@ private:
 
         // Update LEARN indicator while learn mode is active
         refreshLearnIndicators();
+        updateActionButtonTooltips();
     }
 
     void updateValueLabel (Row& row)
@@ -651,6 +678,26 @@ private:
                 processor.setMidiCCLearnMode (-1);
             if (processor.isMidiPadProbCCLearnActive())
                 processor.setMidiPadProbCCLearnMode (-1);
+            if (processor.isMidiControlCCLearnActive())
+                processor.setMidiControlCCLearnTarget (-1);
+            if (processor.isMidiLearnEnabled())
+                processor.setMidiLearnMode (false, -1);
+            return;
+        }
+
+        if (e.eventComponent == &zeroButton)
+        {
+            showActionNoteMenu (BufferTestAudioProcessor::kProbabilityActionZero);
+            return;
+        }
+        if (e.eventComponent == &randomizeButton)
+        {
+            showActionNoteMenu (BufferTestAudioProcessor::kProbabilityActionRandomize);
+            return;
+        }
+        if (e.eventComponent == &resetButton)
+        {
+            showActionNoteMenu (BufferTestAudioProcessor::kProbabilityActionReset);
             return;
         }
 
@@ -706,6 +753,68 @@ private:
     }
 
     // ── Right-click popup menus ──────────────────────────────────────────
+
+    void showActionNoteMenu (int actionIndex)
+    {
+        if (! juce::isPositiveAndBelow (actionIndex, SessionSettings::kNumProbabilityActions))
+            return;
+
+        auto& mappings = processor.getAppState().settings.midiProbabilityActionNoteMap;
+        const int currentNote = mappings[static_cast<size_t> (actionIndex)];
+
+        juce::PopupMenu menu;
+        menu.addItem (1, "MIDI Learn", ! processor.isMidiLearnEnabled());
+        menu.addItem (2,
+                      currentNote >= 0 ? "Clear MIDI Note (" + juce::String (currentNote) + ")"
+                                       : "Clear MIDI Note",
+                      currentNote >= 0);
+        if (currentNote >= 0)
+        {
+            menu.addSeparator();
+            menu.addItem (0, "MIDI Note: " + juce::String (currentNote), false);
+        }
+
+        menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition(),
+            [this, actionIndex] (int result)
+            {
+                if (result == 1)
+                {
+                    processor.setMidiLearnMode (
+                        true,
+                        BufferTestAudioProcessor::kProbabilityActionLearnIndexBase + actionIndex);
+                }
+                else if (result == 2)
+                {
+                    processor.getAppState().settings
+                        .midiProbabilityActionNoteMap[static_cast<size_t> (actionIndex)] = -1;
+                    processor.setMidiLearnMode (false, -1);
+                    updateActionButtonTooltips();
+                }
+            });
+    }
+
+    void updateActionButtonTooltips()
+    {
+        const auto& mappings = processor.getAppState().settings.midiProbabilityActionNoteMap;
+        const int learningTarget = processor.isMidiLearnEnabled()
+            ? processor.getMidiLearnPadIndex() : -1;
+        auto setTooltip = [&] (ActionButton& button, int actionIndex, const juce::String& description)
+        {
+            juce::String suffix;
+            if (learningTarget == BufferTestAudioProcessor::kProbabilityActionLearnIndexBase + actionIndex)
+                suffix = " Waiting for MIDI note…";
+            else if (mappings[static_cast<size_t> (actionIndex)] >= 0)
+                suffix = " MIDI note " + juce::String (mappings[static_cast<size_t> (actionIndex)]) + ".";
+            button.setTooltip (description + suffix + " Right-click for MIDI mapping.");
+        };
+
+        setTooltip (zeroButton, BufferTestAudioProcessor::kProbabilityActionZero,
+                    "Set every modifier and pad-target probability to 0%.");
+        setTooltip (randomizeButton, BufferTestAudioProcessor::kProbabilityActionRandomize,
+                    "Assign a new random value to every modifier and pad-target probability.");
+        setTooltip (resetButton, BufferTestAudioProcessor::kProbabilityActionReset,
+                    "Set every modifier and pad-target probability to 100%.");
+    }
 
     void showModifierCCMenu (int paramIndex)
     {

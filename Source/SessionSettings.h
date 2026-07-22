@@ -116,6 +116,14 @@ struct SessionSettings
         return a;
     }();
 
+    // MIDI note mappings for Probability-page action buttons:
+    // Set All 0%, Randomize, and Set All 100%.
+    static constexpr int kNumProbabilityActions = 3;
+    std::array<int, kNumProbabilityActions> midiProbabilityActionNoteMap = { -1, -1, -1 };
+
+    // Continuous CC mapping for the Session-page master-volume knob.
+    int masterVolumeMidiCC = -1;
+
     // Persistence meta
     juce::String projectName { "Untitled Project" };
     juce::String projectId { juce::Uuid().toString() };

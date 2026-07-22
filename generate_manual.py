@@ -302,16 +302,6 @@ def build_manual():
     pdf.bullet("FLAC (.flac)")
     pdf.bullet("MP3 (.mp3)")
 
-    pdf.chapter_title("Important: DAW Buffer Size", level=2)
-    pdf.note_box(
-        "Loop Breaker performs real-time time-stretching and pitch-shifting on the audio thread. "
-        "These DSP operations require large, contiguous blocks of samples. Set your DAW's audio "
-        "buffer size to the LARGEST available value (typically 2048 or 4096 samples). Using a "
-        "small buffer (e.g. 64 or 128 samples) will cause audible glitching, clicking, and "
-        "tearing when speed or pitch modifiers are active. In most DAWs this setting is found under: "
-        "Preferences > Audio > Buffer Size (or Block Size / Device Buffer)."
-    )
-
     # ═══════════════════════════════════════════════════════════════════════
     # 3. INSTALLATION
     # ═══════════════════════════════════════════════════════════════════════
@@ -481,7 +471,7 @@ def build_manual():
     pdf.bullet("Selected: highlighted/glowing - will be targeted by next modifier")
     pdf.bullet("Playing: animated indicator when the transport is running")
 
-    pdf.chapter_title("Pad Interactions", level=3)
+    pdf.chapter_title("Pad Interactions", level=2)
     interactions = [
         ("Click", "Toggle pad selection on / off"),
         ("Right-click", "Open context menu (Load Sample, Remove Sample, MIDI Learn, Clear MIDI Note)"),
@@ -1054,7 +1044,6 @@ def build_manual():
     pdf.chapter_title("Known Issues", level=2)
     issues = [
         "Octave pitch-shifting may produce audible artifacts at extreme settings. Staying within +/-1 octave typically sounds cleanest.",
-        "Small DAW buffer sizes (< 512 samples) may cause tearing or glitching with time-stretch effects. Use 2048+ for best results.",
     ]
     for issue in issues:
         pdf.bullet(issue)

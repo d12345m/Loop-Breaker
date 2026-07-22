@@ -101,12 +101,17 @@ public:
                                               juce::jmax (90.0f, content.getWidth() * 0.48f),
                                               content.getWidth() * 0.38f);
         auto meta = content.removeFromLeft (metaWidth);
-        auto glyph = content.reduced (6.0f, 0.0f);
 
         // The vertical rule makes the cell read as a modular control board.
         g.setColour (glyphPalette.ink.withAlpha (0.55f));
         g.drawVerticalLine (juce::roundToInt (meta.getRight() + 3.0f),
                             bounds.getY() + 1.0f, bounds.getBottom() - 1.0f);
+
+        // Centre the glyph in the area bounded by the rule and the NEXT-cell
+        // edge.  Deriving this from the rendered divider avoids the subtle
+        // left bias caused by the metadata content inset.
+        const auto glyphCell = nextBounds.withLeft (meta.getRight() + 3.0f);
+        const auto glyph = glyphCell.reduced (6.0f, 8.0f);
 
         auto& fonts = ThemeFonts::getInstance();
         auto nextRow = meta.removeFromTop (18.0f);

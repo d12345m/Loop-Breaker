@@ -72,6 +72,13 @@ void ModifierScheduler::selectNextModifier()
         clearPlannedQueue();
 }
 
+void ModifierScheduler::refreshPlannedQueueForProbabilityChange()
+{
+    clearPlannedQueue();
+    if (running)
+        fillPlannedQueue();
+}
+
 std::optional<ModifierDescriptor> ModifierScheduler::getUpcomingModifier() const
 {
     if (auto planned = getFrontPlannedModifier())

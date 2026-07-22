@@ -72,6 +72,7 @@ public:
 
         // Master volume knob
         addAndMakeVisible(masterVolumeSlider);
+        masterVolumeSlider.addMouseListener (this, false);
         masterVolumeSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
         masterVolumeSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 54, 16);
         masterVolumeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
@@ -79,6 +80,7 @@ public:
         addAndMakeVisible(masterVolumeLabel);
         masterVolumeLabel.setJustificationType(juce::Justification::centred);
         masterVolumeLabel.setFont(ThemeFonts::getInstance().controlLabelFont(15.0f));
+        updateMasterVolumeMidiTooltip();
 
         // statusLabel hidden — may be re-used later
         statusLabel.setVisible(false);
@@ -220,6 +222,7 @@ public:
         stopTimer();
         ThemeEngine::getInstance().removeListener(this);
         app.scheduler.removeListener(this);
+        masterVolumeSlider.removeMouseListener (this);
         setLookAndFeel(nullptr);
     }
 
@@ -352,6 +355,16 @@ public:
 
     void mouseDown(const juce::MouseEvent& e) override
     {
+        if (e.eventComponent == &masterVolumeSlider)
+        {
+            if (e.mods.isPopupMenu())
+                showMasterVolumeContextMenu();
+            else if (processor.getMidiControlCCLearnTarget()
+                     == BufferTestAudioProcessor::kMasterVolumeCCLearnTarget)
+                processor.setMidiControlCCLearnTarget (-1);
+            return;
+        }
+
 #if JUCE_DEBUG
         // Only handle events targeting the modifiers toggle button
         if (e.eventComponent != &modifiersToggle)
@@ -540,7 +553,26 @@ private:
     juce::Label barsBetweenModifiersLabel { {}, "Bars/Mod" };
     juce::Label statusLabel { {}, "Status: Idle" };
 
-    juce::Slider masterVolumeSlider;
+    struct MidiSlider : public juce::Slider
+    {
+        void mouseDown (const juce::MouseEvent& e) override
+        {
+            if (e.mods.isPopupMenu()) return;
+            juce::Slider::mouseDown (e);
+        }
+        void mouseDrag (const juce::MouseEvent& e) override
+        {
+            if (e.mods.isPopupMenu()) return;
+            juce::Slider::mouseDrag (e);
+        }
+        void mouseUp (const juce::MouseEvent& e) override
+        {
+            if (e.mods.isPopupMenu()) return;
+            juce::Slider::mouseUp (e);
+        }
+    };
+
+    MidiSlider masterVolumeSlider;
     juce::Label masterVolumeLabel { {}, "Vol" };
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> masterVolumeAttachment;
 
@@ -629,6 +661,7 @@ private:
     {
         // Lightweight UI refresh only; timing is driven by the audio thread in the processor.
         refreshStatus();
+        updateMasterVolumeMidiTooltip();
         padGrid.setPlayingStates(app.bufferManager.getPlayingBufferIndices());
 
         // Poll for MIDI pad toggle requests (from audio thread)
@@ -715,6 +748,25 @@ private:
                 presetBar.setMidiLearnActive(slot, false);
                 presetLearnSlot = -1;
                 processor.setMidiLearnMode(false, -1);
+            }
+            else if (padIndex >= BufferTestAudioProcessor::kProbabilityActionLearnIndexBase
+                     && padIndex < BufferTestAudioProcessor::kProbabilityActionLearnIndexBase
+                                     + SessionSettings::kNumProbabilityActions)
+            {
+                const int actionIndex =
+                    padIndex - BufferTestAudioProcessor::kProbabilityActionLearnIndexBase;
+                app.settings.midiProbabilityActionNoteMap[static_cast<size_t> (actionIndex)] = learnedNote;
+
+                // Clear any stale learn badges from another note-mappable control.
+                for (int i = 0; i < 8; ++i)
+                    padGrid.setMidiLearnForPad (i, false);
+                if (presetLearnSlot >= 0 && presetLearnSlot < 8)
+                    presetBar.setMidiLearnActive (presetLearnSlot, false);
+                presetLearnSlot = -1;
+#if JUCE_DEBUG
+                modifierToggleLearnActive = false;
+#endif
+                processor.setMidiLearnMode (false, -1);
             }
             else if (padIndex >= 0 && padIndex < 8)
             {
@@ -1050,6 +1102,50 @@ private:
                     default: break;
                 }
             });
+    }
+
+    void showMasterVolumeContextMenu()
+    {
+        const int currentCC = app.settings.masterVolumeMidiCC;
+        juce::PopupMenu menu;
+        menu.addItem (1, "MIDI CC Learn", ! processor.isMidiControlCCLearnActive());
+        menu.addItem (2,
+                      currentCC >= 0 ? "Clear CC (" + juce::String (currentCC) + ")" : "Clear CC",
+                      currentCC >= 0);
+        if (currentCC >= 0)
+        {
+            menu.addSeparator();
+            menu.addItem (0, "MIDI CC: " + juce::String (currentCC), false);
+        }
+
+        menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition(),
+            [this] (int result)
+            {
+                if (result == 1)
+                {
+                    processor.setMidiControlCCLearnTarget (
+                        BufferTestAudioProcessor::kMasterVolumeCCLearnTarget);
+                }
+                else if (result == 2)
+                {
+                    app.settings.masterVolumeMidiCC = -1;
+                    processor.setMidiControlCCLearnTarget (-1);
+                    updateMasterVolumeMidiTooltip();
+                }
+            });
+    }
+
+    void updateMasterVolumeMidiTooltip()
+    {
+        juce::String tooltip = "Master output volume. Right-click for MIDI mapping.";
+        if (processor.getMidiControlCCLearnTarget()
+            == BufferTestAudioProcessor::kMasterVolumeCCLearnTarget)
+            tooltip = "Waiting for MIDI CC…";
+        else if (app.settings.masterVolumeMidiCC >= 0)
+            tooltip = "Master output volume — MIDI CC "
+                    + juce::String (app.settings.masterVolumeMidiCC)
+                    + ". Right-click for MIDI mapping.";
+        masterVolumeSlider.setTooltip (tooltip);
     }
 
     void refreshStatus()

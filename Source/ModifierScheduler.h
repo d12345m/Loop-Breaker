@@ -49,6 +49,10 @@ public:
     // Force immediate selection of next upcoming modifier (does not trigger it)
     void selectNextModifier();
 
+    // Rebuild every frozen queue position after modifier probability weights change.
+    // If no schedulable modifier has a non-zero weight, the queue remains empty.
+    void refreshPlannedQueueForProbabilityChange();
+
     // Getter for UI
     std::optional<ModifierDescriptor> getUpcomingModifier() const;
     std::vector<PlannedModifier> getPlannedQueueSnapshot() const;

@@ -3,15 +3,28 @@
 #include "Modifier.h"
 #include "ThemeEngine.h"
 
-// Simple developer panel listing modifiers with checkboxes; checking one forces it as upcoming.
+// Developer panel listing modifiers with checkboxes. Queue-aware hosts can
+// expose a slot selector; legacy hosts continue to force only the front item.
 class ModifierSelectionPanel : public juce::Component
 {
 public:
     using SelectionCallback = std::function<void(ModifierType)>;
+    using QueueSelectionCallback = std::function<void(int, ModifierType)>;
     using VariantCallback = std::function<void(ModifierType, const juce::String&)>;
 
     ModifierSelectionPanel()
     {
+        queueSlotLabel.setText ("FORCE SLOT", juce::dontSendNotification);
+        queueSlotLabel.setJustificationType (juce::Justification::centredLeft);
+        queueSlotLabel.setVisible (false);
+        addAndMakeVisible (queueSlotLabel);
+        queueSlotBox.addItem ("NEXT", 1);
+        queueSlotBox.addItem ("QUEUE 1", 2);
+        queueSlotBox.addItem ("QUEUE 2", 3);
+        queueSlotBox.setSelectedId (1, juce::dontSendNotification);
+        queueSlotBox.setVisible (false);
+        addAndMakeVisible (queueSlotBox);
+
         auto addToggle = [&](ModifierType type, const juce::String& label)
         {
             auto* t = new juce::ToggleButton(label);
@@ -26,7 +39,10 @@ public:
                     // Untoggle all others to keep single active selection semantic
                     for (auto* other : toggles)
                         if (other != t) other->setToggleState(false, juce::dontSendNotification);
-                    if (onForceSelection) onForceSelection(type);
+                    if (onForceQueueSelection)
+                        onForceQueueSelection (queueSlotBox.getSelectedId() - 1, type);
+                    else if (onForceSelection)
+                        onForceSelection(type);
                 }
                 else if (onForceSelection)
                 {
@@ -76,17 +92,34 @@ public:
     {
         auto area = getLocalBounds().reduced(4);
         int h = 24;
+        if (onForceQueueSelection)
+        {
+            auto slotRow = area.removeFromTop (h);
+            queueSlotLabel.setBounds (slotRow.removeFromLeft (88).reduced (2));
+            queueSlotBox.setBounds (slotRow.reduced (2));
+        }
         for (auto* t : toggles)
             t->setBounds(area.removeFromTop(h).reduced(2));
     }
 
     void setForceSelectionCallback(SelectionCallback cb) { onForceSelection = std::move(cb); }
+    void setForceQueueSelectionCallback (QueueSelectionCallback cb)
+    {
+        onForceQueueSelection = std::move (cb);
+        const bool visible = static_cast<bool> (onForceQueueSelection);
+        queueSlotLabel.setVisible (visible);
+        queueSlotBox.setVisible (visible);
+        resized();
+    }
     void setForceVariantCallback(VariantCallback cb) { onForceVariant = std::move(cb); }
 
 private:
     // Parent Component owns children added via addAndMakeVisible; store non-owning pointers to avoid double deletion
     juce::Array<juce::ToggleButton*> toggles;
+    juce::Label queueSlotLabel;
+    juce::ComboBox queueSlotBox;
     SelectionCallback onForceSelection;
+    QueueSelectionCallback onForceQueueSelection;
     VariantCallback onForceVariant;
 
     void addVariantToggle(ModifierType type, const juce::String& label, const juce::String& variant)

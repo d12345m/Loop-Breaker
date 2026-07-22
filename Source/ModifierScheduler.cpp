@@ -132,7 +132,18 @@ void ModifierScheduler::updateHostTimeline(double ppqPosition, double bpm)
 
 void ModifierScheduler::setUserSelectedBuffers(const juce::Array<int>& indices)
 {
-    userSelectedBuffers = indices;
+    {
+        const juce::SpinLock::ScopedLockType lock (targetStateLock);
+        userSelectedBuffers = indices;
+    }
+    refreshPlannedTargets();
+}
+
+void ModifierScheduler::setAvailableTargetMask (uint32_t mask)
+{
+    mask &= 0xffu;
+    if (availableTargetMask.exchange (mask) != mask)
+        refreshPlannedTargets();
 }
 
 // (timer removed – driven exclusively by audio callback time now)
@@ -253,6 +264,7 @@ void ModifierScheduler::triggerIfDue()
     {
         const auto planned = getFrontPlannedModifier();
         const auto descriptor = planned.has_value() ? planned->descriptor : ModifierDescriptor {};
+        bool consumedExplicitTargets = false;
 
         const bool isNoop = ! planned.has_value();
 
@@ -269,8 +281,14 @@ void ModifierScheduler::triggerIfDue()
             }
             // After a successful trigger, if user had explicitly selected buffers, clear them so
             // next cycle requires fresh selection (pad UI will be updated by listener/owner).
-            if (!userSelectedBuffers.isEmpty())
-                userSelectedBuffers.clearQuick();
+            {
+                const juce::SpinLock::ScopedLockType lock (targetStateLock);
+                if (! userSelectedBuffers.isEmpty())
+                {
+                    userSelectedBuffers.clearQuick();
+                    consumedExplicitTargets = true;
+                }
+            }
         }
         else
         {
@@ -280,6 +298,8 @@ void ModifierScheduler::triggerIfDue()
         lastTriggerAbsoluteSeconds = accumulatedSecondsTotal;
         scheduleNextTrigger();
         advancePlannedQueue();
+        if (consumedExplicitTargets)
+            refreshPlannedTargets();
     }
 }
 
@@ -300,6 +320,7 @@ void ModifierScheduler::triggerIfDueHost(double currentPpq, double bpm)
         const int burstRemainingBefore = quarterNoteBurstRemaining.load();
         const auto planned = getFrontPlannedModifier();
         const auto descriptor = planned.has_value() ? planned->descriptor : ModifierDescriptor {};
+        bool consumedExplicitTargets = false;
 
         const bool isNoop = ! planned.has_value();
 
@@ -312,8 +333,14 @@ void ModifierScheduler::triggerIfDueHost(double currentPpq, double bpm)
             {
                 for (auto* l : listeners) l->modifierTriggered(descriptor, targets);
             }
-            if (!userSelectedBuffers.isEmpty())
-                userSelectedBuffers.clearQuick();
+            {
+                const juce::SpinLock::ScopedLockType lock (targetStateLock);
+                if (! userSelectedBuffers.isEmpty())
+                {
+                    userSelectedBuffers.clearQuick();
+                    consumedExplicitTargets = true;
+                }
+            }
         }
         else
         {
@@ -357,6 +384,8 @@ void ModifierScheduler::triggerIfDueHost(double currentPpq, double bpm)
         // Schedule next boundary and choose next modifier.
         scheduleNextTriggerHost(nextTriggerPpq, bpm);
         advancePlannedQueue();
+        if (consumedExplicitTargets)
+            refreshPlannedTargets();
 
         // Keep accumulatedSecondsTotal consistent for UI.
         accumulatedSecondsTotal = currentPpq * secondsPerQuarter;
@@ -450,6 +479,33 @@ void ModifierScheduler::clearPlannedQueue()
     triggerAsyncUpdate();
 }
 
+void ModifierScheduler::refreshPlannedTargets()
+{
+    std::vector<ModifierDescriptor> descriptors;
+    {
+        const juce::SpinLock::ScopedLockType lock (plannedQueueLock);
+        descriptors.reserve (plannedQueue.size());
+        for (const auto& planned : plannedQueue)
+            descriptors.push_back (planned.descriptor);
+    }
+
+    if (descriptors.empty())
+        return;
+
+    std::vector<juce::Array<int>> targets;
+    targets.reserve (descriptors.size());
+    for (const auto& descriptor : descriptors)
+        targets.push_back (selectTargetBuffers (descriptor));
+
+    {
+        const juce::SpinLock::ScopedLockType lock (plannedQueueLock);
+        const auto count = juce::jmin (plannedQueue.size(), targets.size());
+        for (size_t i = 0; i < count; ++i)
+            plannedQueue[i].targets = std::move (targets[i]);
+    }
+    broadcastUpcoming();
+}
+
 void ModifierScheduler::triggerNow()
 {
     if (!running || !getUpcomingModifier().has_value()) return;
@@ -469,6 +525,14 @@ void ModifierScheduler::skipUpcoming()
 
 void ModifierScheduler::forceUpcomingModifier(ModifierType type)
 {
+    forcePlannedModifier (0, type);
+}
+
+void ModifierScheduler::forcePlannedModifier (int queueIndex, ModifierType type)
+{
+    if (! juce::isPositiveAndBelow (queueIndex, kPlannedQueueDepth))
+        return;
+
     // Find prototype descriptor for given type
     for (auto* proto : prototypeCache)
     {
@@ -476,7 +540,22 @@ void ModifierScheduler::forceUpcomingModifier(ModifierType type)
         {
             // Prepare a randomized variant so planned fields & description are populated
             auto descriptor = prepareVariantDescriptor (proto->getDescriptor());
-            replaceFrontPlannedModifier ({ descriptor, selectTargetBuffers (descriptor) });
+            PlannedModifier replacement { descriptor, selectTargetBuffers (descriptor) };
+
+            if (queueIndex == 0)
+            {
+                replaceFrontPlannedModifier (std::move (replacement));
+                return;
+            }
+
+            {
+                const juce::SpinLock::ScopedLockType lock (plannedQueueLock);
+                const auto index = static_cast<size_t> (queueIndex);
+                if (index >= plannedQueue.size())
+                    return;
+                plannedQueue[index] = std::move (replacement);
+            }
+            broadcastUpcoming();
             return;
         }
     }
@@ -907,9 +986,19 @@ juce::Array<int> ModifierScheduler::selectTargetBuffers(const ModifierDescriptor
     if (desc.category == ModifierCategory::MasterEffect || desc.category == ModifierCategory::GlobalUtility)
         return targets; // Empty means 'master/global'
 
-    // If user selected pads, use them; else select 1-4 weighted-random
-    if (!userSelectedBuffers.isEmpty())
-        return userSelectedBuffers;
+    const auto availableMask = availableTargetMask.load();
+
+    // If the user selected loaded pads, use those. Empty/unloaded selections do
+    // not create target pips that can never produce an audible result.
+    {
+        const juce::SpinLock::ScopedLockType targetLock (targetStateLock);
+        for (int index : userSelectedBuffers)
+            if (juce::isPositiveAndBelow (index, 8)
+                && (availableMask & (1u << static_cast<uint32_t> (index))) != 0)
+                targets.addIfNotAlreadyThere (index);
+    }
+    if (! targets.isEmpty())
+        return targets;
 
     const juce::SpinLock::ScopedLockType lock(rngLock);
 
@@ -920,6 +1009,9 @@ juce::Array<int> ModifierScheduler::selectTargetBuffers(const ModifierDescriptor
 
     for (int i = 0; i < 8; ++i)
     {
+        if ((availableMask & (1u << static_cast<uint32_t> (i))) == 0)
+            continue;
+
         float w = settings.padTargetProbabilities[static_cast<size_t>(i)];
         if (w > 0.0f)
         {

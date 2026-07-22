@@ -238,6 +238,7 @@ public:
         // ── "LOOP BREAKER" branding in the top-left with progress fill ──
         {
             auto brandArea = brandingBounds.toFloat();
+            auto wordmarkArea = brandArea;
             auto& fonts = ThemeFonts::getInstance();
             const auto font = fonts.displayFont(30.0f);
             g.setFont(font);
@@ -247,8 +248,10 @@ public:
             // Build glyph arrangement for precise clipping
             juce::GlyphArrangement glyphs;
             const float textW = juce::GlyphArrangement::getStringWidth(font, logoText);
-            const float textX = brandArea.getX() + (brandArea.getWidth() - textW) * 0.5f;
-            glyphs.addLineOfText(font, logoText, textX, brandArea.getY() + font.getAscent() + (brandArea.getHeight() - font.getHeight()) * 0.5f);
+            const float textX = wordmarkArea.getX() + (wordmarkArea.getWidth() - textW) * 0.5f;
+            glyphs.addLineOfText(font, logoText, textX,
+                                 wordmarkArea.getY() + font.getAscent()
+                                 + (wordmarkArea.getHeight() - font.getHeight()) * 0.5f);
 
             auto glyphBounds = glyphs.getBoundingBox(0, -1, false);
             const float fillX = glyphBounds.getX() + glyphBounds.getWidth() * brandingProgress;
@@ -295,13 +298,14 @@ public:
                 const float loopW = juce::GlyphArrangement::getStringWidth(font, loopStr);
 
                 g.setColour(Theme::accent());
-                g.drawText(loopStr, juce::Rectangle<float>(textX, brandArea.getY(), loopW, brandArea.getHeight()),
+                g.drawText(loopStr, juce::Rectangle<float>(textX, wordmarkArea.getY(), loopW, wordmarkArea.getHeight()),
                            juce::Justification::centredLeft, false);
                 g.setColour(Theme::text());
-                g.drawText(breakerStr, juce::Rectangle<float>(textX + loopW, brandArea.getY(),
-                           brandArea.getRight() - (textX + loopW), brandArea.getHeight()),
+                g.drawText(breakerStr, juce::Rectangle<float>(textX + loopW, wordmarkArea.getY(),
+                           wordmarkArea.getRight() - (textX + loopW), wordmarkArea.getHeight()),
                            juce::Justification::centredLeft, false);
             }
+
         }
 
 #if JUCE_DEBUG

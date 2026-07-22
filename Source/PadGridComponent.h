@@ -219,7 +219,7 @@ public:
         const int cols = 4;
         const int padW = area.getWidth() / cols;
         const int padH = area.getHeight() / rows;
-        const int labelHeight = 20;
+        const int labelHeight = 22;
 
         for (int r = 0; r < rows; ++r)
         {
@@ -229,10 +229,14 @@ public:
                 int idx = (rows - 1 - r) * cols + c;
                 if (idx < padButtons.size())
                 {
-                    juce::Rectangle<int> padRect(area.getX() + c * padW, area.getY() + r * padH, padW - 4, padH - 4);
-                    auto labelRect = padRect.removeFromBottom(labelHeight);
-                    padFileLabels[idx]->setBounds(labelRect.reduced(2, 0));
-                    padButtons[idx]->setBounds(padRect.reduced(4));
+                    juce::Rectangle<int> cell (area.getX() + c * padW,
+                                               area.getY() + r * padH,
+                                               padW, padH);
+                    auto padRect = cell.reduced (4);
+                    padButtons[idx]->setBounds (padRect);
+                    padFileLabels[idx]->setBounds (
+                        padRect.withTrimmedTop (padRect.getHeight() - labelHeight)
+                               .reduced (24, 1));
                 }
             }
         }
@@ -452,7 +456,7 @@ private:
         return -1;
     }
 
-    void paintOverChildren(juce::Graphics& g) override
+    void paint(juce::Graphics& g) override
     {
         const auto& palette = ThemeEngine::getInstance().getCurrentPalette();
         const float cr = palette.borderRadius;
@@ -464,30 +468,29 @@ private:
             {
                 auto r = btn->getBounds().toFloat();
 
-                // ── Pad background ──
+                // ── Ivory outer tile ──
                 const bool hasWave = (thumbnails[i] != nullptr && thumbnails[i]->getTotalLength() > 0.0);
-                g.setColour(hasWave ? palette.padLoaded : palette.padEmpty);
+                g.setColour (palette.padEmpty);
                 g.fillRoundedRectangle(r, cr);
-
-                // ── Inner shadow (dark vignette around edges) ──
-                {
-                    auto insetRect = r.reduced(1.0f);
-                    juce::ColourGradient vignette(juce::Colours::transparentBlack, insetRect.getCentreX(), insetRect.getCentreY(),
-                                                   juce::Colours::black.withAlpha(0.25f), insetRect.getX(), insetRect.getY(), true);
-                    g.setGradientFill(vignette);
-                    g.fillRoundedRectangle(insetRect, cr);
-                }
-
-                // ── Border ──
                 g.setColour(palette.border);
                 g.drawRoundedRectangle(r, cr, 1.0f);
 
-                // Waveform rendering region
-                auto inner = r.reduced(6.f, 6.f);
+                // The filename/status rail lives inside the tile, below the
+                // instrument aperture.
+                auto aperture = r.reduced (5.0f);
+                aperture.removeFromBottom (22.0f);
+                auto inner = aperture.reduced (6.0f);
 
                 if (hasWave)
                 {
                     auto* thumb = thumbnails[i];
+
+                    // Loaded pads use a true black display aperture. This is
+                    // deliberately separate from the ivory tile around it.
+                    g.setColour (palette.padLoaded);
+                    g.fillRect (aperture);
+                    g.setColour (palette.border.withAlpha (0.65f));
+                    g.drawRect (aperture, 1.0f);
 
                     // Oscilloscope grid lines (4 horizontal divisions)
                     g.setColour(palette.border.withAlpha(0.3f));
@@ -497,13 +500,9 @@ private:
                         g.drawHorizontalLine((int)ly, inner.getX(), inner.getRight());
                     }
 
-                    // Waveform with vertical gradient
-                    {
-                        juce::ColourGradient waveGrad(palette.waveformFill.withAlpha(0.6f), inner.getX(), inner.getY(),
-                                                       palette.waveformFill.darker(0.3f).withAlpha(0.6f), inner.getX(), inner.getBottom(), false);
-                        g.setGradientFill(waveGrad);
-                        thumb->drawChannels(g, inner.toNearestInt(), 0.0, thumb->getTotalLength(), 1.0f);
-                    }
+                    g.setColour (palette.waveformFill.withAlpha (0.78f));
+                    thumb->drawChannels(g, inner.toNearestInt(), 0.0,
+                                        thumb->getTotalLength(), 1.0f);
 
                     // Loop overlay with diagonal hatching
                     if (loopEnabled[(size_t)i])
@@ -561,29 +560,39 @@ private:
                 }
                 else
                 {
-                    // ── Empty pad: dashed border + "+" icon ──
+                    // ── Empty pad: four load brackets + "+" icon ──
                     {
-                        juce::Path dashRect;
-                        dashRect.addRoundedRectangle(inner, cr * 0.5f);
-                        const float dashLengths[] = { 4.0f, 4.0f };
-                        juce::PathStrokeType stroke(1.0f);
-                        stroke.createDashedStroke(dashRect, dashRect, dashLengths, 2);
-                        g.setColour(palette.border.withAlpha(0.5f));
-                        g.strokePath(dashRect, stroke);
+                        const float bracket = juce::jlimit (8.0f, 16.0f,
+                                                           aperture.getWidth() * 0.08f);
+                        juce::Path brackets;
+                        brackets.startNewSubPath (aperture.getX(), aperture.getY() + bracket);
+                        brackets.lineTo (aperture.getX(), aperture.getY());
+                        brackets.lineTo (aperture.getX() + bracket, aperture.getY());
+                        brackets.startNewSubPath (aperture.getRight() - bracket, aperture.getY());
+                        brackets.lineTo (aperture.getRight(), aperture.getY());
+                        brackets.lineTo (aperture.getRight(), aperture.getY() + bracket);
+                        brackets.startNewSubPath (aperture.getX(), aperture.getBottom() - bracket);
+                        brackets.lineTo (aperture.getX(), aperture.getBottom());
+                        brackets.lineTo (aperture.getX() + bracket, aperture.getBottom());
+                        brackets.startNewSubPath (aperture.getRight() - bracket, aperture.getBottom());
+                        brackets.lineTo (aperture.getRight(), aperture.getBottom());
+                        brackets.lineTo (aperture.getRight(), aperture.getBottom() - bracket);
+                        g.setColour (palette.border.withAlpha (0.55f));
+                        g.strokePath (brackets, juce::PathStrokeType (1.0f));
                     }
 
                     // "+" icon centered
                     g.setColour(palette.textSecondary.withAlpha(0.5f));
                     const float plusSize = 14.0f;
-                    const float cx = inner.getCentreX();
-                    const float cy = inner.getCentreY();
+                    const float cx = aperture.getCentreX();
+                    const float cy = aperture.getCentreY();
                     g.drawLine(cx - plusSize * 0.5f, cy, cx + plusSize * 0.5f, cy, 1.5f);
                     g.drawLine(cx, cy - plusSize * 0.5f, cx, cy + plusSize * 0.5f, 1.5f);
                 }
 
                 // ── Pad number badge (top-left) ──
                 {
-                    auto badgeRect = juce::Rectangle<float>(r.getX() + 4.0f, r.getY() + 4.0f, 20.0f, 18.0f);
+                    auto badgeRect = juce::Rectangle<float>(aperture.getX() + 4.0f, aperture.getY() + 4.0f, 20.0f, 18.0f);
                     g.setColour(palette.accent1.withAlpha(0.30f));
                     g.fillRoundedRectangle(badgeRect, 3.0f);
                     g.setColour(palette.textPrimary);
@@ -594,7 +603,7 @@ private:
                 // ── MIDI note badge (top-right) ──
                 if (!midiLearnActive[(size_t)i] && midiNotes[(size_t)i] >= 0)
                 {
-                    auto noteRect = juce::Rectangle<float>(r.getRight() - 40.0f, r.getY() + 4.0f, 36.0f, 18.0f);
+                    auto noteRect = juce::Rectangle<float>(aperture.getRight() - 40.0f, aperture.getY() + 4.0f, 36.0f, 18.0f);
                     g.setColour(palette.panelAlt);
                     g.fillRoundedRectangle(noteRect, 3.0f);
                     g.setColour(palette.textSecondary);
@@ -605,14 +614,13 @@ private:
                 // ── Selection overlay ──
                 if (padButtons[i]->getToggleState())
                 {
-                    g.setColour(palette.padSelected);
-                    g.fillRoundedRectangle(r, cr);
-                    // Glow border
-                    g.setColour(palette.accent1.withAlpha(palette.glowIntensity));
-                    g.drawRoundedRectangle(r.expanded(1.5f), cr, 2.0f);
-                    // Outer glow (concentric transparent rects)
-                    g.setColour(palette.accent1.withAlpha(0.08f));
-                    g.drawRoundedRectangle(r.expanded(3.5f), cr + 1.0f, 1.5f);
+                    g.setColour (palette.padSelected);
+                    g.fillRect (aperture);
+                    g.setColour (palette.accent1);
+                    g.fillEllipse (r.getX() + 8.0f, r.getBottom() - 14.0f, 5.0f, 5.0f);
+                    const float underlineWidth = juce::jmin (52.0f, r.getWidth() * 0.28f);
+                    g.fillRect (r.getCentreX() - underlineWidth * 0.5f,
+                                r.getBottom() - 3.0f, underlineWidth, 2.0f);
                 }
 
                 // ── MIDI learn indicator (marching ants) ──
@@ -641,8 +649,8 @@ private:
                 // ── Playing state glow outline ──
                 if (playingStates[(size_t)i])
                 {
-                    g.setColour(palette.padPlaying.withAlpha(0.85f));
-                    g.drawRoundedRectangle(r.expanded(2.f), cr, 2.0f);
+                    g.setColour (palette.padPlaying);
+                    g.fillEllipse (r.getRight() - 13.0f, r.getBottom() - 14.0f, 5.0f, 5.0f);
                 }
 
                 // ── Flash overlay + animated glow pulse (modifier triggered) ──
@@ -653,18 +661,18 @@ private:
                     if (flashAlpha > 0.0f)
                     {
                         g.setColour(palette.accent2.withAlpha(flashAlpha));
-                        g.fillRoundedRectangle(r.expanded(2.f), cr);
+                        g.fillRect (aperture);
                     }
 
                     // Animated radial glow (only when glow animator is active)
                     if (glowAlpha[(size_t)i] > 0.001f)
                     {
                         juce::ColourGradient glow(palette.accent2.withAlpha(glowAlpha[(size_t)i]),
-                                                   r.getCentreX(), r.getCentreY(),
+                                                   aperture.getCentreX(), aperture.getCentreY(),
                                                    palette.accent2.withAlpha(0.0f),
-                                                   r.getX() - 4.0f, r.getY() - 4.0f, true);
+                                                   aperture.getX(), aperture.getY(), true);
                         g.setGradientFill(glow);
-                        g.fillRoundedRectangle(r.expanded(4.f), cr + 1.0f);
+                        g.fillRect (aperture);
                     }
                 }
 

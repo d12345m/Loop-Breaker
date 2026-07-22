@@ -1,6 +1,6 @@
 # Loop Breaker — Control Surface Visual Design Brief
 
-- Status: implementation in progress; visual foundation, first glyph pass, canonical registry, and planned queue foundation complete
+- Status: implementation in progress; visual foundation, first glyph pass, canonical registry, planned queue, and first Session geometry pass complete
 - Branch: `codex/hieroglyph-ui-concepts`
 - Last implementation review: 2026-07-22
 - Primary visual reference: `docs/concepts/hieroglyph-ui/07-control-surface.png`
@@ -108,11 +108,11 @@ Retain the existing tabs: Session, Probability, Settings, Debug (development bui
 
 The existing timer integration with the Loop Breaker logo is worth preserving.
 
-The proposed combination is:
+The implemented combination is:
 
 - Keep the countdown/progress behavior integrated with the wordmark.
-- Keep a short horizontal line below the wordmark as a stable brand mark.
-- Let the line also act as a coarse progress indicator: a colored segment traverses or fills it as the trigger approaches.
+- Do not add a second progress rule beneath the wordmark; the wordmark fill and
+  the full-width rule beneath the modifier board already communicate timing.
 - The detailed countdown still belongs with the large “next” modifier glyph.
 - Timer motion must not distort or reduce the legibility of the logo.
 
@@ -127,12 +127,19 @@ The center header becomes a modular ivory control board:
 - The master-volume control remains at the far right.
 - No descriptive modifier sentence appears here.
 
-### 5.4 Target strip
+### 5.4 Preset strip and target cues
 
-- Preserve A–H as a single horizontal strip aligned to the eight pads.
-- Selected targets use a short colored underline and/or a small circular lamp.
-- Avoid a full bright border around the target selector.
-- The large next cell repeats the selected target colors as small pips so the relationship is visible without routing lines.
+- Preserve A–H as a single horizontal preset strip aligned to the eight pads.
+  These slots retain their existing save/recall behavior; they are not modifier
+  target selectors.
+- Explicit modifier targets continue to come from pad selection. Selected pads
+  use a short colored underline plus a small circular lamp, not a bright full
+  perimeter.
+- The large next cell repeats its planned targets as small pips so the
+  relationship remains visible without routing lines.
+- Occupied preset slots use a visibly tinted fill plus a small status lamp, so
+  saved state remains obvious at a glance. Pending recalls use a restrained
+  underline/tint while keeping their text readable without color.
 
 ### 5.5 Pads
 
@@ -156,7 +163,8 @@ Global rules:
 - Animate only the large next glyph continuously.
 - Queue glyphs should normally be static, with at most a very slow phase change.
 - Triggered pad overlays should decay within roughly 300–800 ms.
-- Respect the existing animation enable/speed configuration.
+- Modifier-glyph motion is enabled by default and has visible enable/speed
+  controls in Settings. Disabling it is the reduced-motion path.
 - Add a reduced-motion path: static representative frame, no loss of meaning.
 - Do not allocate, load assets, or perform expensive geometry construction on the audio thread.
 
@@ -260,7 +268,10 @@ Never require the user to estimate an exact value from animation. The large next
 ### 8.1 Current implementation
 
 `ModifierScheduler` now owns a depth-three `std::deque<PlannedModifier>`. Each
-entry contains a prepared descriptor and a frozen target array. The existing
+entry contains a prepared descriptor and a target array frozen against the
+current loaded-pad/selection state. When pad availability or explicit selection
+changes, queued target snapshots are refreshed and rebroadcast before they can
+fire. The existing
 `getUpcomingModifier()` and `upcomingModifierChanged` API remain as compatibility
 views of the front item, while `getPlannedQueueSnapshot()` and
 `plannedQueueChanged` expose copied queue state to the UI.
@@ -285,7 +296,12 @@ struct PlannedModifier
 };
 ```
 
-The descriptor must be fully variant-planned when it enters the queue. If targets are intended to remain user-reactive until trigger time, document that rule explicitly; otherwise targets should also be frozen at enqueue time so the preview remains truthful. The preferred UX is to freeze both descriptor and targets.
+The descriptor must be fully variant-planned when it enters the queue. Descriptors
+remain frozen until they fire. Target arrays remain frozen between relevant input
+changes; loading/clearing pads or changing the explicit pad selection replans and
+rebroadcasts the queued targets before the front entry can fire. This preserves
+truthful previews without allowing a queue created before sample loading to target
+empty pads.
 
 Public surface:
 
@@ -310,15 +326,15 @@ for the performance audit before release.
 - [x] Front item is the next modifier and owns the active countdown.
 - [x] On trigger, pop front and append one newly planned item.
 - [x] `skipUpcoming()` pops front without firing, then replenishes.
-- [x] `forceUpcomingModifier()` replaces only the front item unless an explicit queue-slot API is added.
-- [ ] Debug tooling can set each queue position independently.
+- [x] `forceUpcomingModifier()` replaces only the front item; `forcePlannedModifier()` can replace an explicitly selected queue slot for debug/testing.
+- [x] Debug tooling can set each queue position independently through the Debug modifier panel's `NEXT` / `QUEUE 1` / `QUEUE 2` selector.
 - [x] Probability/settings changes affect newly enqueued items, not already-previewed entries.
 - [x] Suppression advances the queue consistently with current trigger semantics.
 - [x] Reset/start/stop behavior is deterministic in the implemented queue lifecycle.
 - [x] Seeded randomness produces reproducible full queues.
 - [x] Queue never contains `Unknown`; all-zero probability produces an empty queue and a musical cue.
 - [ ] Planned variants shown in the UI exactly match triggered variants.
-- [x] Planned targets shown in the UI exactly match triggered targets.
+- [x] Planned targets shown in the UI exactly match triggered targets; only loaded pads are eligible, and loaded-pad/selection changes refresh the preview before firing.
 - [x] Add unit tests for fill, trigger/pop, skip, force, suppression, seed reproducibility, and settings changes. These compile in Debug; the Xcode project still needs a runnable test-host scheme to execute them from the command line.
 
 ### 8.4 Modifier registry status
@@ -409,15 +425,22 @@ Implemented on `codex/hieroglyph-ui-concepts` as of 2026-07-22:
 - The Session NEXT tile uses the shared renderer, concise planned-variant text, the real scheduler countdown, a full-width progress rule, and no modifier-description prose.
 - The scheduler owns a truthful depth-three planned queue with frozen descriptors and targets, copy snapshots, and a message-thread queue listener.
 - The Session control board renders the real next item plus two static compact queue cells and color-coded frozen target pips.
-- Animation-disabled mode renders a deterministic representative frame.
+- Debug modifier forcing can independently replace NEXT, QUEUE 1, or QUEUE 2 while preserving the other planned entries.
+- Queue target planning is restricted to loaded pads and refreshes when pad availability or explicit selection changes, preventing visually valid queue entries from firing at empty pads.
+- The wordmark itself carries coarse trigger progress; the redundant rule beneath it has been removed.
+- The A–H preset strip uses flat ivory cells, occupancy lamps, and pending-recall underlines instead of broad filled/glowing buttons.
+- Saved A–H preset slots retain a distinct vermilion-tinted fill in addition to their occupancy lamp; empty slots remain ivory.
+- Pads now use ivory outer tiles and black waveform apertures; empty pads use four load brackets and a plus, while selection and playback use separate underline/lamp cues instead of full-perimeter glows.
+- Production glyph motion is enabled by default at 15 Hz. Settings exposes `Animate modifier glyphs` and `Glyph Speed`; legacy sessions from the hidden/default-off era are migrated to motion-on once, while subsequent saves preserve the user's choice.
+- Runtime status: the VST and three-item queue have been verified in-host. The loaded-pad targeting/application fix, Session geometry pass, occupied-preset treatment, and motion configuration all build and install successfully; final in-host modifier-application, animation, and visual confirmation are pending the next reload.
+- Animation-disabled mode renders a deterministic representative frame as the reduced-motion option.
 - The debug-only Glyph Lab and fixed-phase contact-sheet exporter are implemented.
 - The Debug VST3 target builds successfully with the renderer and Glyph Lab.
 
 Not yet implemented:
 
-- independent debug forcing for queue slots beyond the front item;
 - a runnable command-line test-host scheme and a final audit that every downstream modifier consumes its planned variant without re-randomizing;
-- the final A–H target-strip and pad restyling;
+- production-size visual review and adjustment of the Session geometry;
 - complete variant-to-geometry mapping, accessibility review, and performance validation.
 
 ## 10. Suggested implementation sequence
@@ -442,19 +465,20 @@ Not yet implemented:
 ### Milestone 3 — Queue backend
 
 - [x] Replace single upcoming descriptor with planned queue.
-- [x] Freeze prepared descriptors and targets at planning time.
+- [x] Freeze prepared descriptors at planning time and target snapshots between loaded-pad/selection changes.
 - [x] Add snapshot/listener APIs with message-thread queue delivery.
 - [x] Update force/skip/reset/suppression semantics.
+- [x] Add independent Debug-panel forcing for NEXT, QUEUE 1, and QUEUE 2.
 - [x] Add scheduler queue and registry tests. A runnable Xcode test-host scheme remains to be added.
 
 ### Milestone 4 — Session layout
 
 - [ ] Implement light canvas and modular header. The palette, NEXT tile, and two truthful compact queue cells are complete; production-size visual review remains.
-- [ ] Combine logo line and timer behavior.
+- [x] Integrate coarse timer behavior into the wordmark without adding a redundant logo rule.
 - [x] Add large next tile and two truthful queue tiles with frozen target pips.
-- [ ] Restyle A–H targeting strip.
-- [ ] Restyle loaded and empty pads without changing audio behavior. Theme colors have changed, but final aperture/load/label geometry remains.
-- [ ] Replace full selection borders with lamps/underlines/corner tabs.
+- [x] Restyle the A–H preset strip without changing its save/recall behavior.
+- [x] Restyle loaded and empty pads without changing audio behavior: ivory tiles, black waveform apertures, and bracketed empty states are implemented.
+- [x] Replace normal selection/playing borders with independent lamps and underlines. MIDI learn and file-drag modes retain dashed perimeters because the perimeter itself communicates those temporary modes.
 
 ### Milestone 5 — Remaining glyphs and polish
 
@@ -469,8 +493,8 @@ Not yet implemented:
 ### 10.1 Ordered next steps
 
 1. **Review the production control board and first glyph pass.** Inspect the new NEXT/QUEUE 1/QUEUE 2 layout at minimum and maximum editor sizes, then export a current contact sheet and resolve clipping, centering, ambiguous motion, and color-only distinctions.
-2. **Close the remaining queue verification gaps.** Add debug APIs for forcing individual queue slots, add a runnable Xcode test-host scheme, and audit downstream application code so every displayed planned variant is exactly what the modifier consumes. Add an explicit planned destination for Switch Part if it remains previewable.
-3. **Complete Session geometry.** Add the stable logo progress rule, restyle the A–H target strip, then implement ivory pad tiles with black waveform apertures and non-perimeter selection cues.
+2. **Close the remaining queue verification gaps.** Add a runnable Xcode test-host scheme and audit downstream application code so every displayed planned variant is exactly what the modifier consumes. Add an explicit planned destination for Switch Part if it remains previewable.
+3. **Review and tune Session geometry and motion.** Reload the installed VST, verify saved-versus-empty A–H presets, the wordmark fill and modifier-board progress rule, animated NEXT glyphs at several speeds, the reduced-motion toggle, ivory/black pad treatment, filenames, and non-perimeter state cues, then correct any production-size spacing, contrast, or motion issues.
 4. **Finish variant, accessibility, and performance work.** Map the remaining planned fields, verify reduced motion and color-independent state, test minimum/maximum editor sizes, and review queue planning/allocation cost before final contact-sheet approval.
 
 ## 11. Acceptance criteria

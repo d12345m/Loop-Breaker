@@ -90,8 +90,8 @@ public:
             // sum to the full padColW, avoiding accumulated rounding loss.
             int x = colLeft + (sub == 0 ? 0 : halfW);
             int w = (sub == 0) ? halfW : (padColW - halfW);
-            juce::Rectangle<int> btnRect(x, area.getY(), w - 4, area.getHeight());
-            buttons[i]->setBounds(btnRect.reduced(4, 0));
+            juce::Rectangle<int> btnRect (x, area.getY(), w, area.getHeight());
+            buttons[i]->setBounds (btnRect.reduced (4, 1));
         }
     }
 
@@ -109,19 +109,21 @@ public:
 
             const bool isHighlighted = (highlightedSlot == i && highlightType != HighlightType::None);
 
-            // Background
+            // Occupied slots retain a clearly filled state; the lamp is a
+            // secondary cue, not the only indication that a preset exists.
+            g.setColour (occupied
+                ? palette.panel.interpolatedWith (palette.accent1, 0.20f)
+                : palette.panel);
+            g.fillRoundedRectangle (btnBounds, 2.0f);
+
             if (isHighlighted)
             {
-                // Highlighted background: accent2 (teal) for recall, accent1 (periwinkle) for save
                 auto hlColour = (highlightType == HighlightType::Recall)
                     ? palette.accent2 : palette.accent1;
-                g.setColour(hlColour.withAlpha(0.15f + highlightGlowAlpha[static_cast<size_t>(i)] * 0.35f));
+                g.setColour (hlColour.withAlpha (0.06f
+                    + highlightGlowAlpha[static_cast<size_t>(i)] * 0.12f));
+                g.fillRoundedRectangle (btnBounds, 2.0f);
             }
-            else if (occupied)
-                g.setColour(palette.accent1.withAlpha(0.25f));
-            else
-                g.setColour(palette.panelAlt.withAlpha(0.5f));
-            g.fillRoundedRectangle(btnBounds, 5.0f);
 
             // Border
             if (learning)
@@ -138,25 +140,25 @@ public:
             }
             else if (isHighlighted)
             {
-                // Glow border matching highlight type
                 auto hlColour = (highlightType == HighlightType::Recall)
                     ? palette.accent2 : palette.accent1;
                 float glowA = highlightGlowAlpha[static_cast<size_t>(i)];
-                g.setColour(hlColour.withAlpha(0.6f + glowA * 0.4f));
-                g.drawRoundedRectangle(btnBounds.reduced(0.5f), 5.0f, 2.0f);
-                // Outer glow ring
-                g.setColour(hlColour.withAlpha(glowA * 0.15f));
-                g.drawRoundedRectangle(btnBounds.expanded(2.0f), 6.0f, 1.5f);
-            }
-            else if (occupied)
-            {
-                g.setColour(palette.accent1.withAlpha(0.6f));
-                g.drawRoundedRectangle(btnBounds.reduced(0.5f), 5.0f, 1.5f);
+                g.setColour (hlColour.withAlpha (0.55f + glowA * 0.35f));
+                g.drawRoundedRectangle (btnBounds.reduced (0.5f), 2.0f, 1.25f);
+                g.fillRect (btnBounds.getX() + 8.0f, btnBounds.getBottom() - 2.5f,
+                            btnBounds.getWidth() - 16.0f, 2.0f);
             }
             else
             {
                 g.setColour(palette.border);
-                g.drawRoundedRectangle(btnBounds.reduced(0.5f), 5.0f, 1.0f);
+                g.drawRoundedRectangle(btnBounds.reduced(0.5f), 2.0f, 1.0f);
+            }
+
+            if (occupied)
+            {
+                g.setColour (palette.accent1);
+                g.fillEllipse (btnBounds.getRight() - 9.0f, btnBounds.getY() + 6.0f,
+                               3.5f, 3.5f);
             }
 
             // Label (A/B/C/D)

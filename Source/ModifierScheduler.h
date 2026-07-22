@@ -78,6 +78,10 @@ public:
     // Provide externally selected buffer indices (user pad selections)
     void setUserSelectedBuffers(const juce::Array<int>& indices);
 
+    // Bit i is set when pad i currently contains audio and can receive a modifier.
+    // Updating availability retargets queued descriptors before they can fire.
+    void setAvailableTargetMask (uint32_t mask);
+
     // Deterministic randomness (optional). Call before start() for reproducible sequences.
     void setRandomSeed(int64_t seed);
 
@@ -100,6 +104,7 @@ public:
 
     // Force upcoming modifier (developer/testing aid). If type not found, ignored.
     void forceUpcomingModifier(ModifierType type);
+    void forcePlannedModifier (int queueIndex, ModifierType type);
     void forceUpcomingVariant(ModifierType type, const juce::String& variant);
 
     // Developer controls
@@ -133,6 +138,8 @@ private:
     std::deque<PlannedModifier> plannedQueue;
     mutable juce::SpinLock plannedQueueLock;
     juce::Array<int> userSelectedBuffers;
+    mutable juce::SpinLock targetStateLock;
+    std::atomic<uint32_t> availableTargetMask { 0xffu };
 
     // RNG state (shared by descriptor + target selection) for deterministic runs/tests
     mutable juce::Random rng; // mutable to allow use in const selection helpers
@@ -159,6 +166,7 @@ private:
     void advancePlannedQueue();
     void replaceFrontPlannedModifier(PlannedModifier replacement);
     void clearPlannedQueue();
+    void refreshPlannedTargets();
     ModifierDescriptor pickRandomDescriptor() const;
     juce::Array<int> selectTargetBuffers(const ModifierDescriptor& desc) const;
     void maybeResnapQuantized();

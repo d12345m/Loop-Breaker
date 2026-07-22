@@ -65,7 +65,9 @@ struct SessionSettings
 
     // Visual / UX
     juce::String themeName { "Control Surface (Light)" };
-    bool animationsEnabled = false;
+    // Glyph motion is part of the primary modifier communication system.
+    // Users can disable it through Settings for reduced motion.
+    bool animationsEnabled = true;
     bool bgCycleEnabled = false;
     bool padPulseEnabled = false;
     bool progressShimmerEnabled = false;

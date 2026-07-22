@@ -189,9 +189,11 @@ public:
         // Set initial visibility based on current cadence mode
         updateCadenceVisibility();
 
-        // ── Animation controls (hidden for now — kept for future use) ──
-        // All animation widgets are created but not made visible.
-        animToggle.setButtonText ("Enable Animations");
+        // ── Core modifier motion controls ──────────────────────────────
+        // Glyph motion is semantic, so its master toggle and speed are
+        // visible. Decorative background/glow controls remain hidden.
+        addAndMakeVisible (animToggle);
+        animToggle.setButtonText ("Animate modifier glyphs");
         animToggle.setToggleState (settings.animationsEnabled, juce::dontSendNotification);
         animToggle.onClick = [this] { syncAnimConfigFromUI(); };
 
@@ -211,10 +213,12 @@ public:
         knobGlowToggle.setToggleState (settings.knobGlowEnabled, juce::dontSendNotification);
         knobGlowToggle.onClick = [this] { syncAnimConfigFromUI(); };
 
-        speedLabel.setText ("Animation Speed", juce::dontSendNotification);
+        addAndMakeVisible (speedLabel);
+        speedLabel.setText ("Glyph Speed", juce::dontSendNotification);
         speedLabel.setJustificationType (juce::Justification::centredRight);
         speedLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
 
+        addAndMakeVisible (speedSlider);
         speedSlider.setRange (0.25, 2.0, 0.05);
         speedSlider.setValue (settings.animationSpeed, juce::dontSendNotification);
         speedSlider.setTextValueSuffix ("x");
@@ -325,6 +329,14 @@ public:
 
         g.setColour (palette.border);
         g.fillRect (bounds.removeFromTop (1));
+
+        // Skip the seven Session control rows, then label the motion group.
+        bounds.removeFromTop (7 * 34 + 12);
+        g.setColour (palette.accent1);
+        g.setFont (ThemeFonts::getInstance().headingFont (18.0f));
+        g.drawText ("Motion", bounds.removeFromTop (28), juce::Justification::centredLeft);
+        g.setColour (palette.border);
+        g.fillRect (bounds.removeFromTop (1));
     }
 
     void resized() override
@@ -398,9 +410,20 @@ public:
             timedMaxSlider.setBounds (row.removeFromLeft (200));
         }
 
-        // Animation controls are hidden — layout only contains the rows above.
-        // When re-enabling, restore the resized() layout for animation toggles,
-        // speed slider, and background mode radio buttons here.
+        // Core modifier motion controls. Decorative animation controls remain
+        // hidden until they have a production design use.
+        area.removeFromTop (12 + 28 + 1);
+        {
+            auto row = area.removeFromTop (rowH);
+            row.removeFromLeft (labelW + 10);
+            animToggle.setBounds (row.removeFromLeft (220));
+        }
+        {
+            auto row = area.removeFromTop (rowH);
+            speedLabel.setBounds (row.removeFromLeft (labelW));
+            row.removeFromLeft (10);
+            speedSlider.setBounds (row.removeFromLeft (200));
+        }
     }
 
 private:

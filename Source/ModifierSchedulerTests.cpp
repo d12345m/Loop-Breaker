@@ -155,19 +155,38 @@ public:
         expect (samePlan (afterForce[1], beforeForce[1]));
         expect (samePlan (afterForce[2], beforeForce[2]));
 
-        beginTest ("Targets are frozen when an item enters the queue");
+        beginTest ("Debug forcing can replace an individual queued entry");
+        const auto beforeQueuedForce = scheduler.getPlannedQueueSnapshot();
+        scheduler.forcePlannedModifier (1, ModifierType::Reverse);
+        const auto afterQueuedForce = scheduler.getPlannedQueueSnapshot();
+        expect (samePlan (afterQueuedForce[0], beforeQueuedForce[0]));
+        expect (afterQueuedForce[1].descriptor.type == ModifierType::Reverse);
+        expect (samePlan (afterQueuedForce[2], beforeQueuedForce[2]));
+
+        beginTest ("Target changes refresh the queue before the front item fires");
         scheduler.stop();
         scheduler.setUserSelectedBuffers ({ 1, 3 });
         scheduler.start();
-        const auto frozenFront = scheduler.getPlannedQueueSnapshot().front();
         scheduler.setUserSelectedBuffers ({ 7 });
+        const auto retargetedFront = scheduler.getPlannedQueueSnapshot().front();
         CaptureListener capture;
         scheduler.addListener (&capture);
         scheduler.triggerNow();
         expectEquals (capture.triggerCount, 1);
-        expect (sameTargets (capture.lastTargets, frozenFront.targets));
-        expect (capture.lastDescriptor.description == frozenFront.descriptor.description);
+        expect (sameTargets (capture.lastTargets, retargetedFront.targets));
+        expect (capture.lastTargets.size() == 1 && capture.lastTargets[0] == 7);
+        expect (capture.lastDescriptor.description == retargetedFront.descriptor.description);
         scheduler.removeListener (&capture);
+
+        beginTest ("Random targets are restricted to pads that contain audio");
+        SessionSettings loadedSettings;
+        ModifierScheduler loadedScheduler (loadedSettings);
+        loadedScheduler.setAvailableTargetMask ((1u << 2u) | (1u << 5u));
+        loadedScheduler.setRandomSeed (4422);
+        loadedScheduler.start();
+        for (const auto& planned : loadedScheduler.getPlannedQueueSnapshot())
+            for (int target : planned.targets)
+                expect (target == 2 || target == 5);
 
         beginTest ("Seeded queue planning is reproducible");
         SessionSettings settingsA;

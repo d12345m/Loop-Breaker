@@ -633,6 +633,12 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
         }
     }
 
+    uint32_t loadedTargetMask = 0;
+    for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
+        if (const auto* pad = app.bufferManager.getBuffer (i); pad != nullptr && pad->hasAudioLoaded())
+            loadedTargetMask |= (1u << static_cast<uint32_t> (i));
+    app.scheduler.setAvailableTargetMask (loadedTargetMask);
+
     // Self-healing: if pad file paths exist in settings but the corresponding
     // buffers have no audio loaded and no background loads are in flight,
     // re-trigger the load.  This covers edge cases where releaseResources
@@ -935,6 +941,7 @@ void BufferTestAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     obj->setProperty("playbackEnabled", transportPlaybackEnabled.load());
 
     // Theme & animation settings
+    obj->setProperty("motionConfigVersion", 1);
     obj->setProperty("themeName", app.settings.themeName);
     obj->setProperty("animationsEnabled", app.settings.animationsEnabled);
     obj->setProperty("bgCycleEnabled", app.settings.bgCycleEnabled);
@@ -1104,8 +1111,14 @@ void BufferTestAudioProcessor::setStateInformation (const void* data, int sizeIn
     // Restore theme & animation settings
     if (obj->hasProperty("themeName"))
         app.settings.themeName = obj->getProperty("themeName").toString();
-    if (obj->hasProperty("animationsEnabled"))
+    // Motion was historically default-off while its controls were hidden.
+    // Treat state without the version marker as legacy and opt it into the
+    // production glyph animation; subsequent saves preserve the user's choice.
+    const bool hasMotionConfigVersion = obj->hasProperty ("motionConfigVersion");
+    if (hasMotionConfigVersion && obj->hasProperty("animationsEnabled"))
         app.settings.animationsEnabled = (bool) obj->getProperty("animationsEnabled");
+    else
+        app.settings.animationsEnabled = true;
     if (obj->hasProperty("bgCycleEnabled"))
         app.settings.bgCycleEnabled = (bool) obj->getProperty("bgCycleEnabled");
     if (obj->hasProperty("padPulseEnabled"))

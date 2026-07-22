@@ -50,8 +50,8 @@ public:
         verticalLayout.setItemLayout(3, 8, 8, 8);
         verticalLayout.setItemLayout(4, 60, -1.0, 120);
 
-        modifierSelectionPanel.setForceSelectionCallback([&appState](ModifierType type) {
-            appState.scheduler.forceUpcomingModifier(type);
+        modifierSelectionPanel.setForceQueueSelectionCallback([&appState](int queueIndex, ModifierType type) {
+            appState.scheduler.forcePlannedModifier (queueIndex, type);
         });
         modifierSelectionPanel.setForceVariantCallback([&appState](ModifierType type, const juce::String& variant) {
             appState.scheduler.forceUpcomingVariant(type, variant);

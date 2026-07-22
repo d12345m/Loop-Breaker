@@ -176,7 +176,10 @@ void drawPitch (GlyphCanvas& c, float phase, bool up)
     }
     c.colour (c.p.ink);
     c.stroke (steps, 2.0f);
-    c.line (16.0f, up ? 20.0f : 80.0f, 86.0f, up ? 20.0f : 80.0f, 1.0f);
+    constexpr float upperRegisterY = 13.0f;
+    constexpr float lowerRegisterY = 87.0f;
+    c.line (16.0f, up ? upperRegisterY : lowerRegisterY,
+            86.0f, up ? upperRegisterY : lowerRegisterY, 1.0f);
     const float travel = wrapped (phase) * 4.0f;
     const int step = juce::jlimit (0, 3, static_cast<int> (travel));
     c.dot (26.0f + step * 16.0f,
@@ -184,13 +187,54 @@ void drawPitch (GlyphCanvas& c, float phase, bool up)
            3.8f, c.p.vermilion);
 }
 
+void drawArpSlice (GlyphCanvas& c, float phase, const ModifierDescriptor& d)
+{
+    constexpr int repeatsPerSlice = 4;
+    const int sequenceLength = juce::jlimit (1, 8, d.plannedArpSequenceLength.value_or (4));
+    const int visibleSlices = juce::jmin (4, sequenceLength);
+    const int barCount = visibleSlices * repeatsPerSlice;
+    constexpr float left = 12.0f;
+    constexpr float totalWidth = 76.0f;
+    constexpr float withinGroupGap = 1.15f;
+    constexpr float betweenGroupGap = 3.2f;
+    const float totalGap = visibleSlices * (repeatsPerSlice - 1) * withinGroupGap
+                         + juce::jmax (0, visibleSlices - 1) * betweenGroupGap;
+    const float width = (totalWidth - totalGap) / static_cast<float> (barCount);
+    const int active = static_cast<int> (wrapped (phase) * static_cast<float> (barCount)) % barCount;
+
+    // Each four-bar group is one repeated slice.  The deliberately non-linear
+    // heights retain the randomized arpeggio reading while the timeline and
+    // highlight now move unambiguously from left to right.
+    constexpr float groupHeights[] = { 24.0f, 52.0f, 34.0f, 60.0f };
+    float x = left;
+    int bar = 0;
+    for (int group = 0; group < visibleSlices; ++group)
+    {
+        const float height = groupHeights[group];
+        for (int repeat = 0; repeat < repeatsPerSlice; ++repeat, ++bar)
+        {
+            const auto box = c.rect (x, 68.0f - height, width, height);
+            c.colour (bar == active ? c.p.vermilion : c.p.ink,
+                      bar == active ? 1.0f : 0.76f);
+            c.g.fillRect (box);
+            x += width;
+            if (repeat < repeatsPerSlice - 1)
+                x += withinGroupGap;
+        }
+
+        if (group < visibleSlices - 1)
+            x += betweenGroupGap;
+    }
+
+    c.colour (c.p.mutedInk);
+    c.line (10.0f, 76.0f, 90.0f, 76.0f, 1.0f);
+}
+
 void drawSliceBlocks (GlyphCanvas& c, float phase, ModifierType type, const ModifierDescriptor& d)
 {
     int count = 4;
     if (type == ModifierType::BeatSliceRandom && d.plannedSliceDivision.isNotEmpty())
         count = juce::jlimit (4, 8, d.plannedSliceDivision.getTrailingIntValue());
-    else if (type == ModifierType::ArpSlice && d.plannedArpSequenceLength.has_value())
-        count = juce::jlimit (2, 8, *d.plannedArpSequenceLength);
     const float gap = 3.0f;
     const float width = (76.0f - gap * (count - 1)) / static_cast<float> (count);
     const float traversal = wrapped (phase) * static_cast<float> (count);
@@ -204,15 +248,12 @@ void drawSliceBlocks (GlyphCanvas& c, float phase, ModifierType type, const Modi
         activeVisible = static_cast<int> (repeatPhase * 4.0f) % 2 == 0;
     }
 
-    // All slice glyphs traverse a deterministic shuffled permutation rather
+    // Random slice modes traverse a deterministic shuffled permutation rather
     // than reading as a conventional left-to-right playhead scan.
     const int active = activeVisible ? (activeStep * 3) % count : -1;
     for (int i = 0; i < count; ++i)
     {
-        int order = i;
-        if (type == ModifierType::BeatSliceRandom)
-            order = (i * 3) % count;
-        const float height = type == ModifierType::ArpSlice ? 18.0f + order * (36.0f / juce::jmax (1, count - 1)) : 34.0f;
+        const float height = 34.0f;
         const float top = 68.0f - height + ((type == ModifierType::BeatSliceRandom && i % 2) ? -8.0f : 0.0f);
         auto box = c.rect (12.0f + i * (width + gap), top, width, height);
         c.colour (i == active ? c.p.vermilion : c.p.ink, i == active ? 1.0f : 0.78f);
@@ -255,65 +296,105 @@ void drawDelay (GlyphCanvas& c, float phase)
     c.dot (centreX, baselineY, 4.0f, c.p.vermilion);
 }
 
-void drawDubDelay (GlyphCanvas& c, float phase)
+void drawDubDelay (GlyphCanvas& c, float phase, const ModifierDescriptor& descriptor, bool compact)
 {
-    // Dub is shown as a feedback/send instrument: a dense tape-like coil is
-    // charged on the left, opened through a gate, then released as spaced taps.
-    constexpr float coilX = 36.0f;
-    constexpr float coilY = 52.0f;
-    constexpr float gateX = 64.0f;
+    // A dub sound-system cabinet doubles as a tape machine: the two small
+    // upper reels feed a large bass driver, then staggered wavefronts bloom
+    // into space.  This keeps the cause-and-effect legible without relying on
+    // the red/gold/green echo lamps alone.
+    constexpr float cabinetLeft = 13.0f;
+    constexpr float cabinetTop = 18.0f;
+    constexpr float cabinetWidth = 35.0f;
+    constexpr float cabinetHeight = 65.0f;
+    constexpr float sourceX = cabinetLeft + cabinetWidth;
+    constexpr float wooferY = 57.0f;
+    constexpr float waveY = 50.0f;
     const float cycle = wrapped (phase);
-    const float charge = triangle (cycle);
+    const float bassPulse = std::pow (triangle (cycle * 2.0f), 1.7f);
+    const float wet = static_cast<float> (juce::jlimit (0.0, 1.0,
+                                        descriptor.plannedDelayWet.value_or (0.65)));
+    const float feedback = static_cast<float> (juce::jlimit (0.0, 1.0,
+                                             descriptor.plannedDelayFeedback.value_or (0.72)));
 
-    juce::Path coil;
-    constexpr int coilPoints = 96;
-    for (int i = 0; i <= coilPoints; ++i)
-    {
-        const float t = static_cast<float> (i) / static_cast<float> (coilPoints);
-        const float angle = (-0.5f + t * (2.7f + charge * 0.25f))
-                          * juce::MathConstants<float>::twoPi;
-        const float radius = 2.5f + t * 22.0f;
-        const auto point = c.pt (coilX + std::cos (angle) * radius,
-                                 coilY + std::sin (angle) * radius * 0.78f);
-        if (i == 0) coil.startNewSubPath (point); else coil.lineTo (point);
-    }
     c.colour (c.p.ink);
-    c.stroke (coil, 2.2f);
+    c.g.drawRect (c.rect (cabinetLeft, cabinetTop, cabinetWidth, cabinetHeight),
+                  juce::jmax (1.0f, c.u (2.0f)));
+    c.line (cabinetLeft, 39.0f, cabinetLeft + cabinetWidth, 39.0f, 1.25f);
 
-    // A small moving input pulse makes the coil feel charged rather than floral.
-    const float inputAngle = cycle * juce::MathConstants<float>::twoPi * 2.0f;
-    c.dot (coilX + std::cos (inputAngle) * 8.0f,
-           coilY + std::sin (inputAngle) * 6.0f, 3.2f, c.p.vermilion);
-
-    // Pressure gate.  It opens widest during the release half of the cycle.
-    const float gateOpen = 5.0f + charge * 5.0f;
-    c.colour (c.p.ink);
-    c.line (gateX, 24.0f, gateX, coilY - gateOpen, 2.5f);
-    c.line (gateX, coilY + gateOpen, gateX, 80.0f, 2.5f);
-    c.line (gateX - 5.0f, 24.0f, gateX + 5.0f, 24.0f, 1.5f);
-    c.line (gateX - 5.0f, 80.0f, gateX + 5.0f, 80.0f, 1.5f);
-    c.line (gateX + 3.0f, coilY, 91.0f, coilY, 1.0f);
-
-    // Red, gold, and green read as discrete echo taps, with spacing expanding
-    // as the feedback charge is released.
-    const juce::Colour tapColours[] = { c.p.vermilion, c.p.safetyYellow, c.p.signalGreen };
-    for (int i = 0; i < 3; ++i)
+    // Twin reel hubs and a tape head give the upper bay a transport-machine
+    // reading.  Rotating index marks make the motion mechanical and steady.
+    constexpr float reelY = 28.5f;
+    constexpr float reelX[] = { 23.0f, 38.0f };
+    for (int i = 0; i < 2; ++i)
     {
-        const float spacing = 7.0f + charge * 2.5f;
-        const float tapX = gateX + 7.0f + i * spacing;
-        const float radius = 3.8f - i * 0.55f;
-        c.dot (tapX, coilY, radius, tapColours[i]);
+        c.colour (c.p.ink);
+        c.g.drawEllipse (c.rect (reelX[i] - 5.0f, reelY - 5.0f, 10.0f, 10.0f),
+                         juce::jmax (1.0f, c.u (1.5f)));
+        c.dot (reelX[i], reelY, 1.5f, c.p.ink);
+
+        if (! compact)
+        {
+            const float reelAngle = cycle * juce::MathConstants<float>::twoPi
+                                  * (i == 0 ? 1.0f : -1.0f);
+            c.line (reelX[i], reelY,
+                    reelX[i] + std::cos (reelAngle) * 3.5f,
+                    reelY + std::sin (reelAngle) * 3.5f, 1.0f);
+        }
     }
 
-    // Sparse return path closes the feedback loop without a decorative burst.
-    juce::Path feedback;
-    feedback.startNewSubPath (c.pt (89.0f, 44.0f));
-    feedback.lineTo (c.pt (89.0f, 18.0f));
-    feedback.lineTo (c.pt (44.0f, 18.0f));
-    feedback.lineTo (c.pt (44.0f, 25.0f));
-    c.colour (c.p.mutedInk, 0.75f);
-    c.stroke (feedback, 1.25f);
-    c.arrowHead (44.0f, 28.0f, juce::MathConstants<float>::halfPi, 4.0f);
+    juce::Path tape;
+    tape.startNewSubPath (c.pt (18.0f, reelY));
+    tape.cubicTo (c.pt (18.0f, 20.5f), c.pt (43.0f, 20.5f), c.pt (43.0f, reelY));
+    tape.cubicTo (c.pt (43.0f, 35.0f), c.pt (32.0f, 36.5f), c.pt (29.0f, 34.0f));
+    c.colour (c.p.mutedInk, 0.9f);
+    c.stroke (tape, 1.0f);
+    c.colour (c.p.vermilion);
+    c.g.fillRect (c.rect (28.0f, 33.0f, 4.0f, 3.0f));
+
+    // The large woofer supplies the sound-system weight.  Its inner pressure
+    // ring breathes with the send, with wetness controlling excursion.
+    const float wooferRadius = 11.5f + bassPulse * (1.0f + wet * 1.8f);
+    c.colour (c.p.ink);
+    c.g.drawEllipse (c.rect (30.5f - wooferRadius, wooferY - wooferRadius,
+                             wooferRadius * 2.0f, wooferRadius * 2.0f),
+                     juce::jmax (1.0f, c.u (2.0f)));
+    c.g.drawEllipse (c.rect (25.5f, wooferY - 5.0f, 10.0f, 10.0f),
+                     juce::jmax (1.0f, c.u (1.5f)));
+    c.dot (30.5f, wooferY, 2.2f + bassPulse * wet, c.p.vermilion);
+    c.colour (c.p.ink);
+    c.line (19.0f, 76.5f, 42.0f, 76.5f, 1.5f);
+
+    // Three delayed, slightly irregular orbital wavefronts bloom from the
+    // cabinet.  Feedback lengthens their persistence; the coloured lamps ride
+    // the fronts as redundant reggae/dub signal coding.
+    const juce::Colour echoColours[] = { c.p.vermilion, c.p.safetyYellow, c.p.signalGreen };
+    constexpr int echoCount = 3;
+    for (int echo = echoCount - 1; echo >= 0; --echo)
+    {
+        const float echoPhase = wrapped (cycle - static_cast<float> (echo) / echoCount);
+        const float radius = 9.0f + echoPhase * 34.0f;
+        const float radiusX = radius;
+        const float radiusY = radius * (0.70f + 0.06f * echo);
+        const float persistence = juce::jlimit (0.18f, 0.92f,
+                                                (1.0f - echoPhase) * (0.55f + feedback * 0.62f));
+        juce::Path bloom;
+        constexpr int points = 34;
+        for (int i = 0; i <= points; ++i)
+        {
+            const float t = static_cast<float> (i) / static_cast<float> (points);
+            const float angle = -juce::MathConstants<float>::halfPi
+                              + t * juce::MathConstants<float>::pi;
+            const float ripple = std::sin (angle * 3.0f + echo * 1.7f + cycle * 3.0f) * 0.8f;
+            const auto point = c.pt (sourceX + std::cos (angle) * (radiusX + ripple),
+                                     waveY + std::sin (angle) * (radiusY + ripple * 0.4f));
+            if (i == 0) bloom.startNewSubPath (point); else bloom.lineTo (point);
+        }
+        c.colour (c.p.ink, persistence);
+        c.stroke (bloom, echo == 0 ? 2.0f : 1.5f);
+
+        const float lampX = sourceX + radiusX;
+        c.dot (lampX, waveY, compact ? 2.4f : 2.8f, echoColours[echo]);
+    }
 }
 
 void drawReverb (GlyphCanvas& c, float phase)
@@ -552,8 +633,8 @@ void drawSwap (GlyphCanvas& c, float phase)
         c.g.fillRect (c.rect (66.0f - shift * (i == 2 ? 1.0f : 0.0f), 30.0f + i * 14.0f, 17.0f, 6.0f));
     }
     c.colour (c.p.ink);
-    c.line (34.0f, 18.0f, 66.0f, 82.0f, 1.5f);
-    c.line (34.0f, 82.0f, 66.0f, 18.0f, 1.5f);
+    c.line (42.0f, 18.0f, 58.0f, 82.0f, 1.5f);
+    c.line (42.0f, 82.0f, 58.0f, 18.0f, 1.5f);
 }
 
 void drawReset (GlyphCanvas& c, float phase)
@@ -602,11 +683,11 @@ void ModifierGlyphRenderer::draw (juce::Graphics& g,
         case ModifierType::PitchUpOctave:              drawPitch (c, phase, true); break;
         case ModifierType::PitchDownOctave:            drawPitch (c, phase, false); break;
         case ModifierType::BeatSliceRandom:
-        case ModifierType::ArpSlice:
         case ModifierType::SliceRepeater:               drawSliceBlocks (c, phase, state.descriptor.type, state.descriptor); break;
+        case ModifierType::ArpSlice:                     drawArpSlice (c, phase, state.descriptor); break;
         case ModifierType::PingPong:                    drawPingPong (c, phase); break;
         case ModifierType::BufferDelayOn:               drawDelay (c, phase); break;
-        case ModifierType::BufferDelayDubBurst:         drawDubDelay (c, phase); break;
+        case ModifierType::BufferDelayDubBurst:         drawDubDelay (c, phase, state.descriptor, state.compact); break;
         case ModifierType::BufferReverbOn:              drawReverb (c, phase); break;
         case ModifierType::BufferLowPassOn:             drawFilter (c, phase, false, false, false); break;
         case ModifierType::BufferHighPassOn:            drawFilter (c, phase, true, false, false); break;

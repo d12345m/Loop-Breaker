@@ -186,7 +186,20 @@ void drawSliceBlocks (GlyphCanvas& c, float phase, ModifierType type, const Modi
         count = juce::jlimit (4, 8, d.plannedSliceDivision.getTrailingIntValue());
     const float gap = 3.0f;
     const float width = (76.0f - gap * (count - 1)) / static_cast<float> (count);
-    const int active = static_cast<int> (wrapped (phase) * static_cast<float> (count)) % count;
+    const float traversal = wrapped (phase) * static_cast<float> (count);
+    const int activeStep = static_cast<int> (traversal) % count;
+    bool activeVisible = true;
+    if (type == ModifierType::SliceRepeater)
+    {
+        // Repeat the selected slice twice (on/off/on/off) before choosing the
+        // next shuffled slice.
+        const float repeatPhase = traversal - std::floor (traversal);
+        activeVisible = static_cast<int> (repeatPhase * 4.0f) % 2 == 0;
+    }
+
+    // All slice glyphs traverse a deterministic shuffled permutation rather
+    // than reading as a conventional left-to-right playhead scan.
+    const int active = activeVisible ? (activeStep * 3) % count : -1;
     for (int i = 0; i < count; ++i)
     {
         int order = i;
@@ -196,8 +209,10 @@ void drawSliceBlocks (GlyphCanvas& c, float phase, ModifierType type, const Modi
         const float top = 68.0f - height + ((type == ModifierType::BeatSliceRandom && i % 2) ? -8.0f : 0.0f);
         auto box = c.rect (12.0f + i * (width + gap), top, width, height);
         c.colour (i == active ? c.p.vermilion : c.p.ink, i == active ? 1.0f : 0.78f);
-        if (type == ModifierType::SliceRepeater && i > 0) c.g.drawRect (box, c.u (1.5f));
-        else c.g.fillRect (box);
+        if (type == ModifierType::SliceRepeater && i != active)
+            c.g.drawRect (box, c.u (1.5f));
+        else
+            c.g.fillRect (box);
     }
     c.colour (c.p.mutedInk);
     c.line (10.0f, 76.0f, 90.0f, 76.0f, 1.0f);
@@ -214,27 +229,84 @@ void drawPingPong (GlyphCanvas& c, float phase)
     c.dot (22.0f + triangle (phase) * 56.0f, 50.0f, 5.0f, c.p.vermilion);
 }
 
-void drawDelay (GlyphCanvas& c, float phase, bool burst)
+void drawDelay (GlyphCanvas& c, float phase)
 {
-    const int rings = burst ? 5 : 4;
+    constexpr float centreX = 50.0f;
+    constexpr float baselineY = 70.0f; // centres the visible upper semicircles optically
+    constexpr int rings = 4;
     for (int i = 0; i < rings; ++i)
     {
-        const float expand = burst ? triangle (phase) * 5.0f : wrapped (phase) * 5.0f;
+        const float expand = wrapped (phase) * 5.0f;
         const float radius = 10.0f + i * 9.0f + expand;
         c.colour (i == 0 ? c.p.vermilion : c.p.ink, 1.0f - i * 0.14f);
         juce::Path arc;
-        arc.addCentredArc (c.x (28.0f), c.y (50.0f), c.u (radius), c.u (radius), 0.0f,
+        arc.addCentredArc (c.x (centreX), c.y (baselineY), c.u (radius), c.u (radius), 0.0f,
                            -juce::MathConstants<float>::halfPi,
                            juce::MathConstants<float>::halfPi, true);
         c.stroke (arc, i == 0 ? 3.0f : 2.0f);
     }
-    c.dot (20.0f, 50.0f, 4.0f, c.p.vermilion);
-    if (burst)
+    c.dot (centreX, baselineY, 4.0f, c.p.vermilion);
+}
+
+void drawDubDelay (GlyphCanvas& c, float phase)
+{
+    // Dub is shown as a feedback/send instrument: a dense tape-like coil is
+    // charged on the left, opened through a gate, then released as spaced taps.
+    constexpr float coilX = 36.0f;
+    constexpr float coilY = 52.0f;
+    constexpr float gateX = 64.0f;
+    const float cycle = wrapped (phase);
+    const float charge = triangle (cycle);
+
+    juce::Path coil;
+    constexpr int coilPoints = 96;
+    for (int i = 0; i <= coilPoints; ++i)
     {
-        c.colour (c.p.safetyYellow);
-        for (int i = 0; i < 4; ++i)
-            c.line (72.0f + i * 4.0f, 35.0f + i * 4.0f, 82.0f + i * 2.0f, 30.0f + i * 3.0f, 2.0f);
+        const float t = static_cast<float> (i) / static_cast<float> (coilPoints);
+        const float angle = (-0.5f + t * (2.7f + charge * 0.25f))
+                          * juce::MathConstants<float>::twoPi;
+        const float radius = 2.5f + t * 22.0f;
+        const auto point = c.pt (coilX + std::cos (angle) * radius,
+                                 coilY + std::sin (angle) * radius * 0.78f);
+        if (i == 0) coil.startNewSubPath (point); else coil.lineTo (point);
     }
+    c.colour (c.p.ink);
+    c.stroke (coil, 2.2f);
+
+    // A small moving input pulse makes the coil feel charged rather than floral.
+    const float inputAngle = cycle * juce::MathConstants<float>::twoPi * 2.0f;
+    c.dot (coilX + std::cos (inputAngle) * 8.0f,
+           coilY + std::sin (inputAngle) * 6.0f, 3.2f, c.p.vermilion);
+
+    // Pressure gate.  It opens widest during the release half of the cycle.
+    const float gateOpen = 5.0f + charge * 5.0f;
+    c.colour (c.p.ink);
+    c.line (gateX, 24.0f, gateX, coilY - gateOpen, 2.5f);
+    c.line (gateX, coilY + gateOpen, gateX, 80.0f, 2.5f);
+    c.line (gateX - 5.0f, 24.0f, gateX + 5.0f, 24.0f, 1.5f);
+    c.line (gateX - 5.0f, 80.0f, gateX + 5.0f, 80.0f, 1.5f);
+    c.line (gateX + 3.0f, coilY, 91.0f, coilY, 1.0f);
+
+    // Red, gold, and green read as discrete echo taps, with spacing expanding
+    // as the feedback charge is released.
+    const juce::Colour tapColours[] = { c.p.vermilion, c.p.safetyYellow, c.p.signalGreen };
+    for (int i = 0; i < 3; ++i)
+    {
+        const float spacing = 7.0f + charge * 2.5f;
+        const float tapX = gateX + 7.0f + i * spacing;
+        const float radius = 3.8f - i * 0.55f;
+        c.dot (tapX, coilY, radius, tapColours[i]);
+    }
+
+    // Sparse return path closes the feedback loop without a decorative burst.
+    juce::Path feedback;
+    feedback.startNewSubPath (c.pt (89.0f, 44.0f));
+    feedback.lineTo (c.pt (89.0f, 18.0f));
+    feedback.lineTo (c.pt (44.0f, 18.0f));
+    feedback.lineTo (c.pt (44.0f, 25.0f));
+    c.colour (c.p.mutedInk, 0.75f);
+    c.stroke (feedback, 1.25f);
+    c.arrowHead (44.0f, 28.0f, juce::MathConstants<float>::halfPi, 4.0f);
 }
 
 void drawReverb (GlyphCanvas& c, float phase)
@@ -251,31 +323,45 @@ void drawReverb (GlyphCanvas& c, float phase)
 
 void drawFilter (GlyphCanvas& c, float phase, bool highPass, bool sampleHold, bool master)
 {
-    c.colour (c.p.ink);
-    juce::Path terrain;
-    terrain.startNewSubPath (c.pt (14.0f, highPass ? 70.0f : 26.0f));
-    for (int i = 0; i < 5; ++i)
+    if (! sampleHold)
     {
-        const float nx = 14.0f + (i + 1) * 13.0f;
-        const float y0 = (highPass ? 70.0f : 26.0f) + (highPass ? -1.0f : 1.0f) * i * 9.0f;
-        const float y1 = y0 + (highPass ? -9.0f : 9.0f);
-        terrain.lineTo (c.pt (nx, y0));
-        terrain.lineTo (c.pt (nx, y1));
-    }
-    c.stroke (terrain, 1.5f);
-
-    if (sampleHold)
-    {
-        const float values[] = { 60.0f, 35.0f, 52.0f, 28.0f, 45.0f, 23.0f };
-        juce::Path holds;
-        holds.startNewSubPath (c.pt (14.0f, values[0]));
+        c.colour (c.p.ink);
+        juce::Path terrain;
+        terrain.startNewSubPath (c.pt (14.0f, highPass ? 70.0f : 26.0f));
         for (int i = 0; i < 5; ++i)
         {
-            const float nx = 14.0f + (i + 1) * 14.0f;
-            holds.lineTo (c.pt (nx, values[i]));
-            holds.lineTo (c.pt (nx, values[i + 1]));
+            const float nx = 14.0f + (i + 1) * 13.0f;
+            const float y0 = (highPass ? 70.0f : 26.0f) + (highPass ? -1.0f : 1.0f) * i * 9.0f;
+            const float y1 = y0 + (highPass ? -9.0f : 9.0f);
+            terrain.lineTo (c.pt (nx, y0));
+            terrain.lineTo (c.pt (nx, y1));
         }
-        c.colour (c.p.ultramarine);
+        c.stroke (terrain, 1.5f);
+    }
+    else
+    {
+        // One discrete cutoff trace only.  It changes in held snapshots rather
+        // than gliding, and uses irregular widths/heights to avoid a repeating
+        // staircase rhythm.
+        constexpr float posts[] = { 12.0f, 21.0f, 35.0f, 43.0f,
+                                    59.0f, 70.0f, 84.0f, 91.0f };
+        constexpr int numPosts = static_cast<int> (std::size (posts));
+        const int heldFrame = static_cast<int> (wrapped (phase) * 5.0f);
+        float values[numPosts] {};
+        for (int i = 0; i < numPosts; ++i)
+        {
+            const int hash = (i * 43 + i * i * 7 + heldFrame * 29 + 11) % 67;
+            values[i] = 17.0f + static_cast<float> (hash);
+        }
+
+        juce::Path holds;
+        holds.startNewSubPath (c.pt (posts[0], values[0]));
+        for (int i = 0; i < numPosts - 1; ++i)
+        {
+            holds.lineTo (c.pt (posts[i + 1], values[i]));
+            holds.lineTo (c.pt (posts[i + 1], values[i + 1]));
+        }
+        c.colour (c.p.ink);
         c.stroke (holds, 2.0f);
     }
 
@@ -294,14 +380,58 @@ void drawFilter (GlyphCanvas& c, float phase, bool highPass, bool sampleHold, bo
 
 void drawVolumeRamp (GlyphCanvas& c, float phase)
 {
+    const float voiceLevel = 1.0f - wrapped (phase);
+
+    // Librarian: bun, head, glasses, shoulders, and the raised shushing finger.
     c.colour (c.p.ink);
-    c.line (22.0f, 18.0f, 22.0f, 82.0f, 2.0f);
-    for (int i = 0; i < 7; ++i)
-        c.line (16.0f, 22.0f + i * 9.0f, 22.0f, 22.0f + i * 9.0f, 1.0f);
-    const float drop = triangle (phase) * 8.0f;
+    c.g.drawEllipse (c.rect (19.0f, 23.0f, 27.0f, 31.0f), c.u (2.0f));
+    c.g.fillEllipse (c.rect (14.0f, 20.0f, 11.0f, 11.0f));
+    c.g.drawEllipse (c.rect (23.0f, 31.0f, 8.0f, 7.0f), c.u (1.5f));
+    c.g.drawEllipse (c.rect (33.0f, 31.0f, 8.0f, 7.0f), c.u (1.5f));
+    c.line (31.0f, 34.5f, 33.0f, 34.5f, 1.2f);
+    c.dot (27.0f, 34.5f, 0.8f, c.p.ink);
+    c.dot (37.0f, 34.5f, 0.8f, c.p.ink);
+    c.line (37.0f, 45.0f, 41.0f, 45.0f, 1.3f);
+
+    juce::Path librarianBody;
+    librarianBody.startNewSubPath (c.pt (12.0f, 82.0f));
+    librarianBody.lineTo (c.pt (17.0f, 63.0f));
+    librarianBody.lineTo (c.pt (27.0f, 56.0f));
+    librarianBody.lineTo (c.pt (40.0f, 58.0f));
+    librarianBody.lineTo (c.pt (49.0f, 82.0f));
+    c.stroke (librarianBody, 2.0f);
+
+    juce::Path shushingArm;
+    shushingArm.startNewSubPath (c.pt (27.0f, 70.0f));
+    shushingArm.lineTo (c.pt (43.0f, 57.0f));
+    shushingArm.lineTo (c.pt (43.0f, 39.0f));
     c.colour (c.p.vermilion);
-    c.line (30.0f, 25.0f, 82.0f, 74.0f + drop, 3.0f);
-    c.dot (82.0f, 74.0f + drop, 3.5f, c.p.vermilion);
+    c.stroke (shushingArm, 2.8f);
+    c.dot (43.0f, 38.0f, 1.8f, c.p.vermilion);
+
+    // Talker: a simpler profile facing the librarian.
+    c.colour (c.p.ink);
+    c.g.drawEllipse (c.rect (68.0f, 33.0f, 18.0f, 21.0f), c.u (2.0f));
+    c.line (68.0f, 42.0f, 64.0f, 45.0f, 1.5f);
+    c.line (64.0f, 45.0f, 68.0f, 47.0f, 1.5f);
+    c.dot (73.0f, 40.0f, 1.0f, c.p.ink);
+
+    juce::Path talkerBody;
+    talkerBody.startNewSubPath (c.pt (58.0f, 82.0f));
+    talkerBody.lineTo (c.pt (63.0f, 63.0f));
+    talkerBody.lineTo (c.pt (76.0f, 57.0f));
+    talkerBody.lineTo (c.pt (88.0f, 64.0f));
+    talkerBody.lineTo (c.pt (92.0f, 82.0f));
+    c.stroke (talkerBody, 2.0f);
+
+    // The talker's marks contract and disappear as the librarian shushes them.
+    c.colour (c.p.safetyYellow, 0.20f + voiceLevel * 0.80f);
+    for (int i = 0; i < 3; ++i)
+    {
+        const float length = (7.0f - i * 1.5f) * voiceLevel;
+        const float y = 38.0f + i * 6.0f;
+        c.line (61.0f - length, y, 61.0f, y, 1.6f);
+    }
 }
 
 void drawTremolo (GlyphCanvas& c, float phase)
@@ -462,8 +592,8 @@ void ModifierGlyphRenderer::draw (juce::Graphics& g,
         case ModifierType::ArpSlice:
         case ModifierType::SliceRepeater:               drawSliceBlocks (c, phase, state.descriptor.type, state.descriptor); break;
         case ModifierType::PingPong:                    drawPingPong (c, phase); break;
-        case ModifierType::BufferDelayOn:               drawDelay (c, phase, false); break;
-        case ModifierType::BufferDelayDubBurst:         drawDelay (c, phase, true); break;
+        case ModifierType::BufferDelayOn:               drawDelay (c, phase); break;
+        case ModifierType::BufferDelayDubBurst:         drawDubDelay (c, phase); break;
         case ModifierType::BufferReverbOn:              drawReverb (c, phase); break;
         case ModifierType::BufferLowPassOn:             drawFilter (c, phase, false, false, false); break;
         case ModifierType::BufferHighPassOn:            drawFilter (c, phase, true, false, false); break;

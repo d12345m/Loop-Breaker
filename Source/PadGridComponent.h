@@ -489,6 +489,11 @@ private:
                     // deliberately separate from the ivory tile around it.
                     g.setColour (palette.padLoaded);
                     g.fillRect (aperture);
+                    if (padButtons[i]->getToggleState())
+                    {
+                        g.setColour (palette.padSelected);
+                        g.fillRect (aperture);
+                    }
                     g.setColour (palette.border.withAlpha (0.65f));
                     g.drawRect (aperture, 1.0f);
 
@@ -561,6 +566,12 @@ private:
                 else
                 {
                     // ── Empty pad: four load brackets + "+" icon ──
+                    if (padButtons[i]->getToggleState())
+                    {
+                        g.setColour (palette.padSelected);
+                        g.fillRect (aperture);
+                    }
+
                     {
                         const float bracket = juce::jlimit (8.0f, 16.0f,
                                                            aperture.getWidth() * 0.08f);
@@ -614,9 +625,7 @@ private:
                 // ── Selection overlay ──
                 if (padButtons[i]->getToggleState())
                 {
-                    g.setColour (palette.padSelected);
-                    g.fillRect (aperture);
-                    g.setColour (palette.accent1);
+                    g.setColour (palette.padSelectedIndicator);
                     g.fillEllipse (r.getX() + 8.0f, r.getBottom() - 14.0f, 5.0f, 5.0f);
                     const float underlineWidth = juce::jmin (52.0f, r.getWidth() * 0.28f);
                     g.fillRect (r.getCentreX() - underlineWidth * 0.5f,
@@ -660,16 +669,16 @@ private:
                     float flashAlpha = (float)flashCounters[(size_t)i] / (float)flashDurationTicks * 0.25f;
                     if (flashAlpha > 0.0f)
                     {
-                        g.setColour(palette.accent2.withAlpha(flashAlpha));
+                        g.setColour(palette.padFlash.withAlpha(flashAlpha));
                         g.fillRect (aperture);
                     }
 
                     // Animated radial glow (only when glow animator is active)
                     if (glowAlpha[(size_t)i] > 0.001f)
                     {
-                        juce::ColourGradient glow(palette.accent2.withAlpha(glowAlpha[(size_t)i]),
+                        juce::ColourGradient glow(palette.padFlash.withAlpha(glowAlpha[(size_t)i]),
                                                    aperture.getCentreX(), aperture.getCentreY(),
-                                                   palette.accent2.withAlpha(0.0f),
+                                                   palette.padFlash.withAlpha(0.0f),
                                                    aperture.getX(), aperture.getY(), true);
                         g.setGradientFill(glow);
                         g.fillRect (aperture);

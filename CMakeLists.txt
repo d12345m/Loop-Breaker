@@ -164,6 +164,7 @@ if(LOOP_BREAKER_BUILD_TESTS)
     target_sources(LoopBreakerTests PRIVATE
         Source/UnitTestMain.cpp
         Source/ModifierSchedulerTests.cpp
+        Source/ThemeEngineTests.cpp
     )
     target_include_directories(LoopBreakerTests PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/Source"

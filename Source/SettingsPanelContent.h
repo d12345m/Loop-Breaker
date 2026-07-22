@@ -39,7 +39,7 @@ public:
         int selectedThemeIndex = themes.indexOf (settings.themeName);
         if (selectedThemeIndex < 0)
         {
-            settings.themeName = "Control Surface (Light)";
+            settings.themeName = "Control Surface";
             selectedThemeIndex = themes.indexOf (settings.themeName);
         }
         themeCombo.setSelectedItemIndex (selectedThemeIndex, juce::dontSendNotification);

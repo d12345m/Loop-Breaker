@@ -429,7 +429,15 @@ The live Glyph Lab remains authoritative for motion.
 
 Implemented on `codex/hieroglyph-ui-concepts` as of 2026-07-22:
 
-- The `Control Surface (Light)` ThemeEngine palette is available and is the default for new sessions.
+- The `Control Surface` ThemeEngine palette is available and is the default for
+  new sessions. Its approved pad treatment uses a warm bone field, dark charcoal
+  waveform, pale green-white backlit selection, green selection signal, and a
+  dedicated safety-orange modifier flash. The temporary palette comparisons
+  used to reach this direction have been removed.
+- Every built-in theme uses a luminous selection tint that raises both loaded
+  and empty pad brightness. Modifier flashes use dedicated saturated colours
+  chosen to mix cleanly with their pad surfaces instead of producing muddy
+  brown overlays.
 - `ControlSurfacePalette` maps application themes into stable semantic glyph colors.
 - `ModifierGlyphRenderer` uses normalized JUCE vector geometry and dispatches every non-`Unknown` `ModifierType`.
 - The Session NEXT tile uses the shared renderer, concise planned-variant text, the real scheduler countdown, a full-width progress rule, and no modifier-description prose.
@@ -461,7 +469,7 @@ Not yet implemented:
 
 ### Milestone 1 — Foundation
 
-- [x] Introduce `ControlSurfacePalette` and the `Control Surface (Light)` ThemeEngine palette.
+- [x] Introduce `ControlSurfacePalette` and the `Control Surface` ThemeEngine palette.
 - [x] Introduce a canonical modifier metadata registry, including explicit always-on/non-scheduled status.
 - [x] Add `ModifierGlyphRenderer` with normalized coordinates.
 - [x] Implement large/compact preview containers and glyph dispatch.

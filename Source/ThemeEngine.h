@@ -51,6 +51,8 @@ enum class ColorRole
     PadEmpty,
     PadLoaded,
     PadSelected,
+    PadSelectedIndicator,
+    PadFlash,
     PadPlaying
 };
 
@@ -93,6 +95,8 @@ struct ThemePalette
     juce::Colour padEmpty;
     juce::Colour padLoaded;
     juce::Colour padSelected;
+    juce::Colour padSelectedIndicator;
+    juce::Colour padFlash;
     juce::Colour padPlaying;
 
     // Animation / glow

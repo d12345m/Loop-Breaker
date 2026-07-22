@@ -1174,8 +1174,11 @@ void BufferTestAudioProcessor::setStateInformation (const void* data, int sizeIn
     // Restore theme & animation settings
     if (obj->hasProperty("themeName"))
         app.settings.themeName = obj->getProperty("themeName").toString();
+    if (app.settings.themeName == "Control Surface (Light)"
+        || app.settings.themeName.startsWith ("Control Surface /"))
+        app.settings.themeName = "Control Surface";
     if (ThemeEngine::getInstance().getBuiltInPalette (app.settings.themeName) == nullptr)
-        app.settings.themeName = "Control Surface (Light)";
+        app.settings.themeName = "Control Surface";
     // Motion was historically default-off while its controls were hidden.
     // Treat state without the version marker as legacy and opt it into the
     // production glyph animation; subsequent saves preserve the user's choice.

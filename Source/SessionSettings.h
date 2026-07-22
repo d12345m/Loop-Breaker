@@ -64,7 +64,7 @@ struct SessionSettings
   } parts;
 
     // Visual / UX
-    juce::String themeName { "Control Surface (Light)" };
+    juce::String themeName { "Control Surface" };
     // Glyph motion is part of the primary modifier communication system.
     // Users can disable it through Settings for reduced motion.
     bool animationsEnabled = true;

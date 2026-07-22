@@ -51,6 +51,8 @@ juce::Colour ThemePalette::getColor (ColorRole role) const
         case ColorRole::PadEmpty:      return padEmpty;
         case ColorRole::PadLoaded:     return padLoaded;
         case ColorRole::PadSelected:   return padSelected;
+        case ColorRole::PadSelectedIndicator: return padSelectedIndicator;
+        case ColorRole::PadFlash:      return padFlash;
         case ColorRole::PadPlaying:    return padPlaying;
     }
     return juce::Colours::magenta; // should never happen
@@ -93,6 +95,8 @@ juce::Colour ThemePalette::getColor (ColorRole role) const
     p.padEmpty      = hex (0x111822);
     p.padLoaded     = hex (0x1A2332);
     p.padSelected   = hexA (0x00E5FF, 0.15f);
+    p.padSelectedIndicator = p.accent1;
+    p.padFlash      = p.accent2;
     p.padPlaying    = hex (0x39FF14);
 
     p.glowIntensity = 0.85f;
@@ -134,6 +138,8 @@ juce::Colour ThemePalette::getColor (ColorRole role) const
     p.padEmpty      = hex (0x241610);
     p.padLoaded     = hex (0x352218);
     p.padSelected   = hexA (0xFF6B2B, 0.15f);
+    p.padSelectedIndicator = p.accent1;
+    p.padFlash      = p.accent2;
     p.padPlaying    = hex (0xFFAA00);
 
     p.glowIntensity = 0.6f;
@@ -174,7 +180,9 @@ static ThemePalette makePixelGrid()
 
     p.padEmpty      = hex (0x071007);
     p.padLoaded     = hex (0x020602);
-    p.padSelected   = hexA (0x33FF33, 0.15f);
+    p.padSelected   = hexA (0x66FF66, 0.22f);
+    p.padSelectedIndicator = p.accent1;
+    p.padFlash      = hex (0x5EEBFF);
     p.padPlaying    = hex (0x33FF33);
 
     p.glowIntensity = 0.2f;
@@ -216,6 +224,8 @@ static ThemePalette makePixelGrid()
     p.padEmpty      = hex (0x120B22);
     p.padLoaded     = hex (0x221640);
     p.padSelected   = hexA (0xBF40FF, 0.15f);
+    p.padSelectedIndicator = p.accent1;
+    p.padFlash      = p.accent2;
     p.padPlaying    = hex (0xBF40FF);
 
     p.glowIntensity = 0.8f;
@@ -256,7 +266,9 @@ static ThemePalette makeBasicDark()
 
     p.padEmpty      = hex (0x202328);
     p.padLoaded     = hex (0x101214);
-    p.padSelected   = hexA (0x6EA8FE, 0.18f);
+    p.padSelected   = hexA (0xDCEBFF, 0.28f);
+    p.padSelectedIndicator = p.accent1;
+    p.padFlash      = hex (0x26D9C2);
     p.padPlaying    = hex (0x63C174);
 
     p.glowIntensity = 0.0f;
@@ -299,7 +311,9 @@ static ThemePalette makeBasicLight()
 
     p.padEmpty      = hex (0xECEEF1);
     p.padLoaded     = hex (0x202328);
-    p.padSelected   = hexA (0x356FC0, 0.16f);
+    p.padSelected   = hexA (0xF5FAFF, 0.35f);
+    p.padSelectedIndicator = p.accent1;
+    p.padFlash      = hex (0x2997FF);
     p.padPlaying    = hex (0x2B8A6E);
 
     p.glowIntensity = 0.0f;
@@ -341,6 +355,8 @@ static ThemePalette makeBasicLight()
     p.padEmpty      = hex (0xEDE8E0);
     p.padLoaded     = hex (0xF5F0E8);
     p.padSelected   = hexA (0xC06030, 0.15f);
+    p.padSelectedIndicator = p.accent1;
+    p.padFlash      = p.accent2;
     p.padPlaying    = hex (0xC06030);
 
     p.glowIntensity = 0.0f;
@@ -382,6 +398,8 @@ static ThemePalette makeBasicLight()
     p.padEmpty      = hex (0xE2EBF5);
     p.padLoaded     = hex (0xEEF3FA);
     p.padSelected   = hexA (0x2D7DD2, 0.15f);
+    p.padSelectedIndicator = p.accent1;
+    p.padFlash      = p.accent2;
     p.padPlaying    = hex (0x2D7DD2);
 
     p.glowIntensity = 0.15f;
@@ -423,6 +441,8 @@ static ThemePalette makeBasicLight()
     p.padEmpty      = hex (0xF3F1ED);
     p.padLoaded     = hex (0xF5F4F0);
     p.padSelected   = hexA (0x5C7CFA, 0.15f);
+    p.padSelectedIndicator = p.accent1;
+    p.padFlash      = p.accent2;
     p.padPlaying    = hex (0x5C7CFA);
 
     p.glowIntensity = 0.0f;
@@ -434,7 +454,7 @@ static ThemePalette makeBasicLight()
 static ThemePalette makeControlSurface()
 {
     ThemePalette p;
-    p.name          = "Control Surface (Light)";
+    p.name          = "Control Surface";
 
     p.bg            = hex (0xECE8DC);
     p.bgAlt         = hex (0xE4DFD1);
@@ -458,12 +478,14 @@ static ThemePalette makeControlSurface()
 
     p.knobFill      = hex (0xF04B35);
     p.knobTrack     = hex (0xD5D0C3);
-    p.waveformFill  = hex (0xECE8DC);
+    p.waveformFill  = hex (0x292B29);
     p.playhead      = hex (0xF04B35);
 
     p.padEmpty      = hex (0xF5F1E7);
-    p.padLoaded     = hex (0x121316);
-    p.padSelected   = hexA (0xF04B35, 0.12f);
+    p.padLoaded     = hex (0xE3DED0);
+    p.padSelected   = hexA (0xF8FFE5, 0.62f);
+    p.padSelectedIndicator = hex (0x3F9364);
+    p.padFlash      = hex (0xF36A2D);
     p.padPlaying    = hex (0x54A866);
 
     p.glowIntensity = 0.0f;
@@ -505,6 +527,8 @@ static ThemePalette makeControlSurface()
     p.padEmpty      = hex (0xDDE0E4);
     p.padLoaded     = hex (0xE8EAED);
     p.padSelected   = hexA (0x4A72A8, 0.18f);
+    p.padSelectedIndicator = p.accent1;
+    p.padFlash      = p.accent2;
     p.padPlaying    = hex (0x4A72A8);
 
     p.glowIntensity = 0.05f;
@@ -545,7 +569,9 @@ static ThemePalette makeGruvbox()
 
     p.padEmpty      = hex (0x1D2021);
     p.padLoaded     = hex (0x1D2021);
-    p.padSelected   = hexA (0xFE8019, 0.18f);
+    p.padSelected   = hexA (0xEBDBB2, 0.24f);
+    p.padSelectedIndicator = p.accent1;
+    p.padFlash      = hex (0x83D8C5);
     p.padPlaying    = hex (0xB8BB26);
 
     p.glowIntensity = 0.0f;
@@ -587,7 +613,9 @@ static ThemePalette makeIIgsWriter()
 
     p.padEmpty      = hex (0x2929C9);
     p.padLoaded     = hex (0x181880);
-    p.padSelected   = hexA (0xFFFFFF, 0.18f);
+    p.padSelected   = hexA (0xFFFFFF, 0.28f);
+    p.padSelectedIndicator = p.accent1;
+    p.padFlash      = hex (0xFF72D2);
     p.padPlaying    = hex (0x8CFFB0);
 
     p.glowIntensity = 0.0f;
@@ -631,7 +659,9 @@ static ThemePalette makeGameBoy()
 
     p.padEmpty      = hex (0x8BAC0F);
     p.padLoaded     = hex (0x0F380F);
-    p.padSelected   = hexA (0x306230, 0.15f);
+    p.padSelected   = hexA (0xD7E85B, 0.34f);
+    p.padSelectedIndicator = p.accent1;
+    p.padFlash      = hex (0xE5F25A);
     p.padPlaying    = hex (0x9BBC0F);
 
     p.glowIntensity = 0.0f;
@@ -657,7 +687,7 @@ ThemeEngine::ThemeEngine()
     builtInPalettes.push_back (makePixelGrid());
 
     // Match SessionSettings so first paint and persisted state restoration agree.
-    currentPalette = *getBuiltInPalette ("Control Surface (Light)");
+    currentPalette = *getBuiltInPalette ("Control Surface");
 }
 
 ThemeEngine& ThemeEngine::getInstance()
@@ -685,9 +715,14 @@ juce::Colour ThemeEngine::overlay (float alpha)
 
 void ThemeEngine::setTheme (const juce::String& themeName)
 {
+    const auto requestedName = (themeName == "Control Surface (Light)"
+                                || themeName.startsWith ("Control Surface /"))
+                                   ? juce::String ("Control Surface")
+                                   : themeName;
+
     for (const auto& palette : builtInPalettes)
     {
-        if (palette.name.equalsIgnoreCase (themeName))
+        if (palette.name.equalsIgnoreCase (requestedName))
         {
             if (animConfig.enabled && currentPalette.name != palette.name)
             {
@@ -706,7 +741,7 @@ void ThemeEngine::setTheme (const juce::String& themeName)
 
     // Removed/unknown saved themes migrate to the product default.
     DBG ("ThemeEngine::setTheme — unknown theme name: " + themeName);
-    if (const auto* fallback = getBuiltInPalette ("Control Surface (Light)"))
+    if (const auto* fallback = getBuiltInPalette ("Control Surface"))
         setTheme (*fallback);
 }
 
@@ -735,8 +770,13 @@ juce::StringArray ThemeEngine::getAvailableThemeNames() const
 
 const ThemePalette* ThemeEngine::getBuiltInPalette (const juce::String& name) const
 {
+    const auto requestedName = (name == "Control Surface (Light)"
+                                || name.startsWith ("Control Surface /"))
+                                   ? juce::String ("Control Surface")
+                                   : name;
+
     for (const auto& p : builtInPalettes)
-        if (p.name.equalsIgnoreCase (name))
+        if (p.name.equalsIgnoreCase (requestedName))
             return &p;
     return nullptr;
 }
@@ -805,6 +845,8 @@ void ThemeEngine::updateBlendedPalette()
     blendedPalette.padEmpty     = lerpColour (a.padEmpty, b.padEmpty, t);
     blendedPalette.padLoaded    = lerpColour (a.padLoaded, b.padLoaded, t);
     blendedPalette.padSelected  = lerpColour (a.padSelected, b.padSelected, t);
+    blendedPalette.padSelectedIndicator = lerpColour (a.padSelectedIndicator, b.padSelectedIndicator, t);
+    blendedPalette.padFlash     = lerpColour (a.padFlash, b.padFlash, t);
     blendedPalette.padPlaying   = lerpColour (a.padPlaying, b.padPlaying, t);
 
     blendedPalette.glowIntensity = a.glowIntensity + (b.glowIntensity - a.glowIntensity) * t;

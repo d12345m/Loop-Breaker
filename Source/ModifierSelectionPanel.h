@@ -66,9 +66,6 @@ public:
         // Removed granular delay division/wet/feedback toggles to simplify GUI; runtime randomization will choose values.
     addToggle(ModifierType::BufferLowPassOn, "Low-Pass Filter");
     addToggle(ModifierType::BufferHighPassOn, "High-Pass Filter");
-    // Global (master) filters apply to all tracks under the hood
-    addToggle(ModifierType::MasterLowPassOn, "Master Low-Pass");
-    addToggle(ModifierType::MasterHighPassOn, "Master High-Pass");
     // PingPong and Wow/Flutter are randomized within Delay variants; no separate toggles.
     addToggle(ModifierType::BufferTremolo, "Tremolo");
     addToggle(ModifierType::BufferChorusOn, "Chorus");

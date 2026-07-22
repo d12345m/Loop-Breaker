@@ -1,6 +1,6 @@
 # Loop Breaker — Control Surface Visual Design Brief
 
-- Status: implementation in progress; visual foundation, first glyph pass, canonical registry, planned queue, first Session geometry pass, and headless test runner complete
+- Status: implementation in progress; visual foundation, first glyph pass, canonical registry, planned queue, first Session geometry pass, headless test runner, and downstream planning audit complete
 - Branch: `codex/hieroglyph-ui-concepts`
 - Last implementation review: 2026-07-22
 - Primary visual reference: `docs/concepts/hieroglyph-ui/07-control-surface.png`
@@ -233,7 +233,7 @@ The current `ModifierType` enum contains the following representations. The tabl
 | Buffer Reverb On | Central impulse surrounded by increasingly irregular contour rings | Rings expand, wobble, and dissolve | Three irregular nested contours | Wet and fade bars |
 | Buffer Low Pass On | High stepped terrain clipped by a descending cutoff line | Cutoff line sweeps downward/left; high steps disappear | Descending diagonal over steps | Fade bars / immediate-jump mode |
 | Buffer High Pass On | Low stepped terrain clipped by an ascending cutoff line | Cutoff line sweeps upward/right; low steps disappear | Ascending diagonal over steps | Fade bars / immediate-jump mode |
-| Buffer Volume Ramp Down | Bespectacled librarian with a bun shushing a talker | The talker's voice marks contract and disappear while the raised finger remains fixed | Librarian profile, raised finger, and diminishing voice marks | Fade bars if present |
+| Buffer Volume Ramp Down | Bespectacled librarian with a bun shushing a talker | The talker's voice marks contract and disappear while the raised finger remains fixed | Librarian profile, raised finger, and diminishing voice marks | Fade and hold bars |
 | Buffer Tremolo | Stable center line wrapped by alternating amplitude lobes | Lobes pulse symmetrically around the center | Alternating high/low marks | Rate/depth if later planned |
 | Buffer Chorus On | One central trace with two slightly offset wavy companions | Companion traces drift in and out of phase | Three offset waves | Rate, depth, mix |
 | Buffer Auto Pan | Signal dot orbiting between L and R half-circles | Dot sweeps laterally; depth controls travel range | L/R arc with dot | Rate, depth, mix |
@@ -242,8 +242,8 @@ The current `ModifierType` enum contains the following representations. The tabl
 | Buffer S&H High Pass On | One irregular held-cutoff trace crossed by an ascending filter slash | A single random-looking pattern regenerates only at discrete hold intervals | One stepped trace + high-pass slash | S&H division |
 | Buffer Granular On | Cloud of small grains distributed around a central waveform seed | Grains appear, drift, and recombine continuously | Sparse dot cloud | Density, size, pitch spread, mix, fade |
 | Buffer Granular Momentary | Compact grain packet that erupts and collapses | Short outward grain burst, then snap back | Dense dot packet + burst ticks | Density, size, pitch spread, mix |
-| Master High Pass On | High-pass glyph spanning all eight target ticks | Sweep crosses a row of eight small channel marks | High-pass slash + `ALL`/eight dots | Fade bars / immediate-jump mode |
-| Master Low Pass On | Low-pass glyph spanning all eight target ticks | Sweep crosses a row of eight small channel marks | Low-pass slash + `ALL`/eight dots | Fade bars / immediate-jump mode |
+| Master High Pass On (retired legacy ID) | Legacy high-pass glyph spanning all eight target ticks | Retained only for old saved data and debug rendering | High-pass slash + `ALL`/eight dots | Not scheduled or shown in production controls |
+| Master Low Pass On (retired legacy ID) | Legacy low-pass glyph spanning all eight target ticks | Retained only for old saved data and debug rendering | Low-pass slash + `ALL`/eight dots | Not scheduled or shown in production controls |
 | Switch Part | Two numbered page tiles with a transfer notch | Front tile slides away and next tile indexes in | Overlapping pages + arrow | Destination part if known |
 | Quarter Note Burst | Four evenly spaced impact marks on a bar ruler | Playhead strikes each quarter mark | Four dots on a line | Burst bars |
 | Swap Modifier Stack | Two containers holding stacked layers with crossing transfer paths | Layers cross between containers while retaining color/order | Two stacks + crossing arrows | Target pips; no prose |
@@ -303,6 +303,13 @@ rebroadcasts the queued targets before the front entry can fire. This preserves
 truthful previews without allowing a queue created before sample loading to target
 empty pads.
 
+Explicit pad selection is live performance input for every pad-targeted modifier,
+not a commitment made when the modifier first enters the queue. Users may select or
+deselect pads until the final moment before trigger; each change must synchronously
+refresh the queued target snapshots and target pips so the front entry consumes the
+latest eligible selection. Modifier-specific planning must never silently restore,
+supplement, or retain pads the user has deselected.
+
 Public surface:
 
 ```cpp
@@ -333,8 +340,9 @@ for the performance audit before release.
 - [x] Reset/start/stop behavior is deterministic in the implemented queue lifecycle.
 - [x] Seeded randomness produces reproducible full queues.
 - [x] Queue never contains `Unknown`; all-zero probability produces an empty queue and a musical cue.
-- [x] Structured planned variants shown in the UI come from the same frozen descriptor consumed at trigger time. Switch Part now freezes and displays an explicit destination; remaining unplanned modifier parameters are tracked as polish work.
-- [x] Planned targets shown in the UI exactly match triggered targets; only loaded pads are eligible, and loaded-pad/selection changes refresh the preview before firing.
+- [x] Structured planned variants shown in the UI come from the same frozen descriptor consumed at trigger time. Switch Part freezes and displays an explicit destination; Volume Ramp freezes and displays both fade and hold durations. Remaining unplanned modifier parameters are tracked as polish work.
+- [x] Planned targets shown in the UI exactly match triggered targets; only loaded pads are eligible, and all pad-targeted modifiers treat selection/deselection as live input through the final pre-trigger moment. Loaded-pad or selection changes refresh the preview before firing. Swap Stack uses exactly the live user selection (minimum two), preserves its order, and never supplements it with scheduler-chosen pads; two stacks exchange and larger selections rotate without a promised destination map.
+- [x] Audit downstream randomness. Musical structure and displayed variants are frozen; evolving S&H values, random slice choice/order, granular texture, and wow/flutter micro-parameters remain intentional internal motion. Legacy Ping Pong descriptors use a deterministic fallback rather than choosing a hidden trigger-time division.
 - [x] Add unit tests for fill, trigger/pop, skip, force, suppression, seed reproducibility, settings changes, variant labels, and Switch Part destinations. The `LoopBreakerTests` CMake target runs them headlessly through CTest.
 
 ### 8.4 Modifier registry status
@@ -438,11 +446,12 @@ Implemented on `codex/hieroglyph-ui-concepts` as of 2026-07-22:
 - The Debug VST3 target builds successfully with the renderer and Glyph Lab.
 - A CMake/CTest console runner now executes the Loop Breaker JUCE test category without a DAW or Xcode test-host scheme.
 - NEXT and compact queue labels now share one structured variant formatter, covering Arp Slice, Slice Repeater, S&H filters, chorus, auto-pan, granular, filters, and explicit Switch Part destinations.
+- Volume Ramp fade/hold timing is frozen during queue planning. Swap Stack snapshots the current ordered user selection and replans that snapshot whenever the selection changes, right up to trigger time; application never adds pads of its own.
+- Master Low-Pass and Master High-Pass are retired from production scheduling and controls. Their enum IDs, registry entries, legacy application paths, glyphs, and APVTS parameter positions remain intact so existing sessions do not remap serialized state or automation.
 - Speed, Stretch, Arp Slice, Auto-Pan, and Switch Part glyph geometry now responds to its frozen plan where that response remains legible at queue size.
 
 Not yet implemented:
 
-- a final audit of modifier parameters that are still unplanned or intentionally randomized downstream;
 - production-size visual review and adjustment of the Session geometry;
 - complete variant-to-geometry mapping, accessibility review, and performance validation.
 
@@ -473,6 +482,8 @@ Not yet implemented:
 - [x] Update force/skip/reset/suppression semantics.
 - [x] Add independent Debug-panel forcing for NEXT, QUEUE 1, and QUEUE 2.
 - [x] Add scheduler queue and registry tests plus a runnable CMake/CTest console host.
+- [x] Audit application-time randomness and remove preview/trigger mismatches for Switch Part, Volume Ramp, Swap Stack, and legacy Ping Pong fallback behavior.
+- [x] Retire Master Low-Pass and Master High-Pass from scheduling and production controls while preserving their serialized enum IDs and legacy APVTS parameter positions.
 
 ### Milestone 4 — Session layout
 
@@ -496,9 +507,8 @@ Not yet implemented:
 ### 10.1 Ordered next steps
 
 1. **Review the production control board and first glyph pass.** Inspect the new NEXT/QUEUE 1/QUEUE 2 layout at minimum and maximum editor sizes, then export a current contact sheet and resolve clipping, centering, ambiguous motion, and color-only distinctions.
-2. **Close the remaining queue verification gaps.** Keep the CMake/CTest runner green and audit downstream application code so any newly displayed planned variant is exactly what the modifier consumes. Switch Part now has an explicit frozen destination.
-3. **Review and tune Session geometry and motion.** Reload the installed VST, verify saved-versus-empty A–H presets, the wordmark fill and modifier-board progress rule, animated NEXT glyphs at several speeds, the reduced-motion toggle, ivory/black pad treatment, filenames, and non-perimeter state cues, then correct any production-size spacing, contrast, or motion issues.
-4. **Finish variant, accessibility, and performance work.** Map the remaining planned fields, verify reduced motion and color-independent state, test minimum/maximum editor sizes, and review queue planning/allocation cost before final contact-sheet approval.
+2. **Review and tune Session geometry and motion.** Reload the installed VST, verify saved-versus-empty A–H presets, the wordmark fill and modifier-board progress rule, animated NEXT glyphs at several speeds, the reduced-motion toggle, ivory/black pad treatment, filenames, and non-perimeter state cues, then correct any production-size spacing, contrast, or motion issues.
+3. **Finish variant, accessibility, and performance work.** Map the remaining planned fields, verify reduced motion and color-independent state, test minimum/maximum editor sizes, and review queue planning/allocation cost before final contact-sheet approval.
 
 ## 11. Acceptance criteria
 

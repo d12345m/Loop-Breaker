@@ -717,22 +717,14 @@ ModifierDescriptor ModifierScheduler::pickRandomDescriptor() const
         return {};
     juce::Array<int> candidateIndices;
     const bool moreThanOnePart = settings.parts.getNumParts() > 1;
-    if (restrictToImplemented.load())
+    for (int i = 0; i < prototypeCache.size(); ++i)
     {
-        for (int i = 0; i < prototypeCache.size(); ++i)
-        {
-            auto t = prototypeCache[i]->getDescriptor().type;
-            if (! ModifierRegistry::get (t).schedulerEligible)
-                continue;
-            // SwitchPart gated by parts count is handled inside weighted selection
-            candidateIndices.add(i);
-        }
-    }
-    // Fallback (when not restricting): include all descriptors
-    if (candidateIndices.isEmpty())
-    {
-        for (int i = 0; i < prototypeCache.size(); ++i)
-            candidateIndices.add(i);
+        const auto type = prototypeCache[i]->getDescriptor().type;
+        if (! ModifierRegistry::get (type).schedulerEligible)
+            continue;
+
+        // SwitchPart gating by part count is handled inside weighted selection.
+        candidateIndices.add (i);
     }
 
     // Use weighted random selection via ModifierProbabilityManager.
@@ -880,14 +872,26 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
         juce::String mode = jump ? "Jump to target then decay" : "Ramp up then ramp down";
         modified.description = base.description + " -> " + juce::String((int)dur) + " bars | " + mode;
     }
-        else if (base.type == ModifierType::QuarterNoteBurst)
-        {
-            static const int barsOptions[] { 1, 2, 4 };
-            const juce::SpinLock::ScopedLockType lock(rngLock);
-            int bars = barsOptions[rng.nextInt((int) std::size(barsOptions))];
-            modified.plannedBurstBars = bars;
-            modified.description = base.description + " -> " + juce::String(bars) + (bars == 1 ? " bar" : " bars");
-        }
+    else if (base.type == ModifierType::BufferVolumeRampDown)
+    {
+        static const double fades[] { 1.0, 2.0, 4.0 };
+        static const double holds[] { 1.0, 2.0, 3.0, 4.0 };
+        const juce::SpinLock::ScopedLockType lock (rngLock);
+        const double fadeBars = fades[rng.nextInt ((int) std::size (fades))];
+        const double holdBars = holds[rng.nextInt ((int) std::size (holds))];
+        modified.plannedFxFadeBars = fadeBars;
+        modified.plannedVolumeHoldBars = holdBars;
+        modified.description = base.description + " -> Fade " + juce::String ((int) fadeBars)
+                             + " bars | Hold " + juce::String ((int) holdBars) + " bars";
+    }
+    else if (base.type == ModifierType::QuarterNoteBurst)
+    {
+        static const int barsOptions[] { 1, 2, 4 };
+        const juce::SpinLock::ScopedLockType lock(rngLock);
+        int bars = barsOptions[rng.nextInt((int) std::size(barsOptions))];
+        modified.plannedBurstBars = bars;
+        modified.description = base.description + " -> " + juce::String(bars) + (bars == 1 ? " bar" : " bars");
+    }
     else if (base.type == ModifierType::BufferChorusOn)
     {
         static const double depths[] { 0.25, 0.5, 0.75, 1.0 };
@@ -1029,6 +1033,16 @@ juce::Array<int> ModifierScheduler::selectTargetBuffers(const ModifierDescriptor
                 && (availableMask & (1u << static_cast<uint32_t> (index))) != 0)
                 targets.addIfNotAlreadyThere (index);
     }
+    const bool needsMultipleTargets = desc.type == ModifierType::SwapModifierStack;
+    if (needsMultipleTargets)
+    {
+        // Swap Stack is entirely user-directed. Selection changes replan the
+        // queue, so the set and order here remain editable until trigger time.
+        if (targets.size() < 2)
+            targets.clear();
+        return targets;
+    }
+
     if (! targets.isEmpty())
         return targets;
 
@@ -1041,7 +1055,7 @@ juce::Array<int> ModifierScheduler::selectTargetBuffers(const ModifierDescriptor
 
     for (int i = 0; i < 8; ++i)
     {
-        if ((availableMask & (1u << static_cast<uint32_t> (i))) == 0)
+        if ((availableMask & (1u << static_cast<uint32_t> (i))) == 0 || targets.contains (i))
             continue;
 
         float w = settings.padTargetProbabilities[static_cast<size_t>(i)];
@@ -1056,8 +1070,9 @@ juce::Array<int> ModifierScheduler::selectTargetBuffers(const ModifierDescriptor
     if (eligible.isEmpty())
         return targets; // all pads disabled – nothing to target
 
-    int maxCount = juce::jmin (4, eligible.size());
-    int count = rng.nextInt ({1, maxCount}); // 1..maxCount
+    const int maxTotalCount = juce::jmin (4, eligible.size() + targets.size());
+    const int desiredTotalCount = rng.nextInt ({ 1, maxTotalCount + 1 });
+    const int count = juce::jlimit (0, eligible.size(), desiredTotalCount - targets.size());
 
     std::set<int> unique;
     while ((int)unique.size() < count)
@@ -1076,7 +1091,7 @@ juce::Array<int> ModifierScheduler::selectTargetBuffers(const ModifierDescriptor
         }
     }
 
-    for (int v : unique) targets.add (v);
+    for (int v : unique) targets.addIfNotAlreadyThere (v);
     return targets;
 }
 

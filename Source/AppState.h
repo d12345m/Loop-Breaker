@@ -533,15 +533,6 @@ private:
         }
     }
 
-    // Utility: pick a random element from a small list of doubles
-    double pickRandom(std::initializer_list<double> options) const
-    {
-        juce::Array<double> arr;
-        for (auto v : options) arr.add(v);
-        juce::Random r;
-        return arr[r.nextInt(arr.size())];
-    }
-
     void applyReverse(const juce::Array<int>& targets)
     {
         if (targets.isEmpty()) return;
@@ -719,20 +710,9 @@ private:
     void applyPingPong(const ModifierDescriptor& desc, const juce::Array<int>& targets)
     {
         if (targets.isEmpty()) return;
-        // Use planned division if provided; else pick a random one
-        // Divisions are in bars: whole note=1.0, half=0.5, quarter=0.25, eighth=0.125, sixteenth=0.0625
-        double division = 0.25; // Default to quarter note
-        if (desc.plannedPingPongDivision.has_value())
-        {
-            division = desc.plannedPingPongDivision.value();
-        }
-        else
-        {
-            // Random selection: whole, half, quarter, 1/8, 1/16
-            juce::Random r;
-            const double divisions[] = { 1.0, 0.5, 0.25, 0.125, 0.0625 };
-            division = divisions[r.nextInt(5)];
-        }
+        // Scheduled descriptors always carry this value. Keep a deterministic
+        // quarter-note fallback for manually constructed legacy descriptors.
+        const double division = desc.plannedPingPongDivision.value_or (0.25);
         
         const double bpm = settings.bpm;
         
@@ -1057,15 +1037,10 @@ private:
     {
         if (targets.isEmpty()) return;
 
-        // Duration of the ramp down phase in bars (randomly chosen from plausible options)
-        const float rampBars = desc.plannedFxFadeBars.has_value()
-                                   ? (float) desc.plannedFxFadeBars.value()
-                                   : (float) pickRandom({1.0, 2.0, 4.0});
+        const float rampBars = (float) desc.plannedFxFadeBars.value_or (2.0);
+        const float holdBars = (float) desc.plannedVolumeHoldBars.value_or (2.0);
 
-        // Hold at the low volume for a random number of bars (1-4)
-        const float holdBars = (float) pickRandom({1.0, 2.0, 3.0, 4.0});
-
-        // Target gain: how quiet the ramp gets (pick a random amount)
+        // Volume Ramp currently has one fixed destination: silence.
         const float targetGain = 0.0f; // Fade to silence
 
         // Ramp back up over the same number of bars as the ramp down
@@ -1269,33 +1244,9 @@ private:
 
     void applySwapModifierStack(juce::Array<int> targets)
     {
-        // Need at least 2 buffers to swap between.
-        // If fewer than 2 targets provided, supplement from eligible loaded buffers.
-        if (targets.size() < 2)
-        {
-            juce::Array<int> eligible;
-            for (int i = 0; i < 8; ++i)
-            {
-                if (!targets.contains(i))
-                    if (auto* b = bufferManager.getBuffer(i); b && b->hasAudioLoaded())
-                        eligible.add(i);
-            }
-
-            juce::Random r;
-            int needed = juce::jlimit(0, eligible.size(), 2 - targets.size());
-            // When auto-selecting, aim for 2-4 total buffers
-            if (targets.isEmpty() && eligible.size() >= 2)
-                needed = juce::jlimit(2, juce::jmin(4, eligible.size()), 2 + r.nextInt(juce::jmin(3, eligible.size() - 1)));
-
-            for (int n = 0; n < needed && !eligible.isEmpty(); ++n)
-            {
-                int pick = r.nextInt(eligible.size());
-                targets.add(eligible[pick]);
-                eligible.remove(pick);
-            }
-        }
-
-        if (targets.size() < 2) return; // not enough loaded buffers
+        // ModifierScheduler supplies the final live selection, so the pips
+        // match the stacks that are actually rotated.
+        if (targets.size() < 2) return;
 
         // 1. Capture a BufferModifierSnapshot for each target
         std::vector<BufferModifierSnapshot> snapshots(static_cast<size_t>(targets.size()));

@@ -52,7 +52,8 @@ enum class ModifierType
     BufferGranularOn,
     BufferGranularMomentary,
 
-    // Master FX modifiers
+    // Retired master FX IDs. Keep these positions stable for saved sessions;
+    // registry metadata prevents new scheduling/UI exposure.
     MasterHighPassOn,
     MasterLowPassOn,
 
@@ -100,6 +101,7 @@ struct ModifierDescriptor
     // Future: dub burst durations could be parameterized; for now use defaults
     // Generic FX fade duration in bars (e.g., reverb ramp)
     std::optional<double> plannedFxFadeBars;     // e.g., 0 (instant), 1, 2
+    std::optional<double> plannedVolumeHoldBars; // Volume ramp: time held at minimum gain
 
     // Scheduler-only: when QuarterNoteBurst triggers, schedule quarter-note triggers for X bars.
     std::optional<int> plannedBurstBars;         // e.g., 1, 2, 4

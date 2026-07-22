@@ -123,6 +123,12 @@ public:
         return ModifierRegistry::orderedTypes();
     }
 
+    /** Types shown as editable rows in the Probability UI. */
+    static const std::vector<ModifierType>& visibleModifierTypes()
+    {
+        return ModifierRegistry::visibleProbabilityTypes();
+    }
+
     // ---- Serialisation (JSON-compatible juce::var) ----
 
     /** Serialize weights to a DynamicObject for inclusion in plugin state JSON. */

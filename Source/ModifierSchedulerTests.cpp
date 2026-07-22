@@ -75,6 +75,23 @@ public:
         expect (ducking.probabilityVisible);
         expect (! ducking.prototypeEligible);
         expect (! ducking.schedulerEligible);
+
+        beginTest ("Retired master filters retain IDs but are hidden and unschedulable");
+
+        expectEquals (static_cast<int> (ModifierProbabilityManager::allModifierTypes().size()),
+                      static_cast<int> (ModifierType::Unknown));
+
+        const auto& visibleTypes = ModifierProbabilityManager::visibleModifierTypes();
+        for (auto type : { ModifierType::MasterHighPassOn, ModifierType::MasterLowPassOn })
+        {
+            const auto& metadata = ModifierRegistry::get (type);
+            expect (metadata.prototypeEligible, "Legacy descriptor must remain constructible");
+            expect (! metadata.schedulerEligible);
+            expect (! metadata.probabilityVisible);
+            expect (std::find (visibleTypes.begin(), visibleTypes.end(), type) == visibleTypes.end());
+            expectEquals (static_cast<int> (ModifierProbabilityManager::allModifierTypes()[static_cast<size_t> (type)]),
+                          static_cast<int> (type));
+        }
     }
 };
 
@@ -98,6 +115,12 @@ public:
         auto sampleHold = ModifierRegistry::makeDescriptor (ModifierType::BufferSHLowPassOn);
         sampleHold.plannedSHDivisionBars = 0.125;
         expectEquals (ModifierVariantFormatter::full (sampleHold), juce::String ("HOLD 1/8"));
+
+        auto volumeRamp = ModifierRegistry::makeDescriptor (ModifierType::BufferVolumeRampDown);
+        volumeRamp.plannedFxFadeBars = 2.0;
+        volumeRamp.plannedVolumeHoldBars = 3.0;
+        expectEquals (ModifierVariantFormatter::full (volumeRamp),
+                      juce::String ("FADE 2 BARS  /  HOLD 3 BARS"));
 
         beginTest ("Switch Part exposes its frozen destination");
         auto switchPart = ModifierRegistry::makeDescriptor (ModifierType::SwitchPart);
@@ -189,6 +212,45 @@ public:
         switchQueue = switchScheduler.getPlannedQueueSnapshot();
         expectEquals (*switchQueue[0].descriptor.plannedDestinationPart, 3);
         expectEquals (*switchQueue[1].descriptor.plannedDestinationPart, 0);
+
+        beginTest ("Swap Stack uses exactly the live user selection");
+        SessionSettings swapSettings;
+        ModifierScheduler swapScheduler (swapSettings);
+        swapScheduler.setAvailableTargetMask ((1u << 0u) | (1u << 2u) | (1u << 5u));
+        swapScheduler.setUserSelectedBuffers ({ 0 });
+        swapScheduler.setRandomSeed (2468);
+        swapScheduler.start();
+        swapScheduler.forceUpcomingModifier (ModifierType::SwapModifierStack);
+        expect (swapScheduler.getPlannedQueueSnapshot().front().targets.isEmpty());
+
+        swapScheduler.setUserSelectedBuffers ({ 5, 0, 2 });
+        const auto swapFront = swapScheduler.getPlannedQueueSnapshot().front();
+        expectEquals (swapFront.targets.size(), 3);
+        expectEquals (swapFront.targets[0], 5);
+        expectEquals (swapFront.targets[1], 0);
+        expectEquals (swapFront.targets[2], 2);
+
+        swapScheduler.setUserSelectedBuffers ({ 2, 5 });
+        const auto lastMomentSwapFront = swapScheduler.getPlannedQueueSnapshot().front();
+        expectEquals (lastMomentSwapFront.targets.size(), 2);
+        expectEquals (lastMomentSwapFront.targets[0], 2);
+        expectEquals (lastMomentSwapFront.targets[1], 5);
+
+        CaptureListener swapCapture;
+        swapScheduler.addListener (&swapCapture);
+        swapScheduler.triggerNow();
+        expectEquals (swapCapture.triggerCount, 1);
+        expect (sameTargets (swapCapture.lastTargets, lastMomentSwapFront.targets));
+        swapScheduler.removeListener (&swapCapture);
+
+        beginTest ("Swap Stack has no target pips when fewer than two pads are available");
+        SessionSettings insufficientSwapSettings;
+        ModifierScheduler insufficientSwapScheduler (insufficientSwapSettings);
+        insufficientSwapScheduler.setAvailableTargetMask (1u << 3u);
+        insufficientSwapScheduler.setUserSelectedBuffers ({ 3 });
+        insufficientSwapScheduler.start();
+        insufficientSwapScheduler.forceUpcomingModifier (ModifierType::SwapModifierStack);
+        expect (insufficientSwapScheduler.getPlannedQueueSnapshot().front().targets.isEmpty());
 
         beginTest ("Skip pops the front and preserves already planned entries");
         scheduler.skipUpcoming();
@@ -294,6 +356,16 @@ public:
         expectEquals (mutedCapture.cueCount, 1);
         expect (mutedScheduler.getPlannedQueueSnapshot().empty());
         mutedScheduler.removeListener (&mutedCapture);
+
+        beginTest ("Retired master filters cannot fill the scheduler queue");
+        SessionSettings retiredSettings;
+        for (auto type : ModifierProbabilityManager::allModifierTypes())
+            retiredSettings.modifierProbabilities.setWeight (type, 0.0f);
+        retiredSettings.modifierProbabilities.setWeight (ModifierType::MasterHighPassOn, 1.0f);
+        retiredSettings.modifierProbabilities.setWeight (ModifierType::MasterLowPassOn, 1.0f);
+        ModifierScheduler retiredScheduler (retiredSettings);
+        retiredScheduler.start();
+        expect (retiredScheduler.getPlannedQueueSnapshot().empty());
     }
 };
 
@@ -411,34 +483,55 @@ public:
             }
         }
 
-        beginTest("selectNextModifier plans structured variants when applicable");
+        auto planOnly = [] (ModifierType type, int seed)
         {
             SessionSettings settings;
-            settings.barsBetweenModifiers = 1;
-            ModifierScheduler scheduler(settings);
-            scheduler.setRestrictToImplemented(true);
-            scheduler.setRandomSeed(42);
+            for (auto candidate : ModifierProbabilityManager::allModifierTypes())
+                settings.modifierProbabilities.setWeight (candidate, 0.0f);
+            settings.modifierProbabilities.setWeight (type, 1.0f);
+
+            ModifierScheduler scheduler (settings);
+            scheduler.setRestrictToImplemented (true);
+            scheduler.setRandomSeed (seed);
             scheduler.start();
-            // Try a few rounds to encounter Speed, Stretch, and BeatSliceRandom
-            bool sawSpeedWithPlanned = false;
-            bool sawStretchWithPlanned = false;
-            bool sawSliceWithPlanned = false;
-            for (int i = 0; i < 40 && (!sawSpeedWithPlanned || !sawStretchWithPlanned || !sawSliceWithPlanned); ++i) {
-                auto up = scheduler.getUpcomingModifier();
-                if (up.has_value()) {
-                    if (up->type == ModifierType::Speed)
-                        sawSpeedWithPlanned |= up->plannedSpeed.has_value();
-                    else if (up->type == ModifierType::Stretch)
-                        sawStretchWithPlanned |= up->plannedStretch.has_value();
-                    else if (up->type == ModifierType::BeatSliceRandom)
-                        sawSliceWithPlanned |= up->plannedSliceDivision.isNotEmpty();
-                }
-                // advance to next selection quickly
-                scheduler.updateTime(settings.getSecondsBetweenModifiers() + 0.001);
-            }
-            expect(sawSpeedWithPlanned, "Did not encounter Speed with plannedSpeed set");
-            expect(sawStretchWithPlanned, "Did not encounter Stretch with plannedStretch set");
-            expect(sawSliceWithPlanned, "Did not encounter BeatSliceRandom with plannedSliceDivision set");
+            return scheduler.getUpcomingModifier();
+        };
+
+        beginTest ("Queue planning freezes Speed variant");
+        const auto speed = planOnly (ModifierType::Speed, 42);
+        expect (speed.has_value());
+        if (speed.has_value())
+        {
+            expectEquals ((int) speed->type, (int) ModifierType::Speed);
+            expect (speed->plannedSpeed.has_value());
+        }
+
+        beginTest ("Queue planning freezes Stretch variant");
+        const auto stretch = planOnly (ModifierType::Stretch, 43);
+        expect (stretch.has_value());
+        if (stretch.has_value())
+        {
+            expectEquals ((int) stretch->type, (int) ModifierType::Stretch);
+            expect (stretch->plannedStretch.has_value());
+        }
+
+        beginTest ("Queue planning freezes Beat Slice division");
+        const auto slice = planOnly (ModifierType::BeatSliceRandom, 44);
+        expect (slice.has_value());
+        if (slice.has_value())
+        {
+            expectEquals ((int) slice->type, (int) ModifierType::BeatSliceRandom);
+            expect (slice->plannedSliceDivision.isNotEmpty());
+        }
+
+        beginTest ("Queue planning freezes Volume Ramp timing");
+        const auto volumeRamp = planOnly (ModifierType::BufferVolumeRampDown, 45);
+        expect (volumeRamp.has_value());
+        if (volumeRamp.has_value())
+        {
+            expectEquals ((int) volumeRamp->type, (int) ModifierType::BufferVolumeRampDown);
+            expect (volumeRamp->plannedFxFadeBars.has_value());
+            expect (volumeRamp->plannedVolumeHoldBars.has_value());
         }
     }
 };

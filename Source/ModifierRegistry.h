@@ -56,8 +56,10 @@ public:
             { ModifierType::BufferSHHighPassOn,          ModifierCategory::BufferEffect,    "S&H High-Pass",       "S&H High-Pass",       "Channel Effect", "Persistent high-pass filter with sample-and-hold modulated cutoff and Q",           true,  true,  true, false, 0.25f },
             { ModifierType::BufferGranularOn,            ModifierCategory::BufferEffect,    "Granular",            "Granular",            "Channel Effect", "Clouds-inspired granular texture with randomized density, grain size, pitch spread, and mix", true, true, true, false, 0.25f },
             { ModifierType::BufferGranularMomentary,     ModifierCategory::BufferEffect,    "Granular Burst",      "Granular Burst",      "Channel Effect", "Temporary granular cloud that fades in and out over bars",                          true,  true,  true, false, 0.25f },
-            { ModifierType::MasterHighPassOn,            ModifierCategory::MasterEffect,    "Master High-Pass",    "Master High-Pass",    "Master Effect",  "Temporary master high-pass filter (2-16 bars, ramp or jump mode)",                  true,  true,  true, false, 0.25f },
-            { ModifierType::MasterLowPassOn,             ModifierCategory::MasterEffect,    "Master Low-Pass",     "Master Low-Pass",     "Master Effect",  "Temporary master low-pass filter (2-16 bars, ramp or jump mode)",                   true,  true,  true, false, 0.25f },
+            // Retained as readable legacy IDs. These are hidden and never
+            // scheduled; the per-channel filters can target every pad instead.
+            { ModifierType::MasterHighPassOn,            ModifierCategory::MasterEffect,    "Master High-Pass",    "Master High-Pass",    "Master Effect",  "Retired legacy master high-pass filter",                                           true, false, false, false, 0.25f },
+            { ModifierType::MasterLowPassOn,             ModifierCategory::MasterEffect,    "Master Low-Pass",     "Master Low-Pass",     "Master Effect",  "Retired legacy master low-pass filter",                                            true, false, false, false, 0.25f },
             { ModifierType::SwitchPart,                  ModifierCategory::GlobalUtility,   "Switch Part",         "Switch Part",         "Special",        "Switch to a different part",                                                       true,  true,  true, false, 0.25f },
             { ModifierType::QuarterNoteBurst,            ModifierCategory::GlobalUtility,   "Quarter-Note Burst",  "Quarter-Note Burst",  "Special",        "Trigger modifiers every quarter note for 1-4 bars",                                true,  true,  true, false, 0.25f },
             { ModifierType::SwapModifierStack,           ModifierCategory::BufferTransform, "Swap Stack",          "Swap Stack",          "Special",        "Swap the entire modifier stack between two or more buffers",                       true,  true,  true, false, 0.25f },
@@ -94,6 +96,19 @@ public:
     }
 
     static const std::vector<ModifierType>& orderedTypes()
+    {
+        static const std::vector<ModifierType> types = []
+        {
+            std::vector<ModifierType> result;
+            result.reserve (entries().size());
+            for (const auto& entry : entries())
+                result.push_back (entry.type);
+            return result;
+        }();
+        return types;
+    }
+
+    static const std::vector<ModifierType>& visibleProbabilityTypes()
     {
         static const std::vector<ModifierType> types = []
         {

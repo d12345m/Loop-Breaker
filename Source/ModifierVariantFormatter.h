@@ -115,7 +115,14 @@ inline juce::String full (const ModifierDescriptor& descriptor)
             return result;
         }
         case ModifierType::BufferVolumeRampDown:
-            return descriptor.plannedFxFadeBars.has_value() ? bars (*descriptor.plannedFxFadeBars) : juce::String();
+        {
+            juce::String result;
+            if (descriptor.plannedFxFadeBars.has_value())
+                result << "FADE " << bars (*descriptor.plannedFxFadeBars);
+            if (descriptor.plannedVolumeHoldBars.has_value())
+                result << (result.isNotEmpty() ? "  /  " : "") << "HOLD " << bars (*descriptor.plannedVolumeHoldBars);
+            return result;
+        }
         case ModifierType::BufferChorusOn:
         {
             juce::String result;

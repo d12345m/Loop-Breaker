@@ -161,7 +161,7 @@ private:
     // -------------------------------------------------------------------------
     void buildRows()
     {
-        const auto& allTypes  = ModifierProbabilityManager::allModifierTypes();
+        const auto& allTypes  = ModifierProbabilityManager::visibleModifierTypes();
         juce::String lastCategory;
 
         for (size_t i = 0; i < allTypes.size(); ++i)
@@ -169,7 +169,9 @@ private:
             const auto type = allTypes[i];
             Row row;
             row.type       = type;
-            row.paramIndex = static_cast<int> (i);
+            // MIDI/automation mappings retain the serialized enum index even
+            // when legacy probability rows are hidden.
+            row.paramIndex = static_cast<int> (type);
             row.category   = ModifierProbabilityManager::getCategory (type);
             row.showCategoryHeader = (row.category != lastCategory);
             lastCategory = row.category;

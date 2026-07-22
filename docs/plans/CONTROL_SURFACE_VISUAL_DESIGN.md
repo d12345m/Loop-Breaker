@@ -1,6 +1,6 @@
 # Loop Breaker — Control Surface Visual Design Brief
 
-- Status: implementation in progress; visual foundation and first glyph pass complete
+- Status: implementation in progress; visual foundation, first glyph pass, canonical registry, and planned queue foundation complete
 - Branch: `codex/hieroglyph-ui-concepts`
 - Last implementation review: 2026-07-22
 - Primary visual reference: `docs/concepts/hieroglyph-ui/07-control-surface.png`
@@ -257,19 +257,21 @@ Never require the user to estimate an exact value from animation. The large next
 
 ## 8. Queue backend requirement
 
-### 8.1 Current limitation
+### 8.1 Current implementation
 
-`ModifierScheduler` currently owns one value:
+`ModifierScheduler` now owns a depth-three `std::deque<PlannedModifier>`. Each
+entry contains a prepared descriptor and a frozen target array. The existing
+`getUpcomingModifier()` and `upcomingModifierChanged` API remain as compatibility
+views of the front item, while `getPlannedQueueSnapshot()` and
+`plannedQueueChanged` expose copied queue state to the UI.
 
-```cpp
-std::optional<ModifierDescriptor> upcoming;
-```
+Queue snapshot notifications are coalesced through `juce::AsyncUpdater` and
+delivered on the message thread. Trigger callbacks remain synchronous because
+they drive application/DSP state. Queue access itself is protected while copied.
 
-and exposes `getUpcomingModifier()`. `ModifierSchedulerListener` broadcasts only one descriptor through `upcomingModifierChanged`. Therefore a two- or three-item visual queue cannot yet be truthful.
+### 8.2 Implemented model
 
-### 8.2 Desired model
-
-The scheduler should own a planned queue, suggested default depth **3**:
+The scheduler owns a planned queue with default depth **3**:
 
 ```cpp
 static constexpr int kPlannedQueueDepth = 3;
@@ -285,47 +287,52 @@ struct PlannedModifier
 
 The descriptor must be fully variant-planned when it enters the queue. If targets are intended to remain user-reactive until trigger time, document that rule explicitly; otherwise targets should also be frozen at enqueue time so the preview remains truthful. The preferred UX is to freeze both descriptor and targets.
 
-Suggested public surface:
+Public surface:
 
 ```cpp
 std::vector<PlannedModifier> getPlannedQueueSnapshot() const;
 ```
 
-Suggested listener callback:
+Listener callback:
 
 ```cpp
 virtual void plannedQueueChanged(const std::vector<PlannedModifier>&) {}
 ```
 
-Use a snapshot/copy suitable for the message thread. Do not let the UI hold references into scheduler-owned storage. Review synchronization carefully because scheduler updates may originate from audio/host-timeline processing while UI reads occur on the message thread.
+The UI receives snapshot copies and does not hold references into scheduler-owned
+storage. Planning and queue replenishment can still originate from audio/host
+timeline processing; allocation and locking cost therefore remain explicit items
+for the performance audit before release.
 
 ### 8.3 Queue behavior checklist
 
-- [ ] Fill queue to depth 3 on scheduler start.
-- [ ] Front item is the next modifier and owns the active countdown.
-- [ ] On trigger, pop front and append one newly planned item.
-- [ ] `skipUpcoming()` pops front without firing, then replenishes.
-- [ ] `forceUpcomingModifier()` replaces only the front item unless an explicit queue-slot API is added.
+- [x] Fill queue to depth 3 on scheduler start when at least one modifier has non-zero probability.
+- [x] Front item is the next modifier and owns the active countdown.
+- [x] On trigger, pop front and append one newly planned item.
+- [x] `skipUpcoming()` pops front without firing, then replenishes.
+- [x] `forceUpcomingModifier()` replaces only the front item unless an explicit queue-slot API is added.
 - [ ] Debug tooling can set each queue position independently.
-- [ ] Probability/settings changes affect newly enqueued items, not already-previewed entries.
-- [ ] Suppression advances the queue consistently with current trigger semantics.
-- [ ] Reset/start/stop behavior is deterministic and tested.
-- [ ] Seeded randomness produces reproducible full queues.
-- [ ] Queue never contains `Unknown`.
+- [x] Probability/settings changes affect newly enqueued items, not already-previewed entries.
+- [x] Suppression advances the queue consistently with current trigger semantics.
+- [x] Reset/start/stop behavior is deterministic in the implemented queue lifecycle.
+- [x] Seeded randomness produces reproducible full queues.
+- [x] Queue never contains `Unknown`; all-zero probability produces an empty queue and a musical cue.
 - [ ] Planned variants shown in the UI exactly match triggered variants.
-- [ ] Planned targets shown in the UI exactly match triggered targets.
-- [ ] Add unit tests for fill, trigger/pop, skip, force, suppression, seed reproducibility, and settings changes.
+- [x] Planned targets shown in the UI exactly match triggered targets.
+- [x] Add unit tests for fill, trigger/pop, skip, force, suppression, seed reproducibility, and settings changes. These compile in Debug; the Xcode project still needs a runnable test-host scheme to execute them from the command line.
 
 ### 8.4 Modifier registry status
 
-The immediate count mismatch has been corrected:
+`ModifierRegistry` is now the canonical source for all 29 non-`Unknown`
+entries. It owns ordered type, descriptor category, display and short names, UI
+group, description, prototype eligibility, scheduler eligibility, probability
+visibility, always-on state, and the representative reduced-motion glyph phase.
 
-- `ModifierType` includes `BufferDuckingOn`.
-- `ModifierProbabilityManager::allModifierTypes()` includes all 29 non-`Unknown` enum entries.
-- `SessionSettings::kNumModifierTypes` now derives from the terminal `ModifierType::Unknown` sentinel instead of a hard-coded value.
-- The existing processor assertion still checks the ordered-list size against that derived count.
-
-The canonical-registry task is not complete. Display names, categories, prototype descriptors, and scheduler eligibility are still maintained in more than one place. `ModifierFactory::createAllPrototypes()` also intentionally omits `BufferDuckingOn` because ducking is currently always on; a future registry must represent that distinction explicitly instead of relying on parallel lists and comments.
+`ModifierProbabilityManager`, `ModifierFactory`, `ModifierScheduler`, Glyph Lab,
+and the production glyph renderer now consume that registry. Serialized enum
+values and established parameter/UI ordering are unchanged. Ducking is explicitly
+represented as visible and always on, but neither prototyped nor scheduled.
+Registry invariant tests guard complete/unique enum coverage and factory drift.
 
 ## 9. Glyph Lab decision
 
@@ -400,15 +407,16 @@ Implemented on `codex/hieroglyph-ui-concepts` as of 2026-07-22:
 - `ControlSurfacePalette` maps application themes into stable semantic glyph colors.
 - `ModifierGlyphRenderer` uses normalized JUCE vector geometry and dispatches every non-`Unknown` `ModifierType`.
 - The Session NEXT tile uses the shared renderer, concise planned-variant text, the real scheduler countdown, a full-width progress rule, and no modifier-description prose.
+- The scheduler owns a truthful depth-three planned queue with frozen descriptors and targets, copy snapshots, and a message-thread queue listener.
+- The Session control board renders the real next item plus two static compact queue cells and color-coded frozen target pips.
 - Animation-disabled mode renders a deterministic representative frame.
 - The debug-only Glyph Lab and fixed-phase contact-sheet exporter are implemented.
 - The Debug VST3 target builds successfully with the renderer and Glyph Lab.
 
 Not yet implemented:
 
-- a canonical modifier metadata/eligibility registry;
-- a truthful multi-item planned queue with frozen variants and targets;
-- production queue cells and target pips in the Session header;
+- independent debug forcing for queue slots beyond the front item;
+- a runnable command-line test-host scheme and a final audit that every downstream modifier consumes its planned variant without re-randomizing;
 - the final A–H target-strip and pad restyling;
 - complete variant-to-geometry mapping, accessibility review, and performance validation.
 
@@ -417,7 +425,7 @@ Not yet implemented:
 ### Milestone 1 — Foundation
 
 - [x] Introduce `ControlSurfacePalette` and the `Control Surface (Light)` ThemeEngine palette.
-- [ ] Introduce a canonical modifier metadata registry. The count guard is fixed, but metadata and eligibility remain duplicated.
+- [x] Introduce a canonical modifier metadata registry, including explicit always-on/non-scheduled status.
 - [x] Add `ModifierGlyphRenderer` with normalized coordinates.
 - [x] Implement large/compact preview containers and glyph dispatch.
 - [x] Add the debug-only Glyph Lab tab.
@@ -429,21 +437,21 @@ Not yet implemented:
 - [x] Delay, dub delay, and reverb first pass.
 - [x] Reverse, speed, and stretch first pass.
 - [x] Swap Stack and Reset All first pass.
-- [ ] Validate compact recognition at the final production queue size. Glyph Lab previews exist, but the production queue layout does not.
+- [ ] Validate compact recognition at the final production queue size. The production queue layout now exists; visual review remains.
 
 ### Milestone 3 — Queue backend
 
-- [ ] Replace single upcoming descriptor with planned queue.
-- [ ] Freeze variants and targets at planning time.
-- [ ] Add snapshot/listener APIs.
-- [ ] Update force/skip/reset/suppression semantics.
-- [ ] Add scheduler tests.
+- [x] Replace single upcoming descriptor with planned queue.
+- [x] Freeze prepared descriptors and targets at planning time.
+- [x] Add snapshot/listener APIs with message-thread queue delivery.
+- [x] Update force/skip/reset/suppression semantics.
+- [x] Add scheduler queue and registry tests. A runnable Xcode test-host scheme remains to be added.
 
 ### Milestone 4 — Session layout
 
-- [ ] Implement light canvas and modular header. The palette and large NEXT tile are complete; the full control board is not.
+- [ ] Implement light canvas and modular header. The palette, NEXT tile, and two truthful compact queue cells are complete; production-size visual review remains.
 - [ ] Combine logo line and timer behavior.
-- [ ] Add large next tile and 2–3 queue tiles. The large tile is complete; queue tiles wait on Milestone 3.
+- [x] Add large next tile and two truthful queue tiles with frozen target pips.
 - [ ] Restyle A–H targeting strip.
 - [ ] Restyle loaded and empty pads without changing audio behavior. Theme colors have changed, but final aperture/load/label geometry remains.
 - [ ] Replace full selection borders with lamps/underlines/corner tabs.
@@ -460,12 +468,10 @@ Not yet implemented:
 
 ### 10.1 Ordered next steps
 
-1. **Review the first glyph pass.** Export a current contact sheet, inspect all four phases plus compact frames, and resolve clipping, centering, ambiguous motion, and color-only distinctions. Record durable glyph changes in Section 7.2.
-2. **Create the canonical modifier registry.** Consolidate ordered type, display name, category, prototype/scheduler eligibility, and default glyph metadata. Preserve serialized enum values and explicitly represent always-on/non-scheduled entries such as ducking.
-3. **Implement the planned queue backend.** Follow Section 8 exactly: depth three, fully planned descriptors, frozen targets, copy snapshots, message-thread-safe listener delivery, deterministic seed behavior, and comprehensive scheduler tests.
-4. **Build the production control board.** Use the queue snapshot for one large NEXT tile and two compact queued tiles. Add real target pips only after targets are frozen; do not infer or fake them.
-5. **Complete Session geometry.** Add the stable logo progress rule, restyle the A–H target strip, then implement ivory pad tiles with black waveform apertures and non-perimeter selection cues.
-6. **Finish variant, accessibility, and performance work.** Map the remaining planned fields, verify reduced motion and color-independent state, test minimum/maximum editor sizes, and review UI/audio-thread cost before final contact-sheet approval.
+1. **Review the production control board and first glyph pass.** Inspect the new NEXT/QUEUE 1/QUEUE 2 layout at minimum and maximum editor sizes, then export a current contact sheet and resolve clipping, centering, ambiguous motion, and color-only distinctions.
+2. **Close the remaining queue verification gaps.** Add debug APIs for forcing individual queue slots, add a runnable Xcode test-host scheme, and audit downstream application code so every displayed planned variant is exactly what the modifier consumes. Add an explicit planned destination for Switch Part if it remains previewable.
+3. **Complete Session geometry.** Add the stable logo progress rule, restyle the A–H target strip, then implement ivory pad tiles with black waveform apertures and non-perimeter selection cues.
+4. **Finish variant, accessibility, and performance work.** Map the remaining planned fields, verify reduced motion and color-independent state, test minimum/maximum editor sizes, and review queue planning/allocation cost before final contact-sheet approval.
 
 ## 11. Acceptance criteria
 

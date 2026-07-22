@@ -38,6 +38,8 @@
       <FILE id="sessionSettingsH" name="SessionSettings.h" compile="0" resource="0"
             file="Source/SessionSettings.h"/>
       <FILE id="modifierH" name="Modifier.h" compile="0" resource="0" file="Source/Modifier.h"/>
+      <FILE id="modifierRegistryH" name="ModifierRegistry.h" compile="0" resource="0"
+            file="Source/ModifierRegistry.h"/>
       <FILE id="modifierCpp" name="Modifier.cpp" compile="1" resource="0"
             file="Source/Modifier.cpp"/>
       <FILE id="controlSurfacePaletteH" name="ControlSurfacePalette.h" compile="0"

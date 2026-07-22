@@ -2,8 +2,7 @@
  ============================================================================== 
    ModifierScheduler.h
    --------------------------------------------------------------------------
-   Schedules & selects modifiers at musical bar boundaries.
-   Current implementation is a stub emitting only descriptor selection events.
+   Schedules, plans, and triggers a truthful depth-three modifier queue.
  ==============================================================================
 */
 
@@ -14,18 +13,30 @@
 #include "SessionSettings.h"
 #include "ModifierProbabilityManager.h"
 
+#include <deque>
+#include <vector>
+
+struct PlannedModifier
+{
+    ModifierDescriptor descriptor;
+    juce::Array<int> targets;
+};
+
 class ModifierSchedulerListener
 {
 public:
     virtual ~ModifierSchedulerListener() = default;
     virtual void upcomingModifierChanged(const ModifierDescriptor& /*desc*/) {}
+    virtual void plannedQueueChanged(const std::vector<PlannedModifier>& /*queue*/) {}
     virtual void modifierTriggered(const ModifierDescriptor& /*desc*/, const juce::Array<int>& /*targets*/) {}
     virtual void musicalCueReached() {}
 };
 
-class ModifierScheduler
+class ModifierScheduler : private juce::AsyncUpdater
 {
 public:
+    static constexpr int kPlannedQueueDepth = 3;
+
     explicit ModifierScheduler(const SessionSettings& settingsRef);
     ~ModifierScheduler();
 
@@ -39,7 +50,8 @@ public:
     void selectNextModifier();
 
     // Getter for UI
-    std::optional<ModifierDescriptor> getUpcomingModifier() const { return upcoming; }
+    std::optional<ModifierDescriptor> getUpcomingModifier() const;
+    std::vector<PlannedModifier> getPlannedQueueSnapshot() const;
 
     // Listener management
     void addListener(ModifierSchedulerListener* l) { listeners.addIfNotAlreadyThere(l); }
@@ -82,7 +94,7 @@ public:
     void setSuppressed(bool shouldSuppress) { suppressed.store(shouldSuppress); }
     bool isSuppressed() const { return suppressed.load(); }
 
-    // Limit random selection to implemented modifiers only (Reverse, Speed, ResetAll for now)
+    // Limit random selection to entries marked scheduler-eligible in ModifierRegistry.
     void setRestrictToImplemented(bool enabled) { restrictToImplemented.store(enabled); }
     bool isRestrictToImplemented() const { return restrictToImplemented.load(); }
 
@@ -118,7 +130,8 @@ private:
     std::atomic<int> quarterNoteBurstRemaining { 0 }; // number of quarter-note triggers remaining
 
     juce::OwnedArray<IModifier> prototypeCache; // list of available types
-    std::optional<ModifierDescriptor> upcoming;
+    std::deque<PlannedModifier> plannedQueue;
+    mutable juce::SpinLock plannedQueueLock;
     juce::Array<int> userSelectedBuffers;
 
     // RNG state (shared by descriptor + target selection) for deterministic runs/tests
@@ -132,13 +145,20 @@ private:
     std::atomic<bool> restrictToImplemented { true }; // default: only schedule implemented modifiers
     std::atomic<bool> suppressed { false }; // skip firing while keeping progress
 
-    // Variant planning now carried on the upcoming ModifierDescriptor itself
+    // Variant and target planning are frozen in each PlannedModifier entry.
 
     void scheduleNextTrigger();
     void scheduleNextTriggerHost(double currentPpq, double bpm);
     void triggerIfDue();
     void triggerIfDueHost(double currentPpq, double bpm);
     void broadcastUpcoming();
+    void handleAsyncUpdate() override;
+    std::optional<PlannedModifier> planNextModifier() const;
+    std::optional<PlannedModifier> getFrontPlannedModifier() const;
+    void fillPlannedQueue();
+    void advancePlannedQueue();
+    void replaceFrontPlannedModifier(PlannedModifier replacement);
+    void clearPlannedQueue();
     ModifierDescriptor pickRandomDescriptor() const;
     juce::Array<int> selectTargetBuffers(const ModifierDescriptor& desc) const;
     void maybeResnapQuantized();

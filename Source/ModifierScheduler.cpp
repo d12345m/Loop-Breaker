@@ -8,6 +8,7 @@
 */
 
 #include "ModifierScheduler.h"
+#include "ModifierRegistry.h"
 
 ModifierScheduler::ModifierScheduler(const SessionSettings& settingsRef)
     : settings(settingsRef)
@@ -18,6 +19,7 @@ ModifierScheduler::ModifierScheduler(const SessionSettings& settingsRef)
 ModifierScheduler::~ModifierScheduler()
 {
     stop();
+    cancelPendingUpdate();
 }
 
 void ModifierScheduler::start()
@@ -31,15 +33,15 @@ void ModifierScheduler::start()
     nextTriggerPpq = 0.0;
     nextMainTriggerPpq = 0.0;
     quarterNoteBurstRemaining.store(0);
+    clearPlannedQueue();
     scheduleNextTrigger();
-    selectNextModifier();
+    fillPlannedQueue();
 }
 
 void ModifierScheduler::stop()
 {
-    if (!running) return;
     running = false;
-    upcoming.reset();
+    clearPlannedQueue();
     hostTimelineActive.store(false);
 }
 
@@ -64,9 +66,23 @@ void ModifierScheduler::resetTimeline()
 
 void ModifierScheduler::selectNextModifier()
 {
-    auto base = pickRandomDescriptor();
-    upcoming = prepareVariantDescriptor(base);
-    broadcastUpcoming();
+    if (auto replacement = planNextModifier())
+        replaceFrontPlannedModifier (std::move (*replacement));
+    else
+        clearPlannedQueue();
+}
+
+std::optional<ModifierDescriptor> ModifierScheduler::getUpcomingModifier() const
+{
+    if (auto planned = getFrontPlannedModifier())
+        return planned->descriptor;
+    return std::nullopt;
+}
+
+std::vector<PlannedModifier> ModifierScheduler::getPlannedQueueSnapshot() const
+{
+    const juce::SpinLock::ScopedLockType lock (plannedQueueLock);
+    return { plannedQueue.begin(), plannedQueue.end() };
 }
 
 void ModifierScheduler::updateTime(double secondsElapsed)
@@ -106,8 +122,8 @@ void ModifierScheduler::updateHostTimeline(double ppqPosition, double bpm)
     {
         lastTriggerAbsoluteSeconds = absoluteSeconds;
         scheduleNextTriggerHost(ppqPosition, bpm);
-        if (!upcoming.has_value())
-            selectNextModifier();
+        if (!getUpcomingModifier().has_value())
+            fillPlannedQueue();
         return;
     }
 
@@ -231,19 +247,18 @@ void ModifierScheduler::scheduleNextTriggerHost(double currentPpq, double bpm)
 
 void ModifierScheduler::triggerIfDue()
 {
-    if (!running || !upcoming.has_value()) return;
+    if (!running) return;
     static constexpr double eps = 1e-6;
     if (accumulatedSecondsTotal + eps < nextTriggerAbsoluteSeconds) return;
     {
-        // capture upcoming before mutation
-        auto descriptor = upcoming.value();
+        const auto planned = getFrontPlannedModifier();
+        const auto descriptor = planned.has_value() ? planned->descriptor : ModifierDescriptor {};
 
-        // Skip firing when all modifier probabilities are 0 (Unknown descriptor)
-        const bool isNoop = (descriptor.type == ModifierType::Unknown);
+        const bool isNoop = ! planned.has_value();
 
         if (!isNoop && !suppressed.load())
         {
-            auto targets = selectTargetBuffers(descriptor);
+            const auto& targets = planned->targets;
             // If a buffer-targeting modifier has no eligible targets (all pad
             // probabilities are 0), silently skip the trigger.
             const bool needsTargets = (descriptor.category != ModifierCategory::MasterEffect
@@ -264,13 +279,13 @@ void ModifierScheduler::triggerIfDue()
         // Even if suppressed, we still advance scheduling windows & pick next upcoming
         lastTriggerAbsoluteSeconds = accumulatedSecondsTotal;
         scheduleNextTrigger();
-        selectNextModifier();
+        advancePlannedQueue();
     }
 }
 
 void ModifierScheduler::triggerIfDueHost(double currentPpq, double bpm)
 {
-    if (!running || !upcoming.has_value())
+    if (!running)
         return;
 
     static constexpr double eps = 1e-6;
@@ -283,14 +298,14 @@ void ModifierScheduler::triggerIfDueHost(double currentPpq, double bpm)
     while (currentPpq + eps >= nextTriggerPpq && safety++ < 128)
     {
         const int burstRemainingBefore = quarterNoteBurstRemaining.load();
-        auto descriptor = upcoming.value();
+        const auto planned = getFrontPlannedModifier();
+        const auto descriptor = planned.has_value() ? planned->descriptor : ModifierDescriptor {};
 
-        // Skip firing when all modifier probabilities are 0 (Unknown descriptor)
-        const bool isNoop = (descriptor.type == ModifierType::Unknown);
+        const bool isNoop = ! planned.has_value();
 
         if (!isNoop && !suppressed.load())
         {
-            auto targets = selectTargetBuffers(descriptor);
+            const auto& targets = planned->targets;
             const bool needsTargets = (descriptor.category != ModifierCategory::MasterEffect
                                     && descriptor.category != ModifierCategory::GlobalUtility);
             if (!needsTargets || !targets.isEmpty())
@@ -341,7 +356,7 @@ void ModifierScheduler::triggerIfDueHost(double currentPpq, double bpm)
 
         // Schedule next boundary and choose next modifier.
         scheduleNextTriggerHost(nextTriggerPpq, bpm);
-        selectNextModifier();
+        advancePlannedQueue();
 
         // Keep accumulatedSecondsTotal consistent for UI.
         accumulatedSecondsTotal = currentPpq * secondsPerQuarter;
@@ -350,13 +365,94 @@ void ModifierScheduler::triggerIfDueHost(double currentPpq, double bpm)
 
 void ModifierScheduler::broadcastUpcoming()
 {
-    if (!upcoming.has_value()) return;
-    for (auto* l : listeners) l->upcomingModifierChanged(upcoming.value());
+    if (auto upcoming = getUpcomingModifier())
+        for (auto* l : listeners)
+            l->upcomingModifierChanged (*upcoming);
+
+    // Queue snapshots are a UI-facing API. AsyncUpdater coalesces rapid audio-thread
+    // mutations and guarantees delivery from the message thread.
+    triggerAsyncUpdate();
+}
+
+void ModifierScheduler::handleAsyncUpdate()
+{
+    const auto snapshot = getPlannedQueueSnapshot();
+    for (auto* listener : listeners)
+        listener->plannedQueueChanged (snapshot);
+}
+
+std::optional<PlannedModifier> ModifierScheduler::planNextModifier() const
+{
+    auto descriptor = prepareVariantDescriptor (pickRandomDescriptor());
+    if (descriptor.type == ModifierType::Unknown)
+        return std::nullopt;
+
+    return PlannedModifier { descriptor, selectTargetBuffers (descriptor) };
+}
+
+std::optional<PlannedModifier> ModifierScheduler::getFrontPlannedModifier() const
+{
+    const juce::SpinLock::ScopedLockType lock (plannedQueueLock);
+    if (plannedQueue.empty())
+        return std::nullopt;
+    return plannedQueue.front();
+}
+
+void ModifierScheduler::fillPlannedQueue()
+{
+    while (true)
+    {
+        {
+            const juce::SpinLock::ScopedLockType lock (plannedQueueLock);
+            if (plannedQueue.size() >= static_cast<size_t> (kPlannedQueueDepth))
+                break;
+        }
+
+        auto planned = planNextModifier();
+        if (! planned.has_value())
+            break;
+
+        const juce::SpinLock::ScopedLockType lock (plannedQueueLock);
+        plannedQueue.push_back (std::move (*planned));
+    }
+
+    broadcastUpcoming();
+}
+
+void ModifierScheduler::advancePlannedQueue()
+{
+    {
+        const juce::SpinLock::ScopedLockType lock (plannedQueueLock);
+        if (! plannedQueue.empty())
+            plannedQueue.pop_front();
+    }
+    fillPlannedQueue();
+}
+
+void ModifierScheduler::replaceFrontPlannedModifier (PlannedModifier replacement)
+{
+    {
+        const juce::SpinLock::ScopedLockType lock (plannedQueueLock);
+        if (plannedQueue.empty())
+            plannedQueue.push_front (std::move (replacement));
+        else
+            plannedQueue.front() = std::move (replacement);
+    }
+    fillPlannedQueue();
+}
+
+void ModifierScheduler::clearPlannedQueue()
+{
+    {
+        const juce::SpinLock::ScopedLockType lock (plannedQueueLock);
+        plannedQueue.clear();
+    }
+    triggerAsyncUpdate();
 }
 
 void ModifierScheduler::triggerNow()
 {
-    if (!running || !upcoming.has_value()) return;
+    if (!running || !getUpcomingModifier().has_value()) return;
     // Set next trigger to now and attempt immediate trigger
     nextTriggerAbsoluteSeconds = accumulatedSecondsTotal;
     triggerIfDue();
@@ -364,11 +460,11 @@ void ModifierScheduler::triggerNow()
 
 void ModifierScheduler::skipUpcoming()
 {
-    if (!running || !upcoming.has_value()) return;
+    if (!running || !getUpcomingModifier().has_value()) return;
     // Simulate that we reached the trigger without firing, then select next and reschedule
     lastTriggerAbsoluteSeconds = accumulatedSecondsTotal;
     scheduleNextTrigger();
-    selectNextModifier();
+    advancePlannedQueue();
 }
 
 void ModifierScheduler::forceUpcomingModifier(ModifierType type)
@@ -379,8 +475,8 @@ void ModifierScheduler::forceUpcomingModifier(ModifierType type)
         if (proto->getDescriptor().type == type)
         {
             // Prepare a randomized variant so planned fields & description are populated
-            upcoming = prepareVariantDescriptor(proto->getDescriptor());
-            broadcastUpcoming();
+            auto descriptor = prepareVariantDescriptor (proto->getDescriptor());
+            replaceFrontPlannedModifier ({ descriptor, selectTargetBuffers (descriptor) });
             return;
         }
     }
@@ -502,8 +598,7 @@ void ModifierScheduler::forceUpcomingVariant(ModifierType type, const juce::Stri
                 }
                 base.description = base.description + frag + combo;
             }
-            upcoming = base;
-            broadcastUpcoming();
+            replaceFrontPlannedModifier ({ base, selectTargetBuffers (base) });
             return;
         }
     }
@@ -520,36 +615,8 @@ ModifierDescriptor ModifierScheduler::pickRandomDescriptor() const
         for (int i = 0; i < prototypeCache.size(); ++i)
         {
             auto t = prototypeCache[i]->getDescriptor().type;
-            // Base implemented list
-            bool allowed = (t == ModifierType::Reverse
-                || t == ModifierType::Speed
-                || t == ModifierType::Stretch
-                || t == ModifierType::PitchUpOctave
-                || t == ModifierType::PitchDownOctave
-                || t == ModifierType::ResetAll
-                || t == ModifierType::BeatSliceRandom
-                || t == ModifierType::ArpSlice
-                || t == ModifierType::SliceRepeater
-                || t == ModifierType::BufferReverbOn
-                || t == ModifierType::BufferDelayOn
-                || t == ModifierType::BufferDelayDubBurst
-                || t == ModifierType::BufferLowPassOn
-                || t == ModifierType::BufferHighPassOn
-                || t == ModifierType::MasterLowPassOn
-                || t == ModifierType::MasterHighPassOn
-                || t == ModifierType::BufferTremolo
-                || t == ModifierType::BufferChorusOn
-                || t == ModifierType::BufferAutoPan
-                || t == ModifierType::BufferSHLowPassOn
-                || t == ModifierType::BufferSHHighPassOn
-                || t == ModifierType::BufferGranularOn
-                || t == ModifierType::BufferGranularMomentary
-                || t == ModifierType::PingPong
-                || t == ModifierType::SwapModifierStack
-                || t == ModifierType::BufferVolumeRampDown
-                    || t == ModifierType::SwitchPart
-                    || t == ModifierType::QuarterNoteBurst);
-            if (!allowed) continue;
+            if (! ModifierRegistry::get (t).schedulerEligible)
+                continue;
             // SwitchPart gated by parts count is handled inside weighted selection
             candidateIndices.add(i);
         }

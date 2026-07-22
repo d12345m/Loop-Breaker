@@ -14,6 +14,7 @@
 
 #include <JuceHeader.h>
 #include "Modifier.h"
+#include "ModifierRegistry.h"
 #include <map>
 #include <vector>
 #include <optional>
@@ -106,128 +107,20 @@ public:
     /** Display name for a ModifierType. */
     static juce::String getDisplayName(ModifierType type)
     {
-        switch (type)
-        {
-            case ModifierType::Reverse:             return "Reverse";
-            case ModifierType::Speed:               return "Speed";
-            case ModifierType::Stretch:             return "Stretch";
-            case ModifierType::PitchUpOctave:       return "Pitch Up Octave";
-            case ModifierType::PitchDownOctave:     return "Pitch Down Octave";
-            case ModifierType::BeatSliceRandom:     return "Beat Slice";
-            case ModifierType::ArpSlice:             return "Arp Slice";
-            case ModifierType::SliceRepeater:        return "Slice Repeater";
-            case ModifierType::PingPong:            return "Ping Pong";
-            case ModifierType::BufferDelayOn:       return "Delay";
-            case ModifierType::BufferDelayDubBurst: return "Delay Dub Burst";
-            case ModifierType::BufferReverbOn:      return "Reverb";
-            case ModifierType::BufferLowPassOn:     return "Low-Pass Filter";
-            case ModifierType::BufferHighPassOn:    return "High-Pass Filter";
-            case ModifierType::BufferVolumeRampDown:return "Volume Ramp Down";
-            case ModifierType::BufferTremolo:       return "Tremolo";
-            case ModifierType::BufferChorusOn:       return "Chorus";
-            case ModifierType::BufferAutoPan:         return "Auto-Pan";
-            case ModifierType::BufferDuckingOn:     return "Ducking";
-            case ModifierType::BufferSHLowPassOn:   return "S&H Low-Pass";
-            case ModifierType::BufferSHHighPassOn:  return "S&H High-Pass";
-            case ModifierType::BufferGranularOn:     return "Granular";
-            case ModifierType::BufferGranularMomentary: return "Granular Burst";
-            case ModifierType::MasterHighPassOn:    return "Master High-Pass";
-            case ModifierType::MasterLowPassOn:     return "Master Low-Pass";
-            case ModifierType::SwitchPart:          return "Switch Part";
-            case ModifierType::QuarterNoteBurst:    return "Quarter-Note Burst";
-            case ModifierType::SwapModifierStack:   return "Swap Stack";
-            case ModifierType::ResetAll:            return "Reset All";
-            default:                                return "Unknown";
-        }
+        return ModifierRegistry::get (type).displayName;
     }
 
     /** Category label for grouping rows in the probability panel. */
     static juce::String getCategory(ModifierType type)
     {
-        switch (type)
-        {
-            case ModifierType::Reverse:
-            case ModifierType::Speed:
-            case ModifierType::Stretch:
-            case ModifierType::PitchUpOctave:
-            case ModifierType::PitchDownOctave:
-            case ModifierType::BeatSliceRandom:
-            case ModifierType::ArpSlice:
-            case ModifierType::SliceRepeater:
-            case ModifierType::PingPong:
-                return "Buffer";
-
-            case ModifierType::BufferDelayOn:
-            case ModifierType::BufferDelayDubBurst:
-            case ModifierType::BufferReverbOn:
-            case ModifierType::BufferLowPassOn:
-            case ModifierType::BufferHighPassOn:
-            case ModifierType::BufferVolumeRampDown:
-            case ModifierType::BufferTremolo:
-            case ModifierType::BufferChorusOn:
-            case ModifierType::BufferAutoPan:
-            case ModifierType::BufferDuckingOn:
-            case ModifierType::BufferSHLowPassOn:
-            case ModifierType::BufferSHHighPassOn:
-            case ModifierType::BufferGranularOn:
-            case ModifierType::BufferGranularMomentary:
-                return "Channel Effect";
-
-            case ModifierType::MasterHighPassOn:
-            case ModifierType::MasterLowPassOn:
-                return "Master Effect";
-
-            case ModifierType::SwitchPart:
-            case ModifierType::QuarterNoteBurst:
-            case ModifierType::SwapModifierStack:
-            case ModifierType::ResetAll:
-                return "Special";
-
-            default:
-                return "Other";
-        }
+        return ModifierRegistry::get (type).categoryLabel;
     }
 
     // ---- Ordered list of all types for iteration ----
 
     static const std::vector<ModifierType>& allModifierTypes()
     {
-        static const std::vector<ModifierType> types {
-            // Buffer transforms
-            ModifierType::Reverse,
-            ModifierType::Speed,
-            ModifierType::Stretch,
-            ModifierType::PitchUpOctave,
-            ModifierType::PitchDownOctave,
-            ModifierType::BeatSliceRandom,
-            ModifierType::ArpSlice,
-            ModifierType::SliceRepeater,
-            ModifierType::PingPong,
-            // Channel FX
-            ModifierType::BufferDelayOn,
-            ModifierType::BufferDelayDubBurst,
-            ModifierType::BufferReverbOn,
-            ModifierType::BufferLowPassOn,
-            ModifierType::BufferHighPassOn,
-            ModifierType::BufferVolumeRampDown,
-            ModifierType::BufferTremolo,
-            ModifierType::BufferChorusOn,
-            ModifierType::BufferAutoPan,
-            ModifierType::BufferDuckingOn,
-            ModifierType::BufferSHLowPassOn,
-            ModifierType::BufferSHHighPassOn,
-            ModifierType::BufferGranularOn,
-            ModifierType::BufferGranularMomentary,
-            // Master FX
-            ModifierType::MasterHighPassOn,
-            ModifierType::MasterLowPassOn,
-            // Special
-            ModifierType::SwitchPart,
-            ModifierType::QuarterNoteBurst,
-            ModifierType::SwapModifierStack,
-            ModifierType::ResetAll,
-        };
-        return types;
+        return ModifierRegistry::orderedTypes();
     }
 
     // ---- Serialisation (JSON-compatible juce::var) ----

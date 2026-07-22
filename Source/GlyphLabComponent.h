@@ -3,6 +3,7 @@
 #include <JuceHeader.h>
 #include "ModifierGlyphRenderer.h"
 #include "ModifierProbabilityManager.h"
+#include "ModifierRegistry.h"
 #include "ThemeFonts.h"
 
 /** Debug-only review surface for the production modifier glyph renderer. */
@@ -205,10 +206,7 @@ private:
 
     ModifierDescriptor makePreviewDescriptor (ModifierType type) const
     {
-        ModifierDescriptor descriptor;
-        descriptor.type = type;
-        descriptor.shortName = ModifierProbabilityManager::getDisplayName (type);
-        descriptor.description = ModifierProbabilityManager::getCategory (type);
+        ModifierDescriptor descriptor = ModifierRegistry::makeDescriptor (type);
 
         switch (type)
         {

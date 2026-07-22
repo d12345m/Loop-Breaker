@@ -202,8 +202,7 @@ public:
 
         app.scheduler.addListener(this);
 
-        if (auto up = app.scheduler.getUpcomingModifier())
-            modifierDisplay.setUpcoming(*up);
+        modifierDisplay.setPlannedQueue (app.scheduler.getPlannedQueueSnapshot());
 
         app.scheduler.setQuantizationEnabled(app.settings.quantizeEnabled);
         app.scheduler.setQuantizationSubdivision(app.settings.quantizeSubdivision);
@@ -468,6 +467,14 @@ public:
             if (safeThis == nullptr) return;
             safeThis->modifierDisplay.setUpcoming(descCopy);
         });
+    }
+
+    void plannedQueueChanged (const std::vector<PlannedModifier>& queue) override
+    {
+        // AsyncUpdater in ModifierScheduler guarantees this callback is on the
+        // message thread. A pending preset temporarily owns the NEXT display.
+        if (app.pendingPresetRecall.load() < 0)
+            modifierDisplay.setPlannedQueue (queue);
     }
 
     void modifierTriggered(const ModifierDescriptor& desc, const juce::Array<int>& targets) override

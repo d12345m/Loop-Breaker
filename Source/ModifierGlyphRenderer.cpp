@@ -1,4 +1,5 @@
 #include "ModifierGlyphRenderer.h"
+#include "ModifierRegistry.h"
 
 #include <cmath>
 
@@ -578,7 +579,9 @@ void ModifierGlyphRenderer::draw (juce::Graphics& g,
 {
     if (bounds.isEmpty()) return;
 
-    const float phase = state.reducedMotion ? 0.25f : wrapped (state.phase01);
+    const float phase = state.reducedMotion
+                            ? ModifierRegistry::get (state.descriptor.type).representativeGlyphPhase01
+                            : wrapped (state.phase01);
     GlyphCanvas c (g, bounds, palette, state.emphasis01);
 
     switch (state.descriptor.type)

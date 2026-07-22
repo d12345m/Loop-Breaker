@@ -1,9 +1,232 @@
 #if JUCE_UNIT_TESTS
 #include <JuceHeader.h>
 #include "ModifierScheduler.h"
+#include "ModifierRegistry.h"
 #include "SessionSettings.h"
 #include "AppState.h"
 #include "TimeStretchSoundTouch.h"
+
+class ModifierRegistryTest : public juce::UnitTest
+{
+public:
+    ModifierRegistryTest() : juce::UnitTest ("Modifier Registry") {}
+
+    void runTest() override
+    {
+        beginTest ("Registry covers every serialized modifier exactly once");
+
+        constexpr auto typeCount = static_cast<size_t> (ModifierType::Unknown);
+        std::array<bool, typeCount> seen {};
+        expectEquals (ModifierRegistry::entries().size(), typeCount);
+
+        for (const auto& entry : ModifierRegistry::entries())
+        {
+            const auto index = static_cast<size_t> (entry.type);
+            expect (index < typeCount, "Registry contains Unknown or an invalid type");
+            if (index < typeCount)
+            {
+                expect (! seen[index], "Registry contains a duplicate type");
+                seen[index] = true;
+            }
+
+            expect (juce::String (entry.displayName).isNotEmpty());
+            expect (juce::String (entry.shortName).isNotEmpty());
+            expect (juce::String (entry.categoryLabel).isNotEmpty());
+            expect (juce::String (entry.description).isNotEmpty());
+            expect (entry.representativeGlyphPhase01 >= 0.0f
+                    && entry.representativeGlyphPhase01 <= 1.0f);
+        }
+
+        for (bool wasSeen : seen)
+            expect (wasSeen, "Registry is missing a serialized modifier type");
+
+        beginTest ("Prototype factory and eligibility metadata agree");
+
+        auto prototypes = ModifierFactory::createAllPrototypes();
+        int expectedPrototypeCount = 0;
+        for (const auto& entry : ModifierRegistry::entries())
+        {
+            if (entry.prototypeEligible)
+                ++expectedPrototypeCount;
+
+            bool found = false;
+            for (const auto* prototype : prototypes)
+            {
+                const auto descriptor = prototype->getDescriptor();
+                if (descriptor.type != entry.type)
+                    continue;
+
+                found = true;
+                expectEquals (descriptor.shortName, juce::String (entry.shortName));
+                expectEquals (descriptor.description, juce::String (entry.description));
+                expectEquals (static_cast<int> (descriptor.category),
+                              static_cast<int> (entry.category));
+            }
+            expect (found == entry.prototypeEligible,
+                    "Prototype presence does not match registry eligibility");
+        }
+        expectEquals (prototypes.size(), expectedPrototypeCount);
+
+        beginTest ("Always-on ducking remains visible but is not scheduled");
+
+        const auto& ducking = ModifierRegistry::get (ModifierType::BufferDuckingOn);
+        expect (ducking.alwaysOn);
+        expect (ducking.probabilityVisible);
+        expect (! ducking.prototypeEligible);
+        expect (! ducking.schedulerEligible);
+    }
+};
+
+static ModifierRegistryTest modifierRegistryTestInstance;
+
+class ModifierSchedulerPlannedQueueTest : public juce::UnitTest
+{
+public:
+    ModifierSchedulerPlannedQueueTest() : juce::UnitTest ("ModifierScheduler Planned Queue") {}
+
+    static bool sameTargets (const juce::Array<int>& a, const juce::Array<int>& b)
+    {
+        if (a.size() != b.size())
+            return false;
+        for (int i = 0; i < a.size(); ++i)
+            if (a[i] != b[i])
+                return false;
+        return true;
+    }
+
+    static bool samePlan (const PlannedModifier& a, const PlannedModifier& b)
+    {
+        return a.descriptor.type == b.descriptor.type
+            && a.descriptor.description == b.descriptor.description
+            && sameTargets (a.targets, b.targets);
+    }
+
+    struct CaptureListener : ModifierSchedulerListener
+    {
+        int triggerCount = 0;
+        int cueCount = 0;
+        ModifierDescriptor lastDescriptor;
+        juce::Array<int> lastTargets;
+
+        void modifierTriggered (const ModifierDescriptor& descriptor,
+                                const juce::Array<int>& targets) override
+        {
+            ++triggerCount;
+            lastDescriptor = descriptor;
+            lastTargets = targets;
+        }
+
+        void musicalCueReached() override { ++cueCount; }
+    };
+
+    void runTest() override
+    {
+        beginTest ("Start fills a three-item queue with planned variants and targets");
+        SessionSettings settings;
+        ModifierScheduler scheduler (settings);
+        scheduler.setRandomSeed (1234);
+        scheduler.start();
+
+        auto initial = scheduler.getPlannedQueueSnapshot();
+        expectEquals (static_cast<int> (initial.size()), ModifierScheduler::kPlannedQueueDepth);
+        for (const auto& planned : initial)
+        {
+            expect (planned.descriptor.type != ModifierType::Unknown);
+            const auto& metadata = ModifierRegistry::get (planned.descriptor.type);
+            expect (metadata.schedulerEligible);
+            if (planned.descriptor.category != ModifierCategory::MasterEffect
+                && planned.descriptor.category != ModifierCategory::GlobalUtility)
+                expect (! planned.targets.isEmpty());
+        }
+
+        beginTest ("Skip pops the front and preserves already planned entries");
+        scheduler.skipUpcoming();
+        auto afterSkip = scheduler.getPlannedQueueSnapshot();
+        expectEquals (static_cast<int> (afterSkip.size()), ModifierScheduler::kPlannedQueueDepth);
+        expect (samePlan (afterSkip[0], initial[1]));
+        expect (samePlan (afterSkip[1], initial[2]));
+
+        beginTest ("Force replaces only the front queue entry");
+        const auto beforeForce = afterSkip;
+        scheduler.forceUpcomingModifier (ModifierType::ResetAll);
+        const auto afterForce = scheduler.getPlannedQueueSnapshot();
+        expectEquals (static_cast<int> (afterForce.size()), ModifierScheduler::kPlannedQueueDepth);
+        expect (afterForce[0].descriptor.type == ModifierType::ResetAll);
+        expect (samePlan (afterForce[1], beforeForce[1]));
+        expect (samePlan (afterForce[2], beforeForce[2]));
+
+        beginTest ("Targets are frozen when an item enters the queue");
+        scheduler.stop();
+        scheduler.setUserSelectedBuffers ({ 1, 3 });
+        scheduler.start();
+        const auto frozenFront = scheduler.getPlannedQueueSnapshot().front();
+        scheduler.setUserSelectedBuffers ({ 7 });
+        CaptureListener capture;
+        scheduler.addListener (&capture);
+        scheduler.triggerNow();
+        expectEquals (capture.triggerCount, 1);
+        expect (sameTargets (capture.lastTargets, frozenFront.targets));
+        expect (capture.lastDescriptor.description == frozenFront.descriptor.description);
+        scheduler.removeListener (&capture);
+
+        beginTest ("Seeded queue planning is reproducible");
+        SessionSettings settingsA;
+        SessionSettings settingsB;
+        ModifierScheduler schedulerA (settingsA);
+        ModifierScheduler schedulerB (settingsB);
+        schedulerA.setRandomSeed (8675309);
+        schedulerB.setRandomSeed (8675309);
+        schedulerA.start();
+        schedulerB.start();
+        const auto queueA = schedulerA.getPlannedQueueSnapshot();
+        const auto queueB = schedulerB.getPlannedQueueSnapshot();
+        expectEquals (queueA.size(), queueB.size());
+        for (size_t i = 0; i < juce::jmin (queueA.size(), queueB.size()); ++i)
+            expect (samePlan (queueA[i], queueB[i]));
+
+        beginTest ("Probability changes affect only newly appended entries");
+        auto beforeProbabilityChange = schedulerA.getPlannedQueueSnapshot();
+        for (auto type : ModifierProbabilityManager::allModifierTypes())
+            settingsA.modifierProbabilities.setWeight (type, 0.0f);
+        settingsA.modifierProbabilities.setWeight (ModifierType::Reverse, 1.0f);
+        schedulerA.skipUpcoming();
+        auto afterProbabilityChange = schedulerA.getPlannedQueueSnapshot();
+        expect (samePlan (afterProbabilityChange[0], beforeProbabilityChange[1]));
+        expect (samePlan (afterProbabilityChange[1], beforeProbabilityChange[2]));
+        expect (afterProbabilityChange[2].descriptor.type == ModifierType::Reverse);
+
+        beginTest ("Suppression advances the queue without firing a modifier");
+        const auto suppressedFront = schedulerB.getPlannedQueueSnapshot().front();
+        CaptureListener suppressedCapture;
+        schedulerB.addListener (&suppressedCapture);
+        schedulerB.setSuppressed (true);
+        schedulerB.triggerNow();
+        const auto afterSuppressedTrigger = schedulerB.getPlannedQueueSnapshot();
+        expectEquals (suppressedCapture.triggerCount, 0);
+        expectEquals (suppressedCapture.cueCount, 1);
+        expect (! samePlan (afterSuppressedTrigger.front(), suppressedFront));
+        expect (samePlan (afterSuppressedTrigger.front(), queueB[1]));
+        schedulerB.removeListener (&suppressedCapture);
+
+        beginTest ("Zero probability produces an empty queue, never Unknown");
+        SessionSettings mutedSettings;
+        for (auto type : ModifierProbabilityManager::allModifierTypes())
+            mutedSettings.modifierProbabilities.setWeight (type, 0.0f);
+        mutedSettings.barsBetweenModifiers = 1;
+        ModifierScheduler mutedScheduler (mutedSettings);
+        CaptureListener mutedCapture;
+        mutedScheduler.addListener (&mutedCapture);
+        mutedScheduler.start();
+        expect (mutedScheduler.getPlannedQueueSnapshot().empty());
+        mutedScheduler.updateTime (mutedSettings.getSecondsPerBar());
+        expectEquals (mutedCapture.triggerCount, 0);
+        expectEquals (mutedCapture.cueCount, 1);
+        expect (mutedScheduler.getPlannedQueueSnapshot().empty());
+        mutedScheduler.removeListener (&mutedCapture);
+    }
+};
+
+static ModifierSchedulerPlannedQueueTest modifierSchedulerPlannedQueueTestInstance;
 
 class ModifierSchedulerQuantizeTest : public juce::UnitTest {
 public:

@@ -558,7 +558,7 @@ def build_manual():
     pdf.body_text(
         "Each modifier type has a probability slider ranging from 0.0 to 1.0. Set a slider to "
         "0 to completely disable that modifier. All enabled sliders are normalized automatically: "
-        "a modifier set to 2.0 is twice as likely to appear as one set to 1.0."
+        "a modifier set to 1.0 is twice as likely to appear as one set to 0.5."
     )
     pdf.body_text(
         "Sliders are grouped by category: Buffer, Channel Effect, Master Effect, and Special. "
@@ -590,10 +590,12 @@ def build_manual():
         "auto-selected. These sliders also support DAW automation and MIDI CC learn."
     )
 
-    pdf.chapter_title("Reset All to 100%", level=2)
+    pdf.chapter_title("Bulk Probability Controls", level=2)
     pdf.body_text(
-        "A button at the bottom of the panel resets all probability sliders to their default "
-        "value of 1.0 (100%)."
+        "Three buttons at the bottom of the panel update every modifier and pad target "
+        "probability at once: Set All 0% disables all probabilities, Randomize assigns an "
+        "independent random value to each probability, and Set All 100% restores every "
+        "probability to its default value of 1.0."
     )
 
     pdf.chapter_title("Probability Presets", level=2)
@@ -630,12 +632,13 @@ def build_manual():
 
     pdf.chapter_title("Theme", level=2)
     pdf.body_text(
-        "Choose from 11 built-in visual themes. The theme change crossfades smoothly over 500ms. "
+        "Choose from 7 built-in visual themes. Control Surface is the default. "
+        "Theme changes crossfade smoothly over 500ms. "
         "Available themes:"
     )
     themes = [
-        "Arctic Sky", "Daylight", "Gruvbox", "Ivory", "Neon Rave (Dark)",
-        "Pixel Grid", "Silver", "Studio Clean", "Ultraviolet", "Vintage Ember", "Warm Paper"
+        "Control Surface (Light)", "Basic Light", "Basic Dark", "IIgs Writer (Blue)",
+        "Game Boy (Light)", "Gruvbox (Dark)", "Pixel Grid (Dark)"
     ]
     for t in themes:
         pdf.bullet(t)
@@ -1009,23 +1012,20 @@ def build_manual():
     pdf.chapter_title("Themes")
 
     pdf.body_text(
-        "Loop Breaker includes 11 built-in visual themes that change the entire color palette "
-        "of the plugin interface. Themes crossfade smoothly over 500 milliseconds when switched."
+        "Loop Breaker includes 7 built-in visual themes that change the entire color palette "
+        "and, for the retro themes, the typography of the plugin interface. Control Surface "
+        "is the default. Themes crossfade smoothly over 500 milliseconds when switched."
     )
 
     pdf.chapter_title("Available Themes", level=2)
     theme_descs = [
-        ("Neon Rave (Dark)", "The default theme. Dark background with vibrant neon accent colors. Ideal for dimly-lit studios."),
-        ("Arctic Sky", "Cool blue tones with a clean, icy aesthetic."),
-        ("Daylight", "Bright, light theme with warm neutral tones for well-lit environments."),
-        ("Gruvbox", "Inspired by the popular Gruvbox color scheme. Warm, retro earth tones."),
-        ("Ivory", "Minimal, elegant off-white palette."),
-        ("Pixel Grid", "Retro digital aesthetic with pixel-art-inspired colors."),
-        ("Silver", "Sleek metallic gray palette."),
-        ("Studio Clean", "Professional, neutral tones designed for mixing sessions."),
-        ("Ultraviolet", "Deep purples and electric blues for a futuristic vibe."),
-        ("Vintage Ember", "Warm amber and brown tones with a vintage analog feel."),
-        ("Warm Paper", "Soft, paper-like tones for a gentle reading experience."),
+        ("Control Surface (Light)", "The default warm-ivory instrument panel with vermilion, blue, violet, and signal-green markings."),
+        ("Basic Light", "A quiet neutral light theme with a conventional blue accent."),
+        ("Basic Dark", "A restrained charcoal theme with soft white text and a conventional blue accent."),
+        ("IIgs Writer (Blue)", "A high-contrast blue screen with white monospaced text, inspired by late-1980s IIgs word processors."),
+        ("Game Boy (Light)", "A four-tone green LCD palette framed by a muted beige shell, with pixel typography."),
+        ("Gruvbox (Dark)", "A flatter, high-contrast refinement of the warm retro Gruvbox palette."),
+        ("Pixel Grid (Dark)", "A black-and-green pixel display with restrained CRT scanlines and brighter readable text."),
     ]
     for name, desc in theme_descs:
         pdf.set_font("Helvetica", "B", 10.5)

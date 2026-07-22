@@ -60,7 +60,7 @@ juce::Colour ThemePalette::getColor (ColorRole role) const
 //  Built-in Palettes
 // ═══════════════════════════════════════════════════════════════════════════════
 
-static ThemePalette makeNeonRave()
+[[maybe_unused]] static ThemePalette makeNeonRave()
 {
     ThemePalette p;
     p.name          = "Neon Rave (Dark)";
@@ -101,7 +101,7 @@ static ThemePalette makeNeonRave()
     return p;
 }
 
-static ThemePalette makeVintageEmber()
+[[maybe_unused]] static ThemePalette makeVintageEmber()
 {
     ThemePalette p;
     p.name          = "Vintage Ember (Dark)";
@@ -148,42 +148,42 @@ static ThemePalette makePixelGrid()
     p.name          = "Pixel Grid (Dark)";
 
     p.bg            = hex (0x000000);
-    p.bgAlt         = hex (0x111111);
-    p.panel         = hex (0x1A1A1A);
-    p.panelAlt      = hex (0x222222);
+    p.bgAlt         = hex (0x071007);
+    p.panel         = hex (0x0A160A);
+    p.panelAlt      = hex (0x102410);
 
-    p.border        = hex (0x333333);
-    p.borderGlow    = hex (0x33FF33);
+    p.border        = hex (0x2E6B2E);
+    p.borderGlow    = hex (0x66FF66);
 
-    p.textPrimary   = hex (0x33FF33);
-    p.textSecondary = hex (0x2E9E2E);
+    p.textPrimary   = hex (0xB7FFB7);
+    p.textSecondary = hex (0x65B865);
     p.textOnAccent  = hex (0x000000);
 
-    p.accent1       = hex (0x33FF33);
-    p.accent2       = hex (0x33FFFF);
-    p.accent3       = hex (0xFF33FF);
+    p.accent1       = hex (0x66FF66);
+    p.accent2       = hex (0x5EEBFF);
+    p.accent3       = hex (0xFF78D1);
 
     p.good          = hex (0x33FF33);
     p.warn          = hex (0xFFFF33);
     p.bad           = hex (0xFF3333);
 
-    p.knobFill      = hex (0x33FF33);
-    p.knobTrack     = hex (0x222222);
-    p.waveformFill  = hex (0x33FF33);
-    p.playhead      = hex (0x33FFFF);
+    p.knobFill      = hex (0x66FF66);
+    p.knobTrack     = hex (0x173617);
+    p.waveformFill  = hex (0xB7FFB7);
+    p.playhead      = hex (0x5EEBFF);
 
-    p.padEmpty      = hex (0x111111);
-    p.padLoaded     = hex (0x1A1A1A);
+    p.padEmpty      = hex (0x071007);
+    p.padLoaded     = hex (0x020602);
     p.padSelected   = hexA (0x33FF33, 0.15f);
     p.padPlaying    = hex (0x33FF33);
 
-    p.glowIntensity = 0.9f;
-    p.borderRadius  = 2.0f;
+    p.glowIntensity = 0.2f;
+    p.borderRadius  = 0.0f;
 
     return p;
 }
 
-static ThemePalette makeUltraviolet()
+[[maybe_unused]] static ThemePalette makeUltraviolet()
 {
     ThemePalette p;
     p.name          = "Ultraviolet (Dark)";
@@ -224,91 +224,91 @@ static ThemePalette makeUltraviolet()
     return p;
 }
 
-static ThemePalette makeStudioClean()
+static ThemePalette makeBasicDark()
 {
     ThemePalette p;
-    p.name          = "Studio Clean (Dark)";
+    p.name          = "Basic Dark";
 
-    p.bg            = hex (0x1E1E1E);
-    p.bgAlt         = hex (0x252525);
-    p.panel         = hex (0x2D2D2D);
-    p.panelAlt      = hex (0x333333);
+    p.bg            = hex (0x181A1D);
+    p.bgAlt         = hex (0x202328);
+    p.panel         = hex (0x272B30);
+    p.panelAlt      = hex (0x30353B);
 
-    p.border        = hex (0x444444);
-    p.borderGlow    = hex (0xFFFFFF);
+    p.border        = hex (0x555B63);
+    p.borderGlow    = hex (0x6EA8FE);
 
-    p.textPrimary   = hex (0xEBEBEB);
-    p.textSecondary = hex (0x9C9C9C);
-    p.textOnAccent  = hex (0x1E1E1E);
+    p.textPrimary   = hex (0xF1F3F5);
+    p.textSecondary = hex (0xA1A7AF);
+    p.textOnAccent  = hex (0x101214);
 
-    p.accent1       = hex (0x5B9BD5);
-    p.accent2       = hex (0x4EC9B0);
-    p.accent3       = hex (0xD4845E);
+    p.accent1       = hex (0x6EA8FE);
+    p.accent2       = hex (0x63C5A8);
+    p.accent3       = hex (0xC89BE8);
 
-    p.good          = hex (0x6CC644);
-    p.warn          = hex (0xE5C07B);
+    p.good          = hex (0x63C174);
+    p.warn          = hex (0xE2B95B);
     p.bad           = hex (0xE06C75);
 
-    p.knobFill      = hex (0x5B9BD5);
-    p.knobTrack     = hex (0x333333);
-    p.waveformFill  = hex (0x5B9BD5);
-    p.playhead      = hex (0xEBEBEB);
+    p.knobFill      = hex (0x6EA8FE);
+    p.knobTrack     = hex (0x3A4047);
+    p.waveformFill  = hex (0xDDE7F5);
+    p.playhead      = hex (0x6EA8FE);
 
-    p.padEmpty      = hex (0x252525);
-    p.padLoaded     = hex (0x333333);
-    p.padSelected   = hexA (0x5B9BD5, 0.15f);
-    p.padPlaying    = hex (0x5B9BD5);
+    p.padEmpty      = hex (0x202328);
+    p.padLoaded     = hex (0x101214);
+    p.padSelected   = hexA (0x6EA8FE, 0.18f);
+    p.padPlaying    = hex (0x63C174);
 
     p.glowIntensity = 0.0f;
-    p.borderRadius  = 4.0f;
+    p.borderRadius  = 2.0f;
 
     return p;
 }
 
 // ─── Light mode themes ───────────────────────────────────────────────────────
 
-static ThemePalette makeDaylight()
+static ThemePalette makeBasicLight()
 {
     ThemePalette p;
-    p.name          = "Daylight (Light)";
+    p.name          = "Basic Light";
 
-    p.bg            = hex (0xF5F5F5);
-    p.bgAlt         = hex (0xEBEBEB);
+    p.bg            = hex (0xF2F3F5);
+    p.bgAlt         = hex (0xE5E7EA);
     p.panel         = hex (0xFFFFFF);
-    p.panelAlt      = hex (0xF0F0F0);
+    p.panelAlt      = hex (0xECEEF1);
 
-    p.border        = hex (0xD4D4D4);
-    p.borderGlow    = hex (0x0078D4);
+    p.border        = hex (0xAEB3BA);
+    p.borderGlow    = hex (0x356FC0);
 
-    p.textPrimary   = hex (0x1A1A1A);
-    p.textSecondary = hex (0x666666);
+    p.textPrimary   = hex (0x202328);
+    p.textSecondary = hex (0x646A73);
     p.textOnAccent  = hex (0xFFFFFF);
 
-    p.accent1       = hex (0x0078D4);
-    p.accent2       = hex (0x00A58E);
-    p.accent3       = hex (0xD4380D);
+    p.accent1       = hex (0x356FC0);
+    p.accent2       = hex (0x2B8A6E);
+    p.accent3       = hex (0xA8568A);
 
     p.good          = hex (0x388A34);
     p.warn          = hex (0xB46C00);
     p.bad           = hex (0xC52317);
 
-    p.knobFill      = hex (0x0078D4);
-    p.knobTrack     = hex (0xD6D6D6);
-    p.waveformFill  = hex (0x0098FF);
-    p.playhead      = hex (0x0078D4);
+    p.knobFill      = hex (0x356FC0);
+    p.knobTrack     = hex (0xCDD1D6);
+    p.waveformFill  = hex (0xE8EDF5);
+    p.playhead      = hex (0x356FC0);
 
-    p.padEmpty      = hex (0xEBEBEB);
-    p.padLoaded     = hex (0xF0F0F0);
-    p.padSelected   = hexA (0x0078D4, 0.18f);
-    p.padPlaying    = hex (0x0078D4);
+    p.padEmpty      = hex (0xECEEF1);
+    p.padLoaded     = hex (0x202328);
+    p.padSelected   = hexA (0x356FC0, 0.16f);
+    p.padPlaying    = hex (0x2B8A6E);
 
-    p.glowIntensity = 0.1f;
-    p.borderRadius  = 4.0f;
+    p.glowIntensity = 0.0f;
+    p.borderRadius  = 2.0f;
 
     return p;
 }
 
-static ThemePalette makeWarmPaper()
+[[maybe_unused]] static ThemePalette makeWarmPaper()
 {
     ThemePalette p;
     p.name          = "Warm Paper (Light)";
@@ -349,7 +349,7 @@ static ThemePalette makeWarmPaper()
     return p;
 }
 
-static ThemePalette makeArcticSky()
+[[maybe_unused]] static ThemePalette makeArcticSky()
 {
     ThemePalette p;
     p.name          = "Arctic Sky (Light)";
@@ -390,7 +390,7 @@ static ThemePalette makeArcticSky()
     return p;
 }
 
-static ThemePalette makeIvory()
+[[maybe_unused]] static ThemePalette makeIvory()
 {
     ThemePalette p;
     p.name          = "Ivory (Light)";
@@ -472,7 +472,7 @@ static ThemePalette makeControlSurface()
     return p;
 }
 
-static ThemePalette makeSilver()
+[[maybe_unused]] static ThemePalette makeSilver()
 {
     ThemePalette p;
     p.name          = "Silver (Light)";
@@ -520,10 +520,10 @@ static ThemePalette makeGruvbox()
 
     p.bg            = hex (0x282828);
     p.bgAlt         = hex (0x1D2021);
-    p.panel         = hex (0x3C3836);
-    p.panelAlt      = hex (0x504945);
+    p.panel         = hex (0x32302F);
+    p.panelAlt      = hex (0x3C3836);
 
-    p.border        = hex (0x665C54);
+    p.border        = hex (0x7C6F64);
     p.borderGlow    = hex (0xFE8019);   // bright orange
 
     p.textPrimary   = hex (0xEBDBB2);   // cream fg
@@ -540,57 +540,58 @@ static ThemePalette makeGruvbox()
 
     p.knobFill      = hex (0xFE8019);
     p.knobTrack     = hex (0x504945);
-    p.waveformFill  = hex (0x83A598);   // bright blue
+    p.waveformFill  = hex (0xEBDBB2);
     p.playhead      = hex (0xFABD2F);
 
     p.padEmpty      = hex (0x1D2021);
-    p.padLoaded     = hex (0x3C3836);
+    p.padLoaded     = hex (0x1D2021);
     p.padSelected   = hexA (0xFE8019, 0.18f);
     p.padPlaying    = hex (0xB8BB26);
 
-    p.glowIntensity = 0.2f;
-    p.borderRadius  = 3.0f;
+    p.glowIntensity = 0.0f;
+    p.borderRadius  = 2.0f;
 
     return p;
 }
 
-static ThemePalette makeMarathon()
+static ThemePalette makeIIgsWriter()
 {
     ThemePalette p;
-    p.name          = "Marathon (Dark)";
+    p.name          = "IIgs Writer (Blue)";
 
-    p.bg            = hex (0x08060E);
-    p.bgAlt         = hex (0x120E1C);
-    p.panel         = hex (0x1A1428);
-    p.panelAlt      = hex (0x221A32);
+    // High-contrast blue document screen inspired by late-1980s IIgs tools.
+    p.bg            = hex (0x3333EE);
+    p.bgAlt         = hex (0x2929C9);
+    p.panel         = hex (0x3333EE);
+    p.panelAlt      = hex (0x2727BB);
 
-    p.border        = hex (0x382E4E);
-    p.borderGlow    = hex (0x00DCFF);
+    p.border        = hex (0xE8E8FF);
+    p.borderGlow    = hex (0xFFFFFF);
 
-    p.textPrimary   = hex (0xF0F0FF);
-    p.textSecondary = hex (0x8878A8);
-    p.textOnAccent  = hex (0x08060E);
+    p.textPrimary   = hex (0xFFFFFF);
+    p.textSecondary = hex (0xC7C9FF);
+    p.textOnAccent  = hex (0x2424A8);
 
-    p.accent1       = hex (0x00DCFF);   // CMYK Cyan
-    p.accent2       = hex (0xFF00D4);   // CMYK Magenta
-    p.accent3       = hex (0xFFE500);   // CMYK Yellow
+    p.accent1       = hex (0xFFFFFF);
+    p.accent2       = hex (0x73E6FF);
+    p.accent3       = hex (0xFFB7E8);
 
-    p.good          = hex (0xB8FF00);
-    p.warn          = hex (0xFFE500);
-    p.bad           = hex (0xFF0057);
+    p.good          = hex (0x8CFFB0);
+    p.warn          = hex (0xFFF18A);
+    p.bad           = hex (0xFF9EAE);
 
-    p.knobFill      = hex (0x00DCFF);
-    p.knobTrack     = hex (0x221A32);
-    p.waveformFill  = hex (0xFF00D4);
-    p.playhead      = hex (0xFFE500);
+    p.knobFill      = hex (0xFFFFFF);
+    p.knobTrack     = hex (0x20209A);
+    p.waveformFill  = hex (0xFFFFFF);
+    p.playhead      = hex (0xFFF18A);
 
-    p.padEmpty      = hex (0x120E1C);
-    p.padLoaded     = hex (0x221A32);
-    p.padSelected   = hexA (0x00DCFF, 0.15f);
-    p.padPlaying    = hex (0xFFE500);
+    p.padEmpty      = hex (0x2929C9);
+    p.padLoaded     = hex (0x181880);
+    p.padSelected   = hexA (0xFFFFFF, 0.18f);
+    p.padPlaying    = hex (0x8CFFB0);
 
-    p.glowIntensity = 0.9f;
-    p.borderRadius  = 5.0f;
+    p.glowIntensity = 0.0f;
+    p.borderRadius  = 0.0f;
 
     return p;
 }
@@ -600,19 +601,19 @@ static ThemePalette makeGameBoy()
     ThemePalette p;
     p.name          = "Game Boy (Light)";
 
-    // Beige plastic body as background
-    p.bg            = hex (0xC4B580);
-    p.bgAlt         = hex (0xB8A974);
-    p.panel         = hex (0xD0C18E);
-    p.panelAlt      = hex (0xC9BA84);
+    // Beige shell around a four-tone DMG LCD control field.
+    p.bg            = hex (0xBEB58B);
+    p.bgAlt         = hex (0xAAA174);
+    p.panel         = hex (0x9BBC0F);
+    p.panelAlt      = hex (0x8BAC0F);
 
-    p.border        = hex (0xA89A68);
-    p.borderGlow    = hex (0x306230);
+    p.border        = hex (0x306230);
+    p.borderGlow    = hex (0x0F380F);
 
     // Dark pixel colors for text
     p.textPrimary   = hex (0x0F380F);
     p.textSecondary = hex (0x306230);
-    p.textOnAccent  = hex (0xC4B580);
+    p.textOnAccent  = hex (0x9BBC0F);
 
     // Accents: screen greens against the beige body
     p.accent1       = hex (0x306230);
@@ -624,17 +625,17 @@ static ThemePalette makeGameBoy()
     p.bad           = hex (0x8B2020);
 
     p.knobFill      = hex (0x306230);
-    p.knobTrack     = hex (0xB8A974);
-    p.waveformFill  = hex (0x8BAC0F);
+    p.knobTrack     = hex (0x8BAC0F);
+    p.waveformFill  = hex (0x9BBC0F);
     p.playhead      = hex (0x0F380F);
 
-    p.padEmpty      = hex (0xB8A974);
-    p.padLoaded     = hex (0xD0C18E);
+    p.padEmpty      = hex (0x8BAC0F);
+    p.padLoaded     = hex (0x0F380F);
     p.padSelected   = hexA (0x306230, 0.15f);
     p.padPlaying    = hex (0x9BBC0F);
 
-    p.glowIntensity = 0.1f;
-    p.borderRadius  = 3.0f;
+    p.glowIntensity = 0.0f;
+    p.borderRadius  = 1.0f;
 
     return p;
 }
@@ -645,21 +646,15 @@ static ThemePalette makeGameBoy()
 
 ThemeEngine::ThemeEngine()
 {
-    // All built-in palettes — alphabetical order
-    builtInPalettes.push_back (makeArcticSky());
+    // Control Surface is intentionally first: it is the product default and
+    // the visual baseline. The remaining list stays short and distinct.
     builtInPalettes.push_back (makeControlSurface());
-    builtInPalettes.push_back (makeDaylight());
+    builtInPalettes.push_back (makeBasicLight());
+    builtInPalettes.push_back (makeBasicDark());
+    builtInPalettes.push_back (makeIIgsWriter());
     builtInPalettes.push_back (makeGameBoy());
     builtInPalettes.push_back (makeGruvbox());
-    builtInPalettes.push_back (makeIvory());
-    builtInPalettes.push_back (makeMarathon());
-    builtInPalettes.push_back (makeNeonRave());
     builtInPalettes.push_back (makePixelGrid());
-    builtInPalettes.push_back (makeSilver());
-    builtInPalettes.push_back (makeStudioClean());
-    builtInPalettes.push_back (makeUltraviolet());
-    builtInPalettes.push_back (makeVintageEmber());
-    builtInPalettes.push_back (makeWarmPaper());
 
     // Match SessionSettings so first paint and persisted state restoration agree.
     currentPalette = *getBuiltInPalette ("Control Surface (Light)");
@@ -709,8 +704,10 @@ void ThemeEngine::setTheme (const juce::String& themeName)
         }
     }
 
-    // If name not found, do nothing (keep current theme)
+    // Removed/unknown saved themes migrate to the product default.
     DBG ("ThemeEngine::setTheme — unknown theme name: " + themeName);
+    if (const auto* fallback = getBuiltInPalette ("Control Surface (Light)"))
+        setTheme (*fallback);
 }
 
 void ThemeEngine::setTheme (const ThemePalette& palette)

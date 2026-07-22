@@ -276,10 +276,12 @@ private:
                 "Each modifier type has a probability slider.  "
                 "Set a slider to 0 to completely disable that modifier.  "
                 "All enabled sliders are normalised automatically - "
-                "a modifier at 2.0 is twice as likely as one at 1.0.\n\n"
+                "a modifier at 100% is twice as likely as one at 50%.\n\n"
+                "The bulk controls at the bottom set every modifier and pad-target probability "
+                "to 0%, assign independent random values, or set everything to 100%.\n\n"
                 "Probability sliders are exposed as DAW automation parameters and can also be "
-                "controlled via MIDI CC: click the small CC button beside a slider to enter "
-                "MIDI CC learn mode, then move any CC knob/fader on your controller.";
+                "controlled via MIDI CC: right-click a slider, choose MIDI CC Learn, then move "
+                "any CC knob/fader on your controller.";
             contentHolder.sections.push_back(s);
         }
 

@@ -7,10 +7,10 @@
    Loads three bundled font families from BinaryData at startup:
      - Rajdhani (display / headings — stylized but readable)
      - JetBrains Mono (monospaced — value readouts, timestamps, code)
-     - Press Start 2P (pixel — used exclusively in "Pixel Grid" theme)
+     - Press Start 2P (pixel — used by Pixel Grid and Game Boy)
 
    Provides role-based font accessors that automatically switch to the
-   pixel font when the Pixel Grid theme is active.
+   pixel font for the two pixel themes and the mono face for IIgs Writer.
 
    All fonts are SIL Open Font Licensed (OFL).
  ==============================================================================
@@ -38,39 +38,47 @@ public:
     /** Display / branding font — Rajdhani Bold. Used for plugin title, section headers. */
     juce::Font displayFont (float height) const
     {
-        if (isPixelGridTheme())
+        if (usesPixelFont())
             return makeFont (pixelTypeface, height * 0.5f);
+        if (isIIgsWriterTheme())
+            return makeFont (monoTypeface, height).boldened();
         return makeFont (displayBoldTypeface, height);
     }
 
     /** Section heading font — Rajdhani Bold at a slightly smaller size. */
     juce::Font headingFont (float height) const
     {
-        if (isPixelGridTheme())
+        if (usesPixelFont())
             return makeFont (pixelTypeface, height * 0.6f);
+        if (isIIgsWriterTheme())
+            return makeFont (monoTypeface, height).boldened();
         return makeFont (displayBoldTypeface, height);
     }
 
     /** Body / label font — System sans-serif (no bundled override needed). */
     juce::Font bodyFont (float height) const
     {
-        if (isPixelGridTheme())
+        if (usesPixelFont())
             return makeFont (pixelTypeface, height * 0.6f);
+        if (isIIgsWriterTheme())
+            return makeFont (monoTypeface, height);
         return juce::Font (juce::FontOptions().withHeight (height));
     }
 
     /** Bold body font. */
     juce::Font bodyBoldFont (float height) const
     {
-        if (isPixelGridTheme())
+        if (usesPixelFont())
             return makeFont (pixelTypeface, height * 0.6f);
+        if (isIIgsWriterTheme())
+            return makeFont (monoTypeface, height).boldened();
         return juce::Font (juce::FontOptions().withHeight (height)).boldened();
     }
 
     /** Monospaced font — JetBrains Mono. For value readouts, timestamps, countdown. */
     juce::Font monoFont (float height) const
     {
-        if (isPixelGridTheme())
+        if (usesPixelFont())
             return makeFont (pixelTypeface, height * 0.6f);
         return makeFont (monoTypeface, height);
     }
@@ -78,39 +86,44 @@ public:
     /** Monospaced bold font. */
     juce::Font monoBoldFont (float height) const
     {
-        if (isPixelGridTheme())
+        if (usesPixelFont())
             return makeFont (pixelTypeface, height * 0.6f);
         return makeFont (monoTypeface, height).boldened();
     }
 
-    /** Pixel font — Press Start 2P. Used for Pixel Grid theme or special badges. */
+    /** Pixel font — Press Start 2P. Used for pixel themes or special badges. */
     juce::Font pixelFont (float height) const
     {
         return makeFont (pixelTypeface, height);
     }
 
-    /** Control label font — small system sans-serif for knob/slider labels.
-        In Pixel Grid theme, uses the pixel font at reduced size. */
+    /** Control label font — compact sans/mono/pixel face selected by theme. */
     juce::Font controlLabelFont (float height) const
     {
-        if (isPixelGridTheme())
+        if (usesPixelFont())
             return makeFont (pixelTypeface, juce::jmax (7.0f, height * 0.6f));
+        if (isIIgsWriterTheme())
+            return makeFont (monoTypeface, height);
         return juce::Font (juce::FontOptions().withHeight (height));
     }
 
     /** Modifier name font for the HUD — bold, slightly stylized. */
     juce::Font modifierNameFont (float height) const
     {
-        if (isPixelGridTheme())
+        if (usesPixelFont())
             return makeFont (pixelTypeface, height * 0.6f);
+        if (isIIgsWriterTheme())
+            return makeFont (monoTypeface, height).boldened();
         return makeFont (displayBoldTypeface, height);
     }
 
     /** Tab label font — bold, slightly stylized for the tab bar. */
     juce::Font tabFont (float height) const
     {
-        if (isPixelGridTheme())
+        if (usesPixelFont())
             return makeFont (pixelTypeface, juce::jmax (7.0f, height * 0.55f));
+        if (isIIgsWriterTheme())
+            return makeFont (monoTypeface, height).boldened();
         return makeFont (displayBoldTypeface, height);
     }
 
@@ -153,10 +166,15 @@ private:
         return juce::Font (juce::FontOptions (typeface).withHeight (height));
     }
 
-    /** Quick check: is the current theme "Pixel Grid"? */
-    static bool isPixelGridTheme()
+    static bool usesPixelFont()
     {
-        return ThemeEngine::getInstance().getCurrentPalette().name == "Pixel Grid (Dark)";
+        const auto& name = ThemeEngine::getInstance().getCurrentPalette().name;
+        return name == "Pixel Grid (Dark)" || name == "Game Boy (Light)";
+    }
+
+    static bool isIIgsWriterTheme()
+    {
+        return ThemeEngine::getInstance().getCurrentPalette().name == "IIgs Writer (Blue)";
     }
 
     juce::Typeface::Ptr displayBoldTypeface;

@@ -167,7 +167,7 @@ private:
                               bool isPixelGrid)
     {
         // ── Noise / grain texture overlay ──
-        // Available in all themes when glowIntensity > 0 (Studio Clean has 0, so no grain).
+        // Available in themes that opt in with a non-zero glow intensity.
         // Composited at 3–5% opacity for a subtle analog warmth.
         if (palette.glowIntensity > 0.01f && ! noiseTexture.isNull())
         {

@@ -21,6 +21,7 @@
 #include <vector>
 
 class ModifierProbabilityPanel : public juce::Component,
+                                 public ThemeListener,
                                  private juce::Timer
 {
 public:
@@ -32,6 +33,7 @@ public:
         , apvts (apvtsRef)
         , processor (processorRef)
     {
+        ThemeEngine::getInstance().addListener (this);
         buildRows();
         buildPadRows();
         buildPresetBar();
@@ -43,16 +45,29 @@ public:
         // Catch clicks on empty areas to cancel learn mode
         content.addMouseListener (this, true);
 
-        resetButton.setButtonText ("Reset All to 100%");
+        zeroButton.setButtonText ("SET ALL 0%");
+        zeroButton.setTooltip ("Set every modifier and pad-target probability to 0%.");
+        zeroButton.onClick = [this] { setAllProbabilities (0.0f); };
+        addAndMakeVisible (zeroButton);
+
+        randomizeButton.setButtonText ("RANDOMIZE");
+        randomizeButton.setTooltip ("Assign a new random value to every modifier and pad-target probability.");
+        randomizeButton.onClick = [this] { randomizeAllProbabilities(); };
+        addAndMakeVisible (randomizeButton);
+
+        resetButton.setButtonText ("SET ALL 100%");
+        resetButton.setTooltip ("Set every modifier and pad-target probability to 100%.");
         resetButton.onClick = [this] { resetAllToDefault(); };
         addAndMakeVisible (resetButton);
 
+        applyTheme();
         startTimerHz (10);
     }
 
     ~ModifierProbabilityPanel() override
     {
         stopTimer();
+        ThemeEngine::getInstance().removeListener (this);
         for (auto& row : rows)
             if (row.slider) row.slider->removeMouseListener (this);
         for (auto& pr : padRows)
@@ -61,22 +76,77 @@ public:
 
     void resized() override
     {
-        auto area = getLocalBounds();
+        auto area = getLocalBounds().reduced (14, 12);
 
-        // Preset bar at top
-        auto presetBarArea = area.removeFromTop (36).reduced (4, 2);
-        presetCombo.setBounds (presetBarArea.removeFromLeft (200));
-        presetBarArea.removeFromLeft (4);
-        presetSaveBtn.setBounds (presetBarArea.removeFromLeft (60));
-        presetBarArea.removeFromLeft (4);
-        presetSaveAsBtn.setBounds (presetBarArea.removeFromLeft (72));
-        presetBarArea.removeFromLeft (4);
-        presetDeleteBtn.setBounds (presetBarArea.removeFromLeft (60));
+        // Presets live in a compact instrument strip rather than a generic toolbar.
+        presetStripBounds = area.removeFromTop (52);
+        auto presetBarArea = presetStripBounds.reduced (12, 9);
+        presetBarArea.removeFromLeft (146);
+        presetCombo.setBounds (presetBarArea.removeFromLeft (juce::jmin (240, presetBarArea.getWidth() / 2)));
+        presetBarArea.removeFromLeft (6);
+        presetSaveBtn.setBounds (presetBarArea.removeFromLeft (64));
+        presetBarArea.removeFromLeft (6);
+        presetSaveAsBtn.setBounds (presetBarArea.removeFromLeft (78));
+        presetBarArea.removeFromLeft (6);
+        presetDeleteBtn.setBounds (presetBarArea.removeFromLeft (68));
 
-        auto bottomBar = area.removeFromBottom (32).reduced (4, 2);
-        resetButton.setBounds (bottomBar.removeFromRight (160));
-        viewport.setBounds (area);
+        area.removeFromTop (10);
+        actionStripBounds = area.removeFromBottom (48);
+        auto actions = actionStripBounds.reduced (12, 8);
+        resetButton.setBounds (actions.removeFromRight (118));
+        actions.removeFromRight (6);
+        randomizeButton.setBounds (actions.removeFromRight (112));
+        actions.removeFromRight (6);
+        zeroButton.setBounds (actions.removeFromRight (106));
+
+        area.removeFromBottom (10);
+        viewportBounds = area;
+        viewport.setBounds (viewportBounds);
         layoutContent();
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        const auto& palette = ThemeEngine::getInstance().getCurrentPalette();
+
+        auto drawModule = [&] (juce::Rectangle<int> bounds)
+        {
+            g.setColour (palette.panel);
+            g.fillRect (bounds);
+            g.setColour (palette.border.withAlpha (0.75f));
+            g.drawRect (bounds, 1);
+        };
+
+        drawModule (presetStripBounds);
+        drawModule (viewportBounds);
+        drawModule (actionStripBounds);
+
+        g.setColour (palette.accent1);
+        g.fillRect (presetStripBounds.getX(), presetStripBounds.getY(), 4, presetStripBounds.getHeight());
+        g.setFont (ThemeFonts::getInstance().headingFont (14.0f));
+        g.drawText ("PROBABILITY BANK",
+                    presetStripBounds.reduced (14, 0).removeFromLeft (132),
+                    juce::Justification::centredLeft);
+
+        g.setColour (palette.textSecondary);
+        g.setFont (ThemeFonts::getInstance().monoFont (11.0f));
+        g.drawText ("BULK VALUES", actionStripBounds.reduced (12, 0),
+                    juce::Justification::centredLeft);
+    }
+
+    void paintOverChildren (juce::Graphics& g) override
+    {
+        // The Viewport and its content paint after paint(), so draw this module
+        // rule in the foreground to keep the central panel outline visible.
+        const auto& palette = ThemeEngine::getInstance().getCurrentPalette();
+        g.setColour (palette.border.withAlpha (0.75f));
+        g.drawRect (viewportBounds, 1);
+    }
+
+    void themeChanged() override
+    {
+        applyTheme();
+        repaint();
     }
 
     /** Push current weights back into APVTS (e.g. after an external preset load). */
@@ -133,9 +203,21 @@ private:
     juce::AudioProcessorValueTreeState&     apvts;
     BufferTestAudioProcessor&               processor;
     juce::Viewport                          viewport;
-    juce::Component                         content;
+    struct SurfaceContent : public juce::Component
+    {
+        void paint (juce::Graphics& g) override
+        {
+            const auto& palette = ThemeEngine::getInstance().getCurrentPalette();
+            g.fillAll (palette.panel);
+        }
+    } content;
     std::vector<Row>                        rows;
+    juce::TextButton                        zeroButton;
+    juce::TextButton                        randomizeButton;
     juce::TextButton                        resetButton;
+    juce::Rectangle<int>                    presetStripBounds;
+    juce::Rectangle<int>                    viewportBounds;
+    juce::Rectangle<int>                    actionStripBounds;
 
     // Probability preset bar
     ProbabilityPresetManager                presetManager;
@@ -178,14 +260,14 @@ private:
 
             // -- Category header --
             row.categoryLabel = std::make_unique<juce::Label>();
-            row.categoryLabel->setText (row.category, juce::dontSendNotification);
+            row.categoryLabel->setText (row.category.toUpperCase(), juce::dontSendNotification);
             row.categoryLabel->setFont (ThemeFonts::getInstance().headingFont (15.0f));
             row.categoryLabel->setColour (juce::Label::textColourId, Theme::text());
             content.addAndMakeVisible (row.categoryLabel.get());
 
             // -- Modifier name --
             row.nameLabel = std::make_unique<juce::Label>();
-            row.nameLabel->setText (ModifierProbabilityManager::getDisplayName (type),
+            row.nameLabel->setText (ModifierProbabilityManager::getDisplayName (type).toUpperCase(),
                                     juce::dontSendNotification);
             row.nameLabel->setFont (ThemeFonts::getInstance().bodyFont (14.0f));
             row.nameLabel->setColour (juce::Label::textColourId, Theme::textSubtle());
@@ -238,15 +320,15 @@ private:
         addAndMakeVisible (presetCombo);
         rebuildPresetCombo();
 
-        presetSaveBtn.setButtonText ("Save");
+        presetSaveBtn.setButtonText ("SAVE");
         presetSaveBtn.onClick = [this] { onSavePreset(); };
         addAndMakeVisible (presetSaveBtn);
 
-        presetSaveAsBtn.setButtonText ("Save As");
+        presetSaveAsBtn.setButtonText ("SAVE AS");
         presetSaveAsBtn.onClick = [this] { onSaveAsPreset(); };
         addAndMakeVisible (presetSaveAsBtn);
 
-        presetDeleteBtn.setButtonText ("Delete");
+        presetDeleteBtn.setButtonText ("DELETE");
         presetDeleteBtn.onClick = [this] { onDeletePreset(); };
         addAndMakeVisible (presetDeleteBtn);
     }
@@ -423,7 +505,7 @@ private:
 
     void buildPadRows()
     {
-        padSectionLabel.setText ("Pad Target Probability", juce::dontSendNotification);
+        padSectionLabel.setText ("PAD TARGET PROBABILITY", juce::dontSendNotification);
         padSectionLabel.setFont (ThemeFonts::getInstance().headingFont (15.0f));
         padSectionLabel.setColour (juce::Label::textColourId, Theme::text());
         content.addAndMakeVisible (padSectionLabel);
@@ -434,7 +516,7 @@ private:
             pr.padIndex = i;
 
             pr.nameLabel = std::make_unique<juce::Label>();
-            pr.nameLabel->setText ("Pad " + juce::String (i + 1), juce::dontSendNotification);
+            pr.nameLabel->setText ("PAD " + juce::String (i + 1), juce::dontSendNotification);
             pr.nameLabel->setFont (ThemeFonts::getInstance().bodyFont (14.0f));
             pr.nameLabel->setColour (juce::Label::textColourId, Theme::textSubtle());
             content.addAndMakeVisible (pr.nameLabel.get());
@@ -689,19 +771,101 @@ private:
 
     void resetAllToDefault()
     {
+        setAllProbabilities (1.0f);
+    }
+
+    void setAllProbabilities (float value)
+    {
         const auto& types = ModifierProbabilityManager::allModifierTypes();
         for (auto type : types)
         {
             const juce::String id = "prob_" + juce::String (static_cast<int> (type));
             if (auto* param = apvts.getParameter (id))
-                param->setValueNotifyingHost (1.0f);
+                param->setValueNotifyingHost (value);
         }
         for (int i = 0; i < 8; ++i)
         {
             const juce::String id = "padProb_" + juce::String (i);
             if (auto* param = apvts.getParameter (id))
-                param->setValueNotifyingHost (1.0f);
+                param->setValueNotifyingHost (value);
         }
+    }
+
+    void randomizeAllProbabilities()
+    {
+        const auto& types = ModifierProbabilityManager::allModifierTypes();
+        for (auto type : types)
+        {
+            const juce::String id = "prob_" + juce::String (static_cast<int> (type));
+            if (auto* param = apvts.getParameter (id))
+                param->setValueNotifyingHost (probabilityRandom.nextFloat());
+        }
+
+        for (int i = 0; i < 8; ++i)
+        {
+            const juce::String id = "padProb_" + juce::String (i);
+            if (auto* param = apvts.getParameter (id))
+                param->setValueNotifyingHost (probabilityRandom.nextFloat());
+        }
+    }
+
+    void applyTheme()
+    {
+        const auto& palette = ThemeEngine::getInstance().getCurrentPalette();
+
+        auto styleButton = [&] (juce::TextButton& button, bool signal = false)
+        {
+            button.setColour (juce::TextButton::buttonColourId,
+                              signal ? palette.accent1 : palette.panelAlt);
+            button.setColour (juce::TextButton::buttonOnColourId,
+                              signal ? palette.accent1 : palette.panelAlt);
+            button.setColour (juce::TextButton::textColourOffId,
+                              signal ? palette.textOnAccent : palette.textPrimary);
+            button.setColour (juce::TextButton::textColourOnId,
+                              signal ? palette.textOnAccent : palette.textPrimary);
+        };
+
+        auto styleSlider = [&] (juce::Slider& slider)
+        {
+            slider.setColour (juce::Slider::trackColourId, palette.accent1);
+            slider.setColour (juce::Slider::backgroundColourId, palette.panelAlt);
+            slider.setColour (juce::Slider::thumbColourId, palette.accent1);
+        };
+
+        for (auto& row : rows)
+        {
+            row.categoryLabel->setColour (juce::Label::textColourId, palette.textPrimary);
+            row.categoryLabel->setColour (juce::Label::backgroundColourId, palette.panelAlt);
+            row.nameLabel->setColour (juce::Label::textColourId, palette.textSecondary);
+            row.valueLabel->setColour (juce::Label::textColourId, palette.textPrimary);
+            row.ccLabel->setColour (juce::Label::textColourId, palette.textSecondary);
+            styleSlider (*row.slider);
+        }
+
+        padSectionLabel.setColour (juce::Label::textColourId, palette.textPrimary);
+        padSectionLabel.setColour (juce::Label::backgroundColourId, palette.panelAlt);
+        for (auto& row : padRows)
+        {
+            row.nameLabel->setColour (juce::Label::textColourId, palette.textSecondary);
+            row.valueLabel->setColour (juce::Label::textColourId, palette.textPrimary);
+            row.ccLabel->setColour (juce::Label::textColourId, palette.textSecondary);
+            styleSlider (*row.slider);
+        }
+
+        presetCombo.setColour (juce::ComboBox::backgroundColourId, palette.panel);
+        presetCombo.setColour (juce::ComboBox::outlineColourId, palette.border);
+        presetCombo.setColour (juce::ComboBox::textColourId, palette.textPrimary);
+        presetCombo.setColour (juce::ComboBox::arrowColourId, palette.textSecondary);
+
+        styleButton (presetSaveBtn);
+        styleButton (presetSaveAsBtn);
+        styleButton (presetDeleteBtn);
+        styleButton (zeroButton);
+        styleButton (randomizeButton);
+        styleButton (resetButton, true);
+
+        viewport.setColour (juce::ScrollBar::thumbColourId, palette.textSecondary);
+        content.repaint();
     }
 
     void updatePadValueLabel (PadRow& pr)
@@ -718,10 +882,10 @@ private:
 
     void layoutContent()
     {
-        const int rowHeight       = 32;
-        const int headerHeight    = 24;
-        const int padding         = 6;
-        const int labelWidth      = 150;
+        const int rowHeight       = 30;
+        const int headerHeight    = 28;
+        const int padding         = 10;
+        const int labelWidth      = 176;
         const int valueLabelWidth = 48;
 
         const int contentWidth = viewport.getMaximumVisibleWidth();
@@ -734,14 +898,14 @@ private:
                 row.categoryLabel->setBounds (padding, y,
                                               contentWidth - padding * 2, headerHeight);
                 row.categoryLabel->setVisible (true);
-                y += headerHeight + 2;
+                y += headerHeight + 4;
             }
             else
             {
                 row.categoryLabel->setVisible (false);
             }
 
-            int x = padding + 8;
+            int x = padding + 10;
             row.nameLabel->setBounds (x, y, labelWidth, rowHeight);
             x += labelWidth + 4;
 
@@ -754,19 +918,19 @@ private:
             x += valueLabelWidth + 4;
 
             row.ccLabel->setBounds (x, y, ccLabelWidth, rowHeight);
-            y += rowHeight;
+            y += rowHeight + 1;
         }
 
         // Pad Target Probability section
         if (!padRows.empty())
         {
-            y += 8;
+            y += 12;
             padSectionLabel.setBounds (padding, y, contentWidth - padding * 2, headerHeight);
             y += headerHeight + 2;
 
             for (auto& pr : padRows)
             {
-                int x = padding + 8;
+                int x = padding + 10;
                 pr.nameLabel->setBounds (x, y, labelWidth, rowHeight);
                 x += labelWidth + 4;
 
@@ -779,12 +943,14 @@ private:
                 x += valueLabelWidth + 4;
 
                 pr.ccLabel->setBounds (x, y, ccLabelWidth, rowHeight);
-                y += rowHeight;
+                y += rowHeight + 1;
             }
         }
 
         content.setSize (contentWidth, y + padding);
     }
+
+    juce::Random probabilityRandom;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ModifierProbabilityPanel)
 };

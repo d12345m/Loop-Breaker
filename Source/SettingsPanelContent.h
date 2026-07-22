@@ -28,7 +28,7 @@ public:
 
         // ── Theme dropdown ──────────────────────────────────────────────
         addAndMakeVisible (themeLabel);
-        themeLabel.setText ("Theme", juce::dontSendNotification);
+        themeLabel.setText ("THEME", juce::dontSendNotification);
         themeLabel.setJustificationType (juce::Justification::centredRight);
         themeLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
 
@@ -36,7 +36,13 @@ public:
         auto themes = ThemeEngine::getInstance().getAvailableThemeNames();
         for (int i = 0; i < themes.size(); ++i)
             themeCombo.addItem (themes[i], i + 1);
-        themeCombo.setSelectedItemIndex (themes.indexOf (settings.themeName), juce::dontSendNotification);
+        int selectedThemeIndex = themes.indexOf (settings.themeName);
+        if (selectedThemeIndex < 0)
+        {
+            settings.themeName = "Control Surface (Light)";
+            selectedThemeIndex = themes.indexOf (settings.themeName);
+        }
+        themeCombo.setSelectedItemIndex (selectedThemeIndex, juce::dontSendNotification);
         themeCombo.onChange = [this]
         {
             auto name = themeCombo.getText();
@@ -46,7 +52,7 @@ public:
 
         // ── Parts dropdown ──────────────────────────────────────────────
         addAndMakeVisible (partsLabel);
-        partsLabel.setText ("Parts", juce::dontSendNotification);
+        partsLabel.setText ("PARTS", juce::dontSendNotification);
         partsLabel.setJustificationType (juce::Justification::centredRight);
         partsLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
 
@@ -70,7 +76,7 @@ public:
 
         // ── Bars per modifier slider ────────────────────────────────────
         addAndMakeVisible (barsLabel);
-        barsLabel.setText ("Bars / Modifier", juce::dontSendNotification);
+        barsLabel.setText ("BARS / MODIFIER", juce::dontSendNotification);
         barsLabel.setJustificationType (juce::Justification::centredRight);
         barsLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
 
@@ -87,7 +93,7 @@ public:
 
         // ── Cadence mode dropdown ───────────────────────────────────────
         addAndMakeVisible (cadenceModeLabel);
-        cadenceModeLabel.setText ("Cadence Mode", juce::dontSendNotification);
+        cadenceModeLabel.setText ("CADENCE MODE", juce::dontSendNotification);
         cadenceModeLabel.setJustificationType (juce::Justification::centredRight);
         cadenceModeLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
 
@@ -104,7 +110,7 @@ public:
 
         // ── Variable cadence range (min/max bars) ──────────────────────
         addAndMakeVisible (barsRangeMinLabel);
-        barsRangeMinLabel.setText ("Min Bars", juce::dontSendNotification);
+        barsRangeMinLabel.setText ("MIN BARS", juce::dontSendNotification);
         barsRangeMinLabel.setJustificationType (juce::Justification::centredRight);
         barsRangeMinLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
 
@@ -124,7 +130,7 @@ public:
         };
 
         addAndMakeVisible (barsRangeMaxLabel);
-        barsRangeMaxLabel.setText ("Max Bars", juce::dontSendNotification);
+        barsRangeMaxLabel.setText ("MAX BARS", juce::dontSendNotification);
         barsRangeMaxLabel.setJustificationType (juce::Justification::centredRight);
         barsRangeMaxLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
 
@@ -145,7 +151,7 @@ public:
 
         // ── Timed cadence range (min/max seconds) ──────────────────────
         addAndMakeVisible (timedMinLabel);
-        timedMinLabel.setText ("Min Time", juce::dontSendNotification);
+        timedMinLabel.setText ("MIN TIME", juce::dontSendNotification);
         timedMinLabel.setJustificationType (juce::Justification::centredRight);
         timedMinLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
 
@@ -166,7 +172,7 @@ public:
         };
 
         addAndMakeVisible (timedMaxLabel);
-        timedMaxLabel.setText ("Max Time", juce::dontSendNotification);
+        timedMaxLabel.setText ("MAX TIME", juce::dontSendNotification);
         timedMaxLabel.setJustificationType (juce::Justification::centredRight);
         timedMaxLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
 
@@ -193,7 +199,7 @@ public:
         // Glyph motion is semantic, so its master toggle and speed are
         // visible. Decorative background/glow controls remain hidden.
         addAndMakeVisible (animToggle);
-        animToggle.setButtonText ("Animate modifier glyphs");
+        animToggle.setButtonText ("ANIMATE MODIFIER GLYPHS");
         animToggle.setToggleState (settings.animationsEnabled, juce::dontSendNotification);
         animToggle.onClick = [this] { syncAnimConfigFromUI(); };
 
@@ -214,7 +220,7 @@ public:
         knobGlowToggle.onClick = [this] { syncAnimConfigFromUI(); };
 
         addAndMakeVisible (speedLabel);
-        speedLabel.setText ("Glyph Speed", juce::dontSendNotification);
+        speedLabel.setText ("GLYPH SPEED", juce::dontSendNotification);
         speedLabel.setJustificationType (juce::Justification::centredRight);
         speedLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
 
@@ -245,6 +251,7 @@ public:
 
         // Sync to ThemeEngine on construction
         syncAnimConfigFromUI();
+        applyTheme();
     }
 
     ~SettingsPanelContent() override
@@ -254,179 +261,155 @@ public:
 
     void themeChanged() override
     {
-        // Refresh label colours / fonts for the new theme
-        themeLabel.setColour (juce::Label::textColourId, Theme::text());
-        themeLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
-        partsLabel.setColour (juce::Label::textColourId, Theme::text());
-        partsLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
-        barsLabel.setColour (juce::Label::textColourId, Theme::text());
-        barsLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
-        cadenceModeLabel.setColour (juce::Label::textColourId, Theme::text());
-        cadenceModeLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
-        barsRangeMinLabel.setColour (juce::Label::textColourId, Theme::text());
-        barsRangeMinLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
-        barsRangeMaxLabel.setColour (juce::Label::textColourId, Theme::text());
-        barsRangeMaxLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
-        timedMinLabel.setColour (juce::Label::textColourId, Theme::text());
-        timedMinLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
-        timedMaxLabel.setColour (juce::Label::textColourId, Theme::text());
-        timedMaxLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
-        speedLabel.setColour (juce::Label::textColourId, Theme::text());
-        speedLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
-        bgModeLabel.setColour (juce::Label::textColourId, Theme::text());
-        bgModeLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
-
-        // Refresh combo box colours
-        themeCombo.setColour (juce::ComboBox::backgroundColourId, Theme::panel());
-        themeCombo.setColour (juce::ComboBox::outlineColourId,    Theme::border());
-        themeCombo.setColour (juce::ComboBox::textColourId,       Theme::text());
-        themeCombo.setColour (juce::ComboBox::arrowColourId,      Theme::textSubtle());
-
-        partsCombo.setColour (juce::ComboBox::backgroundColourId, Theme::panel());
-        partsCombo.setColour (juce::ComboBox::outlineColourId,    Theme::border());
-        partsCombo.setColour (juce::ComboBox::textColourId,       Theme::text());
-        partsCombo.setColour (juce::ComboBox::arrowColourId,      Theme::textSubtle());
-
-        cadenceModeCombo.setColour (juce::ComboBox::backgroundColourId, Theme::panel());
-        cadenceModeCombo.setColour (juce::ComboBox::outlineColourId,    Theme::border());
-        cadenceModeCombo.setColour (juce::ComboBox::textColourId,       Theme::text());
-        cadenceModeCombo.setColour (juce::ComboBox::arrowColourId,      Theme::textSubtle());
-
-        barsSlider.setColour (juce::Slider::backgroundColourId,     Theme::panelAlt());
-        barsSlider.setColour (juce::Slider::trackColourId,          Theme::accent());
-        barsSlider.setColour (juce::Slider::thumbColourId,          Theme::accent().brighter (0.2f));
-        barsSlider.setColour (juce::Slider::textBoxBackgroundColourId, Theme::panelAlt());
-        barsSlider.setColour (juce::Slider::textBoxTextColourId,    Theme::text());
-        barsSlider.setColour (juce::Slider::textBoxOutlineColourId, Theme::border());
-
+        applyTheme();
         repaint();
     }
 
     void paint (juce::Graphics& g) override
     {
         const auto& palette = ThemeEngine::getInstance().getCurrentPalette();
-        // No opaque fill — BackgroundAnimator paints the background
-
-        auto bounds = getLocalBounds().reduced (20, 16);
-
-        // Section header: Appearance
-        g.setColour (palette.accent1);
+        g.setColour (palette.textPrimary);
         g.setFont (ThemeFonts::getInstance().headingFont (18.0f));
-        g.drawText ("Appearance", bounds.removeFromTop (28), juce::Justification::centredLeft);
+        g.drawText ("SYSTEM CONFIGURATION", pageHeaderBounds, juce::Justification::centredLeft);
+        g.setColour (palette.textSecondary);
+        g.setFont (ThemeFonts::getInstance().monoFont (11.0f));
+        g.drawText ("DISPLAY  /  TIMING  /  MOTION", pageHeaderBounds,
+                    juce::Justification::centredRight);
 
-        // Divider
-        g.setColour (palette.border);
-        g.fillRect (bounds.removeFromTop (1));
+        auto drawCard = [&] (juce::Rectangle<int> bounds, const juce::String& index,
+                             const juce::String& title, const juce::String& subtitle)
+        {
+            g.setColour (palette.panel);
+            g.fillRect (bounds);
+            g.setColour (palette.border.withAlpha (0.8f));
+            g.drawRect (bounds, 1);
 
-        // Skip theme row
-        bounds.removeFromTop (34);
+            auto header = bounds.reduced (14, 0).removeFromTop (54);
+            g.setColour (palette.accent1);
+            g.fillRect (header.getX(), header.getY() + 14, 4, 24);
+            header.removeFromLeft (12);
+            g.setFont (ThemeFonts::getInstance().headingFont (15.0f));
+            g.drawText (title, header.removeFromTop (31), juce::Justification::centredLeft);
+            g.setColour (palette.textSecondary);
+            g.setFont (ThemeFonts::getInstance().monoFont (10.0f));
+            g.drawText (subtitle, header, juce::Justification::centredLeft);
 
-        // Section header: Session
-        bounds.removeFromTop (12);
-        g.setColour (palette.accent1);
-        g.setFont (ThemeFonts::getInstance().headingFont (18.0f));
-        g.drawText ("Session", bounds.removeFromTop (28), juce::Justification::centredLeft);
+            g.setColour (palette.textSecondary.withAlpha (0.7f));
+            g.setFont (ThemeFonts::getInstance().monoFont (11.0f));
+            g.drawText (index, bounds.reduced (14, 0).removeFromTop (54),
+                        juce::Justification::centredRight);
+            g.setColour (palette.border.withAlpha (0.45f));
+            g.fillRect (bounds.getX(), bounds.getY() + 54, bounds.getWidth(), 1);
+        };
 
-        g.setColour (palette.border);
-        g.fillRect (bounds.removeFromTop (1));
-
-        // Skip the seven Session control rows, then label the motion group.
-        bounds.removeFromTop (7 * 34 + 12);
-        g.setColour (palette.accent1);
-        g.setFont (ThemeFonts::getInstance().headingFont (18.0f));
-        g.drawText ("Motion", bounds.removeFromTop (28), juce::Justification::centredLeft);
-        g.setColour (palette.border);
-        g.fillRect (bounds.removeFromTop (1));
+        drawCard (appearanceCardBounds, "01", "APPEARANCE", "CONTROL-SURFACE PALETTE");
+        drawCard (sessionCardBounds, "02", "SESSION", "MODIFIER CADENCE ENGINE");
+        drawCard (motionCardBounds, "03", "MOTION", "SEMANTIC GLYPH DISPLAY");
     }
 
     void resized() override
     {
-        auto area = getLocalBounds().reduced (20, 16);
-        area.removeFromTop (30);  // header + divider
+        auto area = getLocalBounds().reduced (18, 14);
+        pageHeaderBounds = area.removeFromTop (38);
+        area.removeFromTop (10);
 
-        const int rowH = 34;
-        const int labelW = 140;
-
-        // Theme row
+        constexpr int gap = 12;
+        if (area.getWidth() >= 840)
         {
-            auto row = area.removeFromTop (rowH);
-            themeLabel.setBounds (row.removeFromLeft (labelW));
-            row.removeFromLeft (10);
-            themeCombo.setBounds (row.removeFromLeft (200));
+            const int appearanceW = juce::jmax (240, juce::roundToInt (area.getWidth() * 0.23f));
+            const int motionW = juce::jmax (290, juce::roundToInt (area.getWidth() * 0.28f));
+            appearanceCardBounds = area.removeFromLeft (appearanceW);
+            area.removeFromLeft (gap);
+            motionCardBounds = area.removeFromRight (motionW);
+            area.removeFromRight (gap);
+            sessionCardBounds = area;
+        }
+        else
+        {
+            appearanceCardBounds = area.removeFromTop (132);
+            area.removeFromTop (gap);
+            sessionCardBounds = area.removeFromTop (232);
+            area.removeFromTop (gap);
+            motionCardBounds = area;
         }
 
-        // Session section header gap
-        area.removeFromTop (12 + 28 + 1);  // spacing + "Session" heading + divider
-
-        // Parts row
+        const int rowH = 38;
+        auto controlArea = [] (juce::Rectangle<int> card)
         {
-            auto row = area.removeFromTop (rowH);
-            partsLabel.setBounds (row.removeFromLeft (labelW));
-            row.removeFromLeft (10);
-            partsCombo.setBounds (row.removeFromLeft (160));
-        }
-
-        // Cadence mode row
+            card.removeFromTop (55);
+            return card.reduced (14, 12);
+        };
+        auto placePair = [] (juce::Rectangle<int> row, juce::Label& label,
+                             juce::Component& control, int labelW)
         {
-            auto row = area.removeFromTop (rowH);
-            cadenceModeLabel.setBounds (row.removeFromLeft (labelW));
-            row.removeFromLeft (10);
-            cadenceModeCombo.setBounds (row.removeFromLeft (160));
-        }
+            label.setBounds (row.removeFromLeft (juce::jmin (labelW, row.getWidth() / 2)));
+            row.removeFromLeft (8);
+            control.setBounds (row.removeFromLeft (juce::jmin (220, row.getWidth())).reduced (0, 4));
+        };
 
-        // Bars per modifier row (Fixed mode)
         {
-            auto row = area.removeFromTop (rowH);
-            barsLabel.setBounds (row.removeFromLeft (labelW));
-            row.removeFromLeft (10);
-            barsSlider.setBounds (row.removeFromLeft (200));
+            auto card = controlArea (appearanceCardBounds);
+            placePair (card.removeFromTop (rowH), themeLabel, themeCombo, 58);
         }
 
-        // Variable cadence range rows
         {
-            auto row = area.removeFromTop (rowH);
-            barsRangeMinLabel.setBounds (row.removeFromLeft (labelW));
-            row.removeFromLeft (10);
-            barsRangeMinSlider.setBounds (row.removeFromLeft (200));
-        }
-        {
-            auto row = area.removeFromTop (rowH);
-            barsRangeMaxLabel.setBounds (row.removeFromLeft (labelW));
-            row.removeFromLeft (10);
-            barsRangeMaxSlider.setBounds (row.removeFromLeft (200));
-        }
-
-        // Timed cadence range rows
-        {
-            auto row = area.removeFromTop (rowH);
-            timedMinLabel.setBounds (row.removeFromLeft (labelW));
-            row.removeFromLeft (10);
-            timedMinSlider.setBounds (row.removeFromLeft (200));
-        }
-        {
-            auto row = area.removeFromTop (rowH);
-            timedMaxLabel.setBounds (row.removeFromLeft (labelW));
-            row.removeFromLeft (10);
-            timedMaxSlider.setBounds (row.removeFromLeft (200));
+            auto card = controlArea (sessionCardBounds);
+            const int labelW = sessionCardBounds.getWidth() < 360 ? 106 : 126;
+            auto row0 = card.removeFromTop (rowH);
+            auto row1 = card.removeFromTop (rowH);
+            auto row2 = card.removeFromTop (rowH);
+            auto row3 = card.removeFromTop (rowH);
+            placePair (row0, partsLabel, partsCombo, labelW);
+            placePair (row1, cadenceModeLabel, cadenceModeCombo, labelW);
+            placePair (row2, barsLabel, barsSlider, labelW);
+            placePair (row2, barsRangeMinLabel, barsRangeMinSlider, labelW);
+            placePair (row3, barsRangeMaxLabel, barsRangeMaxSlider, labelW);
+            placePair (row2, timedMinLabel, timedMinSlider, labelW);
+            placePair (row3, timedMaxLabel, timedMaxSlider, labelW);
         }
 
-        // Core modifier motion controls. Decorative animation controls remain
-        // hidden until they have a production design use.
-        area.removeFromTop (12 + 28 + 1);
         {
-            auto row = area.removeFromTop (rowH);
-            row.removeFromLeft (labelW + 10);
-            animToggle.setBounds (row.removeFromLeft (220));
-        }
-        {
-            auto row = area.removeFromTop (rowH);
-            speedLabel.setBounds (row.removeFromLeft (labelW));
-            row.removeFromLeft (10);
-            speedSlider.setBounds (row.removeFromLeft (200));
+            auto card = controlArea (motionCardBounds);
+            animToggle.setBounds (card.removeFromTop (rowH).reduced (0, 4));
+            placePair (card.removeFromTop (rowH), speedLabel, speedSlider, 92);
         }
     }
 
 private:
+    void applyTheme()
+    {
+        const auto& palette = ThemeEngine::getInstance().getCurrentPalette();
+
+        for (auto* label : { &themeLabel, &partsLabel, &barsLabel, &cadenceModeLabel,
+                             &barsRangeMinLabel, &barsRangeMaxLabel, &timedMinLabel,
+                             &timedMaxLabel, &speedLabel, &bgModeLabel })
+        {
+            label->setColour (juce::Label::textColourId, palette.textSecondary);
+            label->setFont (ThemeFonts::getInstance().controlLabelFont (12.0f));
+        }
+
+        for (auto* combo : { &themeCombo, &partsCombo, &cadenceModeCombo })
+        {
+            combo->setColour (juce::ComboBox::backgroundColourId, palette.panel);
+            combo->setColour (juce::ComboBox::outlineColourId, palette.border);
+            combo->setColour (juce::ComboBox::textColourId, palette.textPrimary);
+            combo->setColour (juce::ComboBox::arrowColourId, palette.textSecondary);
+        }
+
+        for (auto* slider : { &barsSlider, &barsRangeMinSlider, &barsRangeMaxSlider,
+                              &timedMinSlider, &timedMaxSlider, &speedSlider })
+        {
+            slider->setColour (juce::Slider::backgroundColourId, palette.panelAlt);
+            slider->setColour (juce::Slider::trackColourId, palette.accent1);
+            slider->setColour (juce::Slider::thumbColourId, palette.accent1);
+            slider->setColour (juce::Slider::textBoxBackgroundColourId, palette.panelAlt);
+            slider->setColour (juce::Slider::textBoxTextColourId, palette.textPrimary);
+            slider->setColour (juce::Slider::textBoxOutlineColourId, palette.border);
+        }
+
+        animToggle.setColour (juce::ToggleButton::textColourId, palette.textPrimary);
+    }
+
     void syncAnimConfigFromUI()
     {
         // Write to SessionSettings (persisted)
@@ -547,6 +530,11 @@ private:
     // Background mode
     juce::Label bgModeLabel;
     std::unique_ptr<juce::ToggleButton> bgModeButtons[3];
+
+    juce::Rectangle<int> pageHeaderBounds;
+    juce::Rectangle<int> appearanceCardBounds;
+    juce::Rectangle<int> sessionCardBounds;
+    juce::Rectangle<int> motionCardBounds;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SettingsPanelContent)
 };

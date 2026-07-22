@@ -84,6 +84,17 @@ target_sources(LoopBreaker PRIVATE
     Source/ThemeEngine.cpp
 )
 
+# Refresh the version and build timestamp before compiling the plug-in.  Making
+# this a dependency (rather than using PRE_BUILD, which is generator-specific)
+# ensures it runs with Ninja, Makefiles, and Xcode builds alike.
+add_custom_target(LoopBreakerBuildInfo
+    COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/gen_build_info.sh"
+    BYPRODUCTS "${CMAKE_CURRENT_SOURCE_DIR}/Source/BuildInfo.h"
+    COMMENT "Generating Loop Breaker build information"
+    VERBATIM
+)
+add_dependencies(LoopBreaker LoopBreakerBuildInfo)
+
 target_include_directories(LoopBreaker PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/Source"
     "${SOUNDTOUCH_INCLUDE_DIR}"

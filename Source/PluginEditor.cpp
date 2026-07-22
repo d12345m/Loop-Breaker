@@ -10,6 +10,7 @@
 #include "ModifierProbabilityPanel.h"
 #if JUCE_DEBUG
 #include "DebugPanelContent.h"
+#include "GlyphLabComponent.h"
 #endif
 #include "ThemeEngine.h"
 #include "ThemeFonts.h"
@@ -1062,6 +1063,7 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
 {
    #if JUCE_DEBUG
     debugPanel = std::make_unique<DebugPanelContent>(processor.getAppState());
+    glyphLabPanel = std::make_unique<GlyphLabComponent>();
    #endif
 
     content = std::make_unique<PluginEditorContent>(processor,
@@ -1103,6 +1105,7 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
     tabComponent->addTab("Settings",    tabBg, settingsPanel.get(), false);
    #if JUCE_DEBUG
     tabComponent->addTab("Debug",       tabBg, debugPanel.get(), false);
+    tabComponent->addTab("Glyph Lab",   tabBg, glyphLabPanel.get(), false);
    #endif
     tabComponent->addTab("Help",        tabBg, helpPanel.get(), false);
 
@@ -1138,6 +1141,7 @@ BufferTestAudioProcessorEditor::~BufferTestAudioProcessorEditor()
     settingsPanel.reset();
    #if JUCE_DEBUG
     debugPanel.reset();
+    glyphLabPanel.reset();
    #endif
     helpPanel.reset();
     backgroundAnimator.reset();

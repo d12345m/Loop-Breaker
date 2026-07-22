@@ -7,6 +7,7 @@
 class ModifierProbabilityPanel;
 #if JUCE_DEBUG
 class DebugPanelContent;
+class GlyphLabComponent;
 #endif
 class HelpPanelContent;
 class SettingsPanelContent;
@@ -30,6 +31,7 @@ private:
     std::unique_ptr<SettingsPanelContent> settingsPanel;
    #if JUCE_DEBUG
     std::unique_ptr<DebugPanelContent> debugPanel;
+    std::unique_ptr<GlyphLabComponent> glyphLabPanel;
    #endif
     std::unique_ptr<HelpPanelContent> helpPanel;
     std::unique_ptr<juce::TabbedComponent> tabComponent;

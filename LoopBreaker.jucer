@@ -46,6 +46,8 @@
             resource="0" file="Source/ModifierGlyphRenderer.h"/>
       <FILE id="modifierGlyphRendererCpp" name="ModifierGlyphRenderer.cpp" compile="1"
             resource="0" file="Source/ModifierGlyphRenderer.cpp"/>
+      <FILE id="glyphLabComponentH" name="GlyphLabComponent.h" compile="0"
+            resource="0" file="Source/GlyphLabComponent.h"/>
       <FILE id="modifierSchedulerH" name="ModifierScheduler.h" compile="0"
             resource="0" file="Source/ModifierScheduler.h"/>
       <FILE id="modifierSchedulerCpp" name="ModifierScheduler.cpp" compile="1"

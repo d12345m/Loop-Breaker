@@ -64,7 +64,7 @@ struct SessionSettings
   } parts;
 
     // Visual / UX
-    juce::String themeName { "Neon Rave (Dark)" };
+    juce::String themeName { "Control Surface (Light)" };
     bool animationsEnabled = false;
     bool bgCycleEnabled = false;
     bool padPulseEnabled = false;
@@ -90,7 +90,10 @@ struct SessionSettings
     // MIDI CC mappings for modifier probability sliders.
     // Index i corresponds to ModifierProbabilityManager::allModifierTypes()[i].
     // Value is CC number (0-127), or -1 if unassigned.
-    static constexpr int kNumModifierTypes = 26;
+    // ModifierType is contiguous and Unknown is the terminal sentinel.  Derive
+    // the storage count so adding an enum entry cannot silently under-size the
+    // MIDI probability mapping (the registry currently contains 29 entries).
+    static constexpr int kNumModifierTypes = static_cast<int> (ModifierType::Unknown);
     std::array<int, kNumModifierTypes> midiProbCCMap = []() {
         std::array<int, kNumModifierTypes> a;
         a.fill(-1);

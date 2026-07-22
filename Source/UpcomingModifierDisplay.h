@@ -12,7 +12,7 @@
 #include "Modifier.h"
 #include "ThemeEngine.h"
 #include "ThemeFonts.h"
-#include "Animator.h"
+#include "ModifierGlyphRenderer.h"
 
 class UpcomingModifierDisplay : public juce::Component,
                                 private juce::Timer
@@ -25,6 +25,7 @@ public:
 
     void setUpcoming(const std::optional<ModifierDescriptor>& desc)
     {
+        upcomingDescriptor = desc;
         if (desc.has_value())
         {
             upcomingName = desc->shortName;
@@ -143,15 +144,10 @@ public:
                 upcomingVariant = parts;
             }
 
-            // Show base description without any appended arrow details (UI will show variant separately)
-            auto d = desc->description;
-            int arrow = d.lastIndexOf("->");
-            upcomingDescription = (arrow >= 0 ? d.substring(0, arrow).trim() : d);
         }
         else
         {
             upcomingName = "--";
-            upcomingDescription = "";
             upcomingVariant.clear();
         }
         repaint();
@@ -174,84 +170,84 @@ public:
     void paint(juce::Graphics& g) override
     {
         const auto& palette = ThemeEngine::getInstance().getCurrentPalette();
+        const auto glyphPalette = ControlSurfacePalette::fromTheme (palette);
         auto bounds = getLocalBounds().toFloat();
-        const float cr = palette.borderRadius;
+        if (bounds.isEmpty()) return;
 
-        // ── Panel background ──
-        g.setColour(palette.panel);
-        g.fillRoundedRectangle(bounds, cr);
+        // A flat instrument tile: separation comes from rules, not shadows.
+        g.setColour (glyphPalette.raisedTile);
+        g.fillRect (bounds);
+        g.setColour (glyphPalette.ink.withAlpha (0.72f));
+        g.drawRect (bounds, 1.0f);
 
-        // Top-edge divider (thin accent line)
-        g.setColour(palette.accent1.withAlpha(0.35f));
-        g.fillRect(bounds.getX() + 4.0f, bounds.getY(), bounds.getWidth() - 8.0f, 1.0f);
+        auto content = bounds.reduced (10.0f, 8.0f);
+        const float metaWidth = juce::jlimit (90.0f,
+                                              juce::jmax (90.0f, content.getWidth() * 0.48f),
+                                              content.getWidth() * 0.38f);
+        auto meta = content.removeFromLeft (metaWidth);
+        auto glyph = content.reduced (6.0f, 0.0f);
 
-        // Border
-        g.setColour(palette.border);
-        g.drawRoundedRectangle(bounds, cr, 1.0f);
+        // The vertical rule makes the cell read as a modular control board.
+        g.setColour (glyphPalette.ink.withAlpha (0.55f));
+        g.drawVerticalLine (juce::roundToInt (meta.getRight() + 3.0f),
+                            bounds.getY() + 1.0f, bounds.getBottom() - 1.0f);
 
-        const float pad = 8.0f;
-        auto content = bounds.reduced(pad, 12.0f);
+        auto& fonts = ThemeFonts::getInstance();
+        auto nextRow = meta.removeFromTop (18.0f);
+        g.setColour (suppressed ? glyphPalette.safetyYellow : glyphPalette.vermilion);
+        g.setFont (fonts.monoBoldFont (12.0f));
+        g.drawText (suppressed ? "PAUSED" : "NEXT", nextRow, juce::Justification::centredLeft);
 
-        // Split content into two equal halves so both rows are vertically centred
-        auto topRow = content.removeFromTop(content.getHeight() / 2);
-        auto bottomRow = content;
+        meta.removeFromTop (2.0f);
+        auto nameRow = meta.removeFromTop (juce::jmin (28.0f, meta.getHeight() * 0.42f));
+        g.setColour (glyphPalette.ink);
+        g.setFont (fonts.modifierNameFont (20.0f));
+        g.drawFittedText (upcomingName.toUpperCase(), nameRow.toNearestInt(),
+                          juce::Justification::centredLeft, 1, 0.7f);
 
-        // "NEXT" badge
+        if (upcomingVariant.isNotEmpty())
         {
-            auto badgeRect = juce::Rectangle<float>(topRow.getX(), topRow.getY() + 2.0f, 52.0f, 22.0f);
-            g.setColour(palette.accent1.withAlpha(0.18f));
-            g.fillRoundedRectangle(badgeRect, 3.0f);
-            g.setColour(palette.accent1);
-            g.setFont(ThemeFonts::getInstance().monoBoldFont(13.0f));
-            g.drawText("NEXT", badgeRect, juce::Justification::centred);
+            auto variantRow = meta.removeFromTop (juce::jmin (28.0f, meta.getHeight() * 0.55f));
+            g.setColour (glyphPalette.mutedInk);
+            g.setFont (fonts.monoFont (10.5f));
+            g.drawFittedText (upcomingVariant.toUpperCase(), variantRow.toNearestInt(),
+                              juce::Justification::centredLeft, 2, 0.75f);
         }
 
-        // Modifier name + variant, centered in the full width
+        juce::String countdown;
+        if (suppressed)
+            countdown = "MODIFIERS HELD";
+        else if (secondsRemaining > 0.0 || barsRemaining > 0.0)
+            countdown = juce::String (barsRemaining, barsRemaining < 1.0 ? 2 : 1)
+                      + " BAR  /  " + juce::String (secondsRemaining, 1) + " S";
+
+        if (countdown.isNotEmpty())
         {
-            auto textArea = topRow;
-            auto nameFont = ThemeFonts::getInstance().modifierNameFont(26.0f);
-            auto variantFont = ThemeFonts::getInstance().monoFont(16.0f);
-
-            // Measure name width
-            juce::GlyphArrangement nameGlyphs;
-            nameGlyphs.addLineOfText(nameFont, upcomingName, 0.0f, 0.0f);
-            float nameWidth = nameGlyphs.getBoundingBox(0, -1, false).getWidth();
-
-            // Measure variant width
-            float variantWidth = 0.0f;
-            const float gap = upcomingVariant.isNotEmpty() ? 10.0f : 0.0f;
-            if (upcomingVariant.isNotEmpty())
-            {
-                juce::GlyphArrangement varGlyphs;
-                varGlyphs.addLineOfText(variantFont, upcomingVariant, 0.0f, 0.0f);
-                variantWidth = varGlyphs.getBoundingBox(0, -1, false).getWidth();
-            }
-
-            float totalWidth = nameWidth + gap + variantWidth;
-            float startX = textArea.getCentreX() - totalWidth * 0.5f;
-
-            // Draw name
-            auto nameRect = textArea.withX(startX).withWidth(nameWidth);
-            g.setColour(palette.accent1);
-            g.setFont(nameFont);
-            g.drawText(upcomingName, nameRect, juce::Justification::centredLeft, true);
-
-            // Draw variant
-            if (upcomingVariant.isNotEmpty())
-            {
-                auto varRect = textArea.withX(startX + nameWidth + gap).withWidth(variantWidth);
-                g.setColour(palette.textSecondary);
-                g.setFont(variantFont);
-                g.drawText(upcomingVariant, varRect, juce::Justification::centredLeft, true);
-            }
+            g.setColour (suppressed ? glyphPalette.safetyYellow : glyphPalette.mutedInk);
+            g.setFont (fonts.monoFont (10.5f));
+            g.drawText (countdown, meta.removeFromBottom (16.0f), juce::Justification::centredLeft);
         }
 
-        // ── Description (centered) ──
-        if (upcomingDescription.isNotEmpty())
+        if (upcomingDescriptor.has_value())
         {
-            g.setColour(palette.textSecondary);
-            g.setFont(ThemeFonts::getInstance().bodyFont(16.0f));
-            g.drawFittedText(upcomingDescription, bottomRow.toNearestInt(), juce::Justification::centred, 1);
+            ModifierGlyphState glyphState;
+            glyphState.descriptor = *upcomingDescriptor;
+            glyphState.phase01 = glyphPhase;
+            glyphState.emphasis01 = suppressed ? 0.46f : 1.0f;
+            glyphState.compact = glyph.getWidth() < 110.0f;
+            glyphState.reducedMotion = ! ThemeEngine::getInstance().getAnimationConfig().enabled;
+            ModifierGlyphRenderer::draw (g, glyph, glyphState, glyphPalette);
+        }
+
+        // Stable brand rule plus a truthful coarse countdown fill.
+        auto progressTrack = bounds.removeFromBottom (3.0f);
+        g.setColour (glyphPalette.ink.withAlpha (0.28f));
+        g.fillRect (progressTrack.withHeight (1.0f));
+        if (progress > 0.0)
+        {
+            g.setColour (suppressed ? glyphPalette.safetyYellow : glyphPalette.vermilion);
+            g.fillRect (progressTrack.withWidth (progressTrack.getWidth()
+                                                * juce::jlimit (0.0f, 1.0f, static_cast<float> (progress))));
         }
     }
 
@@ -259,20 +255,20 @@ private:
     void timerCallback() override
     {
         const auto& anim = ThemeEngine::getInstance().getAnimationConfig();
-        if (anim.enabled && anim.progressBarShimmer && progress > 0.01 && !suppressed)
+        if (anim.enabled && upcomingDescriptor.has_value() && ! suppressed)
         {
-            shimmerPhase += (1.0f / 15.0f) * anim.animationSpeed * 0.5f;  // ~2s cycle
-            if (shimmerPhase > 1.0f) shimmerPhase -= 1.0f;
+            glyphPhase += (1.0f / 15.0f) * anim.animationSpeed * 0.45f;
+            if (glyphPhase > 1.0f) glyphPhase -= 1.0f;
             repaint();
         }
     }
 
+    std::optional<ModifierDescriptor> upcomingDescriptor;
     juce::String upcomingName { "--" };
-    juce::String upcomingDescription;
     juce::String upcomingVariant;
     double secondsRemaining = 0.0;
     double barsRemaining = 0.0;
     double progress = 0.0; // 0..1
     bool suppressed = false;
-    float shimmerPhase = 0.0f;
+    float glyphPhase = 0.0f;
 };

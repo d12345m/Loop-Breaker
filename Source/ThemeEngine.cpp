@@ -431,6 +431,47 @@ static ThemePalette makeIvory()
     return p;
 }
 
+static ThemePalette makeControlSurface()
+{
+    ThemePalette p;
+    p.name          = "Control Surface (Light)";
+
+    p.bg            = hex (0xECE8DC);
+    p.bgAlt         = hex (0xE4DFD1);
+    p.panel         = hex (0xF5F1E7);
+    p.panelAlt      = hex (0xEAE5D8);
+
+    p.border        = hex (0x77756E);
+    p.borderGlow    = hex (0xF04B35);
+
+    p.textPrimary   = hex (0x202124);
+    p.textSecondary = hex (0x77756E);
+    p.textOnAccent  = hex (0xF5F1E7);
+
+    p.accent1       = hex (0xF04B35);
+    p.accent2       = hex (0x3159C9);
+    p.accent3       = hex (0x8246AF);
+
+    p.good          = hex (0x54A866);
+    p.warn          = hex (0xE6BF3A);
+    p.bad           = hex (0xF04B35);
+
+    p.knobFill      = hex (0xF04B35);
+    p.knobTrack     = hex (0xD5D0C3);
+    p.waveformFill  = hex (0xECE8DC);
+    p.playhead      = hex (0xF04B35);
+
+    p.padEmpty      = hex (0xF5F1E7);
+    p.padLoaded     = hex (0x121316);
+    p.padSelected   = hexA (0xF04B35, 0.12f);
+    p.padPlaying    = hex (0x54A866);
+
+    p.glowIntensity = 0.0f;
+    p.borderRadius  = 2.0f;
+
+    return p;
+}
+
 static ThemePalette makeSilver()
 {
     ThemePalette p;
@@ -606,6 +647,7 @@ ThemeEngine::ThemeEngine()
 {
     // All built-in palettes — alphabetical order
     builtInPalettes.push_back (makeArcticSky());
+    builtInPalettes.push_back (makeControlSurface());
     builtInPalettes.push_back (makeDaylight());
     builtInPalettes.push_back (makeGameBoy());
     builtInPalettes.push_back (makeGruvbox());
@@ -619,8 +661,8 @@ ThemeEngine::ThemeEngine()
     builtInPalettes.push_back (makeVintageEmber());
     builtInPalettes.push_back (makeWarmPaper());
 
-    // Default to Neon Rave
-    currentPalette = *getBuiltInPalette ("Neon Rave (Dark)");
+    // Match SessionSettings so first paint and persisted state restoration agree.
+    currentPalette = *getBuiltInPalette ("Control Surface (Light)");
 }
 
 ThemeEngine& ThemeEngine::getInstance()

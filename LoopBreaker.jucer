@@ -40,6 +40,12 @@
       <FILE id="modifierH" name="Modifier.h" compile="0" resource="0" file="Source/Modifier.h"/>
       <FILE id="modifierCpp" name="Modifier.cpp" compile="1" resource="0"
             file="Source/Modifier.cpp"/>
+      <FILE id="controlSurfacePaletteH" name="ControlSurfacePalette.h" compile="0"
+            resource="0" file="Source/ControlSurfacePalette.h"/>
+      <FILE id="modifierGlyphRendererH" name="ModifierGlyphRenderer.h" compile="0"
+            resource="0" file="Source/ModifierGlyphRenderer.h"/>
+      <FILE id="modifierGlyphRendererCpp" name="ModifierGlyphRenderer.cpp" compile="1"
+            resource="0" file="Source/ModifierGlyphRenderer.cpp"/>
       <FILE id="modifierSchedulerH" name="ModifierScheduler.h" compile="0"
             resource="0" file="Source/ModifierScheduler.h"/>
       <FILE id="modifierSchedulerCpp" name="ModifierScheduler.cpp" compile="1"

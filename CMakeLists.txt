@@ -78,6 +78,7 @@ target_sources(LoopBreaker PRIVATE
     Source/AudioBuffer.cpp
     Source/AudioBufferManager.cpp
     Source/Modifier.cpp
+    Source/ModifierGlyphRenderer.cpp
     Source/ModifierScheduler.cpp
     Source/ProjectManager.cpp
     Source/ModifierSchedulerTests.cpp

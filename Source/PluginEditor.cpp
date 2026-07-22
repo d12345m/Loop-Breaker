@@ -779,6 +779,7 @@ private:
         }
 
         // Update modifier countdown/progress (driven by scheduler host timeline when available).
+        modifierDisplay.setTempoBpm (app.settings.bpm);
         if (app.scheduler.isRunning())
         {
             modifierDisplay.setCountdown(app.scheduler.getSecondsUntilNextTrigger(),
@@ -1074,7 +1075,7 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
 {
    #if JUCE_DEBUG
     debugPanel = std::make_unique<DebugPanelContent>(processor.getAppState());
-    glyphLabPanel = std::make_unique<GlyphLabComponent>();
+    glyphLabPanel = std::make_unique<GlyphLabComponent>(processor.getAppState().settings);
    #endif
 
     content = std::make_unique<PluginEditorContent>(processor,

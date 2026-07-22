@@ -122,7 +122,7 @@ The center header becomes a modular ivory control board:
 
 - One large **next** cell, approximately twice the width of each queue cell.
 - Two or three smaller **queued** cells.
-- The large cell contains the main glyph, `NEXT`, the modifier name, planned variant details, and target pips.
+- The large cell contains the main glyph, `NEXT`, the modifier name, planned variant details, and a compact modifier-family marker.
 - Queue cells contain a compact glyph, short name, and optionally one essential variant value.
 - The master-volume control remains at the far right.
 - No descriptive modifier sentence appears here.
@@ -135,8 +135,10 @@ The center header becomes a modular ivory control board:
 - Explicit modifier targets continue to come from pad selection. Selected pads
   use a short colored underline plus a small circular lamp, not a bright full
   perimeter.
-- The large next cell repeats its planned targets as small pips so the
-  relationship remains visible without routing lines.
+- The top-right pips identify the modifier family using the same groups as the
+  Probability tab: Buffer is one ultramarine pip, Channel Effect is two green
+  pips, and Special is three vermilion pips. The redundant count-and-colour
+  coding keeps the marker useful without relying on colour alone.
 - Occupied preset slots use a visibly tinted fill plus a small status lamp, so
   saved state remains obvious at a glance. Pending recalls use a restrained
   underline/tint while keeping their text readable without color.
@@ -432,14 +434,14 @@ Implemented on `codex/hieroglyph-ui-concepts` as of 2026-07-22:
 - `ModifierGlyphRenderer` uses normalized JUCE vector geometry and dispatches every non-`Unknown` `ModifierType`.
 - The Session NEXT tile uses the shared renderer, concise planned-variant text, the real scheduler countdown, a full-width progress rule, and no modifier-description prose.
 - The scheduler owns a truthful depth-three planned queue with frozen descriptors and targets, copy snapshots, and a message-thread queue listener.
-- The Session control board renders the real next item plus two static compact queue cells and color-coded frozen target pips.
+- The Session control board renders the real next item plus two static compact queue cells and concise family pips shared by NEXT and both queue cells.
 - Debug modifier forcing can independently replace NEXT, QUEUE 1, or QUEUE 2 while preserving the other planned entries.
 - Queue target planning is restricted to loaded pads and refreshes when pad availability or explicit selection changes, preventing visually valid queue entries from firing at empty pads.
 - The wordmark itself carries coarse trigger progress; the redundant rule beneath it has been removed.
 - The A–H preset strip uses flat ivory cells, occupancy lamps, and pending-recall underlines instead of broad filled/glowing buttons.
 - Saved A–H preset slots retain a distinct vermilion-tinted fill in addition to their occupancy lamp; empty slots remain ivory.
 - Pads now use ivory outer tiles and black waveform apertures; empty pads use four load brackets and a plus, while selection and playback use separate underline/lamp cues instead of full-perimeter glows.
-- Production glyph motion is enabled by default at 15 Hz. Settings exposes `Animate modifier glyphs` and `Glyph Speed`; legacy sessions from the hidden/default-off era are migrated to motion-on once, while subsequent saves preserve the user's choice.
+- Production glyph motion is enabled by default at 15 Hz and completes one phase cycle per 4/4 bar at the current session/host BPM. Settings exposes `Animate modifier glyphs`; legacy sessions from the hidden/default-off era are migrated to motion-on once, while subsequent saves preserve the user's choice.
 - Runtime status: the VST and three-item queue have been verified in-host. The loaded-pad targeting/application fix, Session geometry pass, occupied-preset treatment, and motion configuration all build and install successfully; final in-host modifier-application, animation, and visual confirmation are pending the next reload.
 - Animation-disabled mode renders a deterministic representative frame as the reduced-motion option.
 - The debug-only Glyph Lab and fixed-phase contact-sheet exporter are implemented.
@@ -489,7 +491,7 @@ Not yet implemented:
 
 - [ ] Implement light canvas and modular header. The palette, NEXT tile, and two truthful compact queue cells are complete; production-size visual review remains.
 - [x] Integrate coarse timer behavior into the wordmark without adding a redundant logo rule.
-- [x] Add large next tile and two truthful queue tiles with frozen target pips.
+- [x] Add large next tile and two truthful queue tiles with Probability-group family pips.
 - [x] Restyle the A–H preset strip without changing its save/recall behavior.
 - [x] Restyle loaded and empty pads without changing audio behavior: ivory tiles, black waveform apertures, and bracketed empty states are implemented.
 - [x] Replace normal selection/playing borders with independent lamps and underlines. MIDI learn and file-drag modes retain dashed perimeters because the perimeter itself communicates those temporary modes.

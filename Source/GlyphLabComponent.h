@@ -4,6 +4,7 @@
 #include "ModifierGlyphRenderer.h"
 #include "ModifierProbabilityManager.h"
 #include "ModifierRegistry.h"
+#include "SessionSettings.h"
 #include "ThemeFonts.h"
 
 /** Debug-only review surface for the production modifier glyph renderer. */
@@ -12,7 +13,8 @@ class GlyphLabComponent final : public juce::Component,
                                 private juce::Timer
 {
 public:
-    GlyphLabComponent()
+    explicit GlyphLabComponent (const SessionSettings& settingsRef)
+        : settings (settingsRef)
     {
         const auto& registry = ModifierProbabilityManager::allModifierTypes();
         allTypes.assign (registry.begin(), registry.end());
@@ -128,6 +130,8 @@ public:
     }
 
 private:
+    const SessionSettings& settings;
+
     int getNumRows() override
     {
         return static_cast<int> (filteredTypes.size());
@@ -169,11 +173,18 @@ private:
 
     void timerCallback() override
     {
+        const double nowMs = juce::Time::getMillisecondCounterHiRes();
+        const double elapsedSeconds = lastAnimationTickMs > 0.0
+            ? juce::jlimit (0.0, 0.25, (nowMs - lastAnimationTickMs) / 1000.0)
+            : (1.0 / 15.0);
+        lastAnimationTickMs = nowMs;
+
         if (! animateToggle.getToggleState() || reducedMotionToggle.getToggleState())
             return;
 
-        const auto speed = ThemeEngine::getInstance().getAnimationConfig().animationSpeed;
-        phase += (1.0f / 15.0f) * speed * 0.45f;
+        constexpr double beatsPerCycle = 4.0;
+        const double bpm = juce::jlimit (20.0, 400.0, settings.bpm);
+        phase += static_cast<float> ((bpm / (60.0 * beatsPerCycle)) * elapsedSeconds);
         if (phase >= 1.0f) phase -= 1.0f;
         phaseSlider.setValue (phase, juce::dontSendNotification);
         repaint();
@@ -488,6 +499,7 @@ private:
     std::vector<ModifierType> filteredTypes;
     ModifierType selectedType = ModifierType::Reverse;
     float phase = 0.25f;
+    double lastAnimationTickMs = 0.0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GlyphLabComponent)
 };

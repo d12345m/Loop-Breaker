@@ -66,6 +66,11 @@ public:
         repaint();
     }
 
+    void setTempoBpm (double bpm)
+    {
+        tempoBpm = juce::jlimit (20.0, 400.0, bpm);
+    }
+
     void paint(juce::Graphics& g) override
     {
         const auto& palette = ThemeEngine::getInstance().getCurrentPalette();
@@ -108,9 +113,9 @@ public:
         g.setColour (suppressed ? glyphPalette.safetyYellow : glyphPalette.vermilion);
         g.setFont (fonts.monoBoldFont (12.0f));
         g.drawText (suppressed ? "PAUSED" : "NEXT", nextRow, juce::Justification::centredLeft);
-        if (! plannedQueue.empty())
-            drawTargetPips (g, nextRow.withTrimmedLeft (44.0f), plannedQueue.front().targets,
-                            glyphPalette, true);
+        if (upcomingDescriptor.has_value())
+            drawCategoryPips (g, nextRow.withTrimmedLeft (44.0f), upcomingDescriptor->type,
+                              glyphPalette, true);
 
         meta.removeFromTop (2.0f);
         auto nameRow = meta.removeFromTop (juce::jmin (28.0f, meta.getHeight() * 0.42f));
@@ -187,33 +192,43 @@ public:
     }
 
 private:
-    static juce::Colour targetColour (int target, const ControlSurfacePalette& palette)
+    struct CategoryPipStyle
     {
-        switch (target % 5)
-        {
-            case 0:  return palette.vermilion;
-            case 1:  return palette.ultramarine;
-            case 2:  return palette.signalGreen;
-            case 3:  return palette.violet;
-            default: return palette.safetyYellow;
-        }
+        int count;
+        juce::Colour colour;
+    };
+
+    static CategoryPipStyle categoryPipStyle (ModifierType type,
+                                              const ControlSurfacePalette& palette)
+    {
+        // Use the registry's UI label rather than ModifierCategory: Special is
+        // deliberately a Probability-tab group containing multiple runtime categories.
+        const juce::String category = ModifierRegistry::get (type).categoryLabel;
+        if (category == "Buffer")
+            return { 1, palette.ultramarine };
+        if (category == "Channel Effect")
+            return { 2, palette.signalGreen };
+        if (category == "Special")
+            return { 3, palette.vermilion };
+        return { 0, palette.mutedInk };
     }
 
-    static void drawTargetPips (juce::Graphics& g, juce::Rectangle<float> area,
-                                const juce::Array<int>& targets,
-                                const ControlSurfacePalette& palette, bool alignRight)
+    static void drawCategoryPips (juce::Graphics& g, juce::Rectangle<float> area,
+                                  ModifierType type, const ControlSurfacePalette& palette,
+                                  bool alignRight)
     {
-        if (targets.isEmpty())
+        const auto style = categoryPipStyle (type, palette);
+        if (style.count == 0)
             return;
 
         constexpr float diameter = 5.0f;
         constexpr float gap = 3.0f;
-        const float width = targets.size() * diameter + juce::jmax (0, targets.size() - 1) * gap;
+        const float width = style.count * diameter + juce::jmax (0, style.count - 1) * gap;
         float x = alignRight ? area.getRight() - width : area.getX();
         const float y = area.getCentreY() - diameter * 0.5f;
-        for (int target : targets)
+        g.setColour (style.colour);
+        for (int i = 0; i < style.count; ++i)
         {
-            g.setColour (targetColour (target, palette));
             g.fillEllipse (x, y, diameter, diameter);
             x += diameter + gap;
         }
@@ -237,7 +252,8 @@ private:
             return;
         }
 
-        drawTargetPips (g, labelRow.withTrimmedLeft (42.0f), planned->targets, palette, true);
+        drawCategoryPips (g, labelRow.withTrimmedLeft (42.0f), planned->descriptor.type,
+                          palette, true);
 
         const auto compactVariant = ModifierVariantFormatter::compact (planned->descriptor);
         if (compactVariant.isNotEmpty())
@@ -266,10 +282,20 @@ private:
 
     void timerCallback() override
     {
+        const double nowMs = juce::Time::getMillisecondCounterHiRes();
+        const double elapsedSeconds = lastAnimationTickMs > 0.0
+            ? juce::jlimit (0.0, 0.25, (nowMs - lastAnimationTickMs) / 1000.0)
+            : (1.0 / 15.0);
+        lastAnimationTickMs = nowMs;
+
         const auto& anim = ThemeEngine::getInstance().getAnimationConfig();
         if (anim.enabled && upcomingDescriptor.has_value() && ! suppressed)
         {
-            glyphPhase += (1.0f / 15.0f) * anim.animationSpeed * 0.45f;
+            // One complete glyph phase per 4/4 bar. At 120 BPM this remains
+            // close to the former default speed while following host tempo.
+            constexpr double beatsPerCycle = 4.0;
+            glyphPhase += static_cast<float> ((tempoBpm / (60.0 * beatsPerCycle))
+                                              * elapsedSeconds);
             if (glyphPhase > 1.0f) glyphPhase -= 1.0f;
             repaint();
         }
@@ -284,4 +310,6 @@ private:
     double progress = 0.0; // 0..1
     bool suppressed = false;
     float glyphPhase = 0.0f;
+    double tempoBpm = 120.0;
+    double lastAnimationTickMs = 0.0;
 };

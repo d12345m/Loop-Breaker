@@ -196,8 +196,8 @@ public:
         updateCadenceVisibility();
 
         // ── Core modifier motion controls ──────────────────────────────
-        // Glyph motion is semantic, so its master toggle and speed are
-        // visible. Decorative background/glow controls remain hidden.
+        // Glyph motion is semantic, so its master toggle remains visible.
+        // Its rate follows session/host BPM; decorative controls remain hidden.
         addAndMakeVisible (animToggle);
         animToggle.setButtonText ("ANIMATE MODIFIER GLYPHS");
         animToggle.setToggleState (settings.animationsEnabled, juce::dontSendNotification);
@@ -218,19 +218,6 @@ public:
         knobGlowToggle.setButtonText ("Knob glow on change");
         knobGlowToggle.setToggleState (settings.knobGlowEnabled, juce::dontSendNotification);
         knobGlowToggle.onClick = [this] { syncAnimConfigFromUI(); };
-
-        addAndMakeVisible (speedLabel);
-        speedLabel.setText ("GLYPH SPEED", juce::dontSendNotification);
-        speedLabel.setJustificationType (juce::Justification::centredRight);
-        speedLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
-
-        addAndMakeVisible (speedSlider);
-        speedSlider.setRange (0.25, 2.0, 0.05);
-        speedSlider.setValue (settings.animationSpeed, juce::dontSendNotification);
-        speedSlider.setTextValueSuffix ("x");
-        speedSlider.setSliderStyle (juce::Slider::LinearHorizontal);
-        speedSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 44, 20);
-        speedSlider.onValueChange = [this] { syncAnimConfigFromUI(); };
 
         bgModeLabel.setText ("Background Mode", juce::dontSendNotification);
         bgModeLabel.setJustificationType (juce::Justification::centredRight);
@@ -371,7 +358,6 @@ public:
         {
             auto card = controlArea (motionCardBounds);
             animToggle.setBounds (card.removeFromTop (rowH).reduced (0, 4));
-            placePair (card.removeFromTop (rowH), speedLabel, speedSlider, 92);
         }
     }
 
@@ -382,7 +368,7 @@ private:
 
         for (auto* label : { &themeLabel, &partsLabel, &barsLabel, &cadenceModeLabel,
                              &barsRangeMinLabel, &barsRangeMaxLabel, &timedMinLabel,
-                             &timedMaxLabel, &speedLabel, &bgModeLabel })
+                             &timedMaxLabel, &bgModeLabel })
         {
             label->setColour (juce::Label::textColourId, palette.textSecondary);
             label->setFont (ThemeFonts::getInstance().controlLabelFont (12.0f));
@@ -397,7 +383,7 @@ private:
         }
 
         for (auto* slider : { &barsSlider, &barsRangeMinSlider, &barsRangeMaxSlider,
-                              &timedMinSlider, &timedMaxSlider, &speedSlider })
+                              &timedMinSlider, &timedMaxSlider })
         {
             slider->setColour (juce::Slider::backgroundColourId, palette.panelAlt);
             slider->setColour (juce::Slider::trackColourId, palette.accent1);
@@ -418,7 +404,6 @@ private:
         settings.padPulseEnabled       = padPulseToggle.getToggleState();
         settings.progressShimmerEnabled = shimmerToggle.getToggleState();
         settings.knobGlowEnabled       = knobGlowToggle.getToggleState();
-        settings.animationSpeed        = (float) speedSlider.getValue();
 
         // Write to ThemeEngine runtime config
         auto& cfg = ThemeEngine::getInstance().getAnimationConfigMutable();
@@ -435,7 +420,6 @@ private:
         padPulseToggle.setEnabled (master);
         shimmerToggle.setEnabled (master);
         knobGlowToggle.setEnabled (master);
-        speedSlider.setEnabled (master);
         for (auto& b : bgModeButtons) b->setEnabled (master);
     }
 
@@ -524,8 +508,6 @@ private:
     juce::ToggleButton knobGlowToggle;
 
     // Speed
-    juce::Label  speedLabel;
-    juce::Slider speedSlider;
 
     // Background mode
     juce::Label bgModeLabel;

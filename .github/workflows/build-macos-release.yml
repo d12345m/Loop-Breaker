@@ -28,9 +28,6 @@ concurrency:
 
 jobs:
   build-macos-installer:
-    # A GITHUB_TOKEN push normally does not start another workflow run. This
-    # guard also prevents a loop if that GitHub behavior or token changes.
-    if: github.actor != 'github-actions[bot]'
     runs-on: macos-latest
     environment: Production
 
@@ -42,14 +39,18 @@ jobs:
           submodules: recursive
           fetch-depth: 0 # Needed for version tags
 
-      # VERSION is the release version's single source of truth. Push builds
-      # default to patch; manual runs may select patch, minor, or major.
+      # Released vX.Y.Z tags persist the last successful version without
+      # writing to protected main. VERSION seeds the first tagged release.
       - name: Increment release version
         id: version
         env:
           BUMP_TYPE: ${{ inputs.bump_type || 'patch' }}
         run: |
-          git pull --ff-only origin main
+          latest_tag="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)"
+          if [ -n "$latest_tag" ]; then
+            printf '%s\n' "${latest_tag#v}" > VERSION
+          fi
+
           bash bump_version.sh "$BUMP_TYPE"
           version="$(tr -d '[:space:]' < VERSION)"
           echo "bump_type=$BUMP_TYPE" >> "$GITHUB_OUTPUT"
@@ -184,7 +185,7 @@ jobs:
       - name: Create or Update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
+          tag_name: v${{ steps.version.outputs.version }}
           name: Loop Breaker v${{ steps.version.outputs.version }}
           body: |
             # Loop Breaker v${{ steps.version.outputs.version }} - macOS Installer
@@ -209,18 +210,9 @@ jobs:
             Installer/output/LoopBreaker-macOS-Installer.zip
           draft: false
           prerelease: false
+          make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # Do not consume a version number unless the installer was successfully
-      # built and published.
-      - name: Persist release version
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add VERSION Source/BuildInfo.h
-          git commit -m "Bump release version to ${{ steps.version.outputs.version }} [skip ci]"
-          git push origin HEAD:main
 
       # ── Upload Build Artifact (backup) ────────────────────────────────────
       - name: User Manual PDFas workflow artifact

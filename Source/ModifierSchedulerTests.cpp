@@ -527,8 +527,12 @@ public:
         else
             expect (false, "Master-volume parameter is missing");
 
-        beginTest ("Selecting portrait layout performs one resize and keeps tabs visible");
+        beginTest ("Portrait layout reconciles the host viewport and keeps tabs visible");
         std::unique_ptr<juce::AudioProcessorEditor> layoutEditor (processor.createEditor());
+        juce::Component hostViewport;
+        hostViewport.setSize (1200, 800);
+        hostViewport.addAndMakeVisible (layoutEditor.get());
+
         for (int i = 0; i < layoutEditor->getNumChildComponents(); ++i)
             if (auto* tabs = dynamic_cast<juce::TabbedComponent*> (
                     layoutEditor->getChildComponent (i)))
@@ -541,11 +545,26 @@ public:
         layoutEditor->addComponentListener (&resizeCounter);
         if (layoutCombo != nullptr)
             layoutCombo->setSelectedId (2, juce::sendNotificationSync);
-        layoutEditor->removeComponentListener (&resizeCounter);
 
         expectEquals (layoutEditor->getWidth(), 540);
         expectEquals (layoutEditor->getHeight(), 960);
         expectEquals (resizeCounter.count, 1);
+
+        // Some hosts first update only their native viewport, leaving the
+        // editor larger and bottom-aligned. This is the state that clipped the
+        // 30 px tab bar and the rightmost 17 px until a manual resize.
+        layoutEditor->setTopLeftPosition (0, -30);
+        hostViewport.setSize (523, 930);
+        expect (layoutEditor->getBounds() == juce::Rectangle<int> (0, 0, 523, 930));
+        expectEquals (resizeCounter.count, 2);
+
+        // The editor can already have the right size while its native peer is
+        // still offset by the clipped tab depth, leaving black space below.
+        layoutEditor->setTopLeftPosition (0, -30);
+        layoutEditor->parentSizeChanged();
+        expect (layoutEditor->getBounds() == juce::Rectangle<int> (0, 0, 523, 930));
+        expectEquals (resizeCounter.count, 2);
+        layoutEditor->removeComponentListener (&resizeCounter);
 
         bool dynamicTabBarVisible = false;
         for (int i = 0; i < layoutEditor->getNumChildComponents(); ++i)
@@ -560,6 +579,13 @@ public:
                                     && currentButton != nullptr
                                     && currentButton->isVisible()
                                     && ! currentButton->getBounds().isEmpty();
+
+                expect (tabs->getBounds() == layoutEditor->getLocalBounds());
+                expect (tabBar.getBounds()
+                        == juce::Rectangle<int> (0, 0, 523, tabs->getTabBarDepth()));
+                expect (tabs->getCurrentContentComponent()->getBounds()
+                        == juce::Rectangle<int> (0, tabs->getTabBarDepth(),
+                                                 523, 930 - tabs->getTabBarDepth()));
             }
         expect (dynamicTabBarVisible);
         layoutEditor.reset();

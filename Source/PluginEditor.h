@@ -21,10 +21,12 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
+    void parentSizeChanged() override;
 
 private:
     void applyWindowLayout (WindowLayoutMode mode, bool restorePreviousSize);
-    void refreshTabbedLayout();
+    bool synchronisePortraitBoundsWithHost();
+    void scheduleHostBoundsReconciliation();
 
     BufferTestAudioProcessor& processor;
 
@@ -41,6 +43,8 @@ private:
 
     ThemeLookAndFeel editorLnf;
     juce::Rectangle<int> previousResizableBounds { 0, 0, 1200, 800 };
+    WindowLayoutMode activeWindowLayoutMode = WindowLayoutMode::Resizable;
+    bool synchronisingHostBounds = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BufferTestAudioProcessorEditor)
 };

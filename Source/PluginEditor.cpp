@@ -19,8 +19,52 @@
 #include "BackgroundAnimator.h"
 #include "PresetBarComponent.h"
 
+#if JUCE_MAC
+#include <CoreGraphics/CoreGraphics.h>
+#include <objc/message.h>
+#include <objc/runtime.h>
+#endif
+
 namespace
 {
+
+#if JUCE_MAC
+juce::Point<int> getNativeHostViewportSize (const juce::Component& component)
+{
+    // An embedded VST3 peer can retain the requested editor size even after
+    // its host NSView has been constrained to a smaller on-screen viewport.
+    auto* nativeView = reinterpret_cast<id> (component.getWindowHandle());
+    if (nativeView == nil)
+        return {};
+
+    const auto sendObjectMessage = reinterpret_cast<id (*) (id, SEL)> (objc_msgSend);
+    auto* window = sendObjectMessage (nativeView, sel_registerName ("window"));
+    if (window != nil
+        && sendObjectMessage (window, sel_registerName ("contentView")) == nativeView)
+        return {};
+
+    auto* hostView = sendObjectMessage (nativeView, sel_registerName ("superview"));
+    if (hostView == nil)
+        return {};
+
+    CGRect bounds;
+   #if defined (__x86_64__)
+    reinterpret_cast<void (*) (CGRect*, id, SEL)> (objc_msgSend_stret) (
+        &bounds, hostView, sel_registerName ("bounds"));
+   #else
+    bounds = reinterpret_cast<CGRect (*) (id, SEL)> (objc_msgSend) (
+        hostView, sel_registerName ("bounds"));
+   #endif
+
+    return { juce::roundToInt (bounds.size.width),
+             juce::roundToInt (bounds.size.height) };
+}
+#else
+juce::Point<int> getNativeHostViewportSize (const juce::Component&)
+{
+    return {};
+}
+#endif
 
 class PluginEditorContent final : public juce::Component,
                                  public ModifierSchedulerListener,
@@ -1338,7 +1382,16 @@ void BufferTestAudioProcessorEditor::resized()
         backgroundAnimator->setBounds(bounds);
 
     if (tabComponent)
+    {
         tabComponent->setBounds(bounds);
+        tabComponent->resized();
+    }
+}
+
+void BufferTestAudioProcessorEditor::parentSizeChanged()
+{
+    if (! synchronisePortraitBoundsWithHost())
+        resized();
 }
 
 void BufferTestAudioProcessorEditor::applyWindowLayout (WindowLayoutMode mode,
@@ -1346,6 +1399,7 @@ void BufferTestAudioProcessorEditor::applyWindowLayout (WindowLayoutMode mode,
 {
     auto* sessionContent = static_cast<PluginEditorContent*> (content.get());
     const bool portrait = mode == WindowLayoutMode::Portrait9x16;
+    activeWindowLayoutMode = mode;
 
     if (portrait)
     {
@@ -1366,6 +1420,7 @@ void BufferTestAudioProcessorEditor::applyWindowLayout (WindowLayoutMode mode,
 
         sessionContent->setPortraitLayout (true);
         setSize (540, 960);
+        scheduleHostBoundsReconciliation();
     }
     else
     {
@@ -1381,42 +1436,86 @@ void BufferTestAudioProcessorEditor::applyWindowLayout (WindowLayoutMode mode,
             setSize (juce::jlimit (920, 2400, previousResizableBounds.getWidth()),
                      juce::jlimit (600, 1600, previousResizableBounds.getHeight()));
     }
+}
 
-    refreshTabbedLayout();
+bool BufferTestAudioProcessorEditor::synchronisePortraitBoundsWithHost()
+{
+    if (activeWindowLayoutMode != WindowLayoutMode::Portrait9x16
+        || synchronisingHostBounds)
+        return false;
 
-    // Some plug-in hosts complete editor resizing after the ComboBox callback
-    // returns. Repeat the forced bounds invalidation after the host has settled;
-    // this mirrors the resize event that otherwise makes the tabs reappear.
+    const auto currentSize = juce::Point<int> (getWidth(), getHeight());
+    juce::Point<int> hostSize;
+
+    const auto isCompatiblePortraitViewport = [currentSize] (juce::Point<int> candidate)
+    {
+        if (candidate.x < 450 || candidate.y < 800
+            || candidate.x > currentSize.x || candidate.y > currentSize.y)
+            return false;
+
+        return std::abs (static_cast<double> (candidate.x) / candidate.y
+                         - 9.0 / 16.0) < 0.01;
+    };
+
+    const auto considerHostSize = [&] (juce::Point<int> candidate)
+    {
+        if (! isCompatiblePortraitViewport (candidate))
+            return;
+
+        if (hostSize.isOrigin()
+            || static_cast<int64_t> (candidate.x) * candidate.y
+                < static_cast<int64_t> (hostSize.x) * hostSize.y)
+            hostSize = candidate;
+    };
+
+    if (auto* parent = getParentComponent())
+        considerHostSize ({ parent->getWidth(), parent->getHeight() });
+
+    const auto nativeHostSize = getNativeHostViewportSize (*this);
+    considerHostSize (nativeHostSize);
+
+    if (auto* peer = getPeer())
+        considerHostSize ({ peer->getBounds().getWidth(), peer->getBounds().getHeight() });
+
+    if (hostSize.isOrigin())
+        return false;
+
+    const auto targetBounds = juce::Rectangle<int> (0, 0, hostSize.x, hostSize.y);
+    const bool editorNeedsBounds = getBounds() != targetBounds;
+    bool peerNeedsBounds = false;
+
+    if (nativeHostSize == hostSize)
+        if (auto* peer = getPeer())
+            peerNeedsBounds = peer->getBounds() != targetBounds;
+
+    if (! editorNeedsBounds && ! peerNeedsBounds)
+        return false;
+
+    const juce::ScopedValueSetter<bool> synchronising (synchronisingHostBounds, true);
+    if (editorNeedsBounds)
+        setBounds (targetBounds);
+
+    // Matching only the editor size leaves a bottom-aligned native peer at
+    // y = -30: the tabs stay clipped and an equal black strip appears below.
+    if (nativeHostSize == hostSize)
+        if (auto* peer = getPeer())
+            if (peer->getBounds() != targetBounds)
+                peer->setBounds (targetBounds, false);
+
+    return true;
+}
+
+void BufferTestAudioProcessorEditor::scheduleHostBoundsReconciliation()
+{
     juce::Component::SafePointer<BufferTestAudioProcessorEditor> safeThis (this);
     juce::MessageManager::callAsync ([safeThis]
     {
         if (safeThis != nullptr)
-            safeThis->refreshTabbedLayout();
+            safeThis->synchronisePortraitBoundsWithHost();
     });
     juce::Timer::callAfterDelay (150, [safeThis]
     {
         if (safeThis != nullptr)
-            safeThis->refreshTabbedLayout();
+            safeThis->synchronisePortraitBoundsWithHost();
     });
-}
-
-void BufferTestAudioProcessorEditor::refreshTabbedLayout()
-{
-    auto bounds = getLocalBounds();
-
-    if (backgroundAnimator)
-        backgroundAnimator->setBounds (bounds);
-
-    if (tabComponent)
-    {
-        // Setting identical bounds is intentionally a no-op in JUCE. A one-pixel
-        // nudge guarantees that the tab component and its bar both receive a
-        // real resized() callback before settling on the host's final bounds.
-        tabComponent->setBounds (bounds.withTrimmedBottom (1));
-        tabComponent->setBounds (bounds);
-        tabComponent->getTabbedButtonBar().resized();
-        tabComponent->repaint();
-    }
-
-    repaint();
 }

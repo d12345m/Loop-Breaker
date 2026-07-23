@@ -2,7 +2,7 @@
 
 - Status: implementation in progress; visual foundation, first glyph pass, canonical registry, planned queue, first Session geometry pass, headless test runner, and downstream planning audit complete
 - Branch: `codex/hieroglyph-ui-concepts`
-- Last implementation review: 2026-07-22
+- Last implementation review: 2026-07-23
 - Primary visual reference: `docs/concepts/hieroglyph-ui/07-control-surface.png`
 - Secondary motion reference: `docs/concepts/hieroglyph-ui/08-cartography.png`
 
@@ -97,6 +97,27 @@ Do not use broad gradients or neon glow as general decoration. Color behaves lik
 - Use dots, short ticks, brackets, underlines, stepped lines, and sparse arrows.
 - Slight asymmetry or imperfect spacing can add personality, but semantic geometry must remain clear.
 - Wavy/contour lines are reserved for time dispersion, modulation, spectral motion, or granularity. They should not decorate unrelated controls.
+
+### 4.5 Operational hieroglyph grammar
+
+The production glyph family uses five recurring primitives:
+
+- **Gate:** a post, reflector, or bracket that establishes a boundary.
+- **Rail:** a path used only for time, sequence, or transfer.
+- **Packet:** a slice, beat, layer, or indexed card.
+- **Bead:** the vermilion action/state marker.
+- **Field:** an echo, contour, modulation trace, or grain cloud.
+
+Charcoal describes stable machinery, vermilion describes the active operation,
+and muted ink describes history or decay. Ultramarine, safety yellow, and
+signal green are reserved for genuinely separate voices, layers, or channels.
+Decorative underlines are not part of the system.
+
+The full-size glyph may carry one unusual or playful feature. Compact glyphs
+are optical variants rather than miniatures: remove facial detail, microdots,
+fine arrowheads, and excess contours; preserve one dominant silhouette and one
+vermilion action. Chassis, gates, stairs, and rails use square construction,
+while signals, orbits, and fields may use rounded paths.
 
 ## 5. Session-tab layout
 

@@ -18,11 +18,6 @@ static juce::Colour hex (juce::uint32 rgb)
                          static_cast<juce::uint8> (rgb & 0xFF));
 }
 
-static juce::Colour hexA (juce::uint32 rgb, float alpha)
-{
-    return hex (rgb).withAlpha (alpha);
-}
-
 static juce::String canonicalThemeName (const juce::String& name)
 {
     if (name == "Control Surface (Light)" || name.startsWith ("Control Surface /"))
@@ -60,8 +55,9 @@ juce::Colour ThemePalette::getColor (ColorRole role) const
         case ColorRole::WaveformFill:  return waveformFill;
         case ColorRole::Playhead:      return playhead;
         case ColorRole::PadEmpty:      return padEmpty;
+        case ColorRole::PadEmptySelected: return padEmptySelected;
         case ColorRole::PadLoaded:     return padLoaded;
-        case ColorRole::PadSelected:   return padSelected;
+        case ColorRole::PadLoadedSelected: return padLoadedSelected;
         case ColorRole::PadSelectedIndicator: return padSelectedIndicator;
         case ColorRole::PadFlash:      return padFlash;
         case ColorRole::PadPlaying:    return padPlaying;
@@ -104,8 +100,9 @@ juce::Colour ThemePalette::getColor (ColorRole role) const
     p.playhead      = hex (0x00E5FF);
 
     p.padEmpty      = hex (0x111822);
+    p.padEmptySelected = hex (0x173447);
     p.padLoaded     = hex (0x1A2332);
-    p.padSelected   = hexA (0x00E5FF, 0.15f);
+    p.padLoadedSelected = hex (0x124354);
     p.padSelectedIndicator = p.accent1;
     p.padFlash      = p.accent2;
     p.padPlaying    = hex (0x39FF14);
@@ -147,8 +144,9 @@ juce::Colour ThemePalette::getColor (ColorRole role) const
     p.playhead      = hex (0xFFAA00);
 
     p.padEmpty      = hex (0x241610);
+    p.padEmptySelected = hex (0x4A2518);
     p.padLoaded     = hex (0x352218);
-    p.padSelected   = hexA (0xFF6B2B, 0.15f);
+    p.padLoadedSelected = hex (0x65301D);
     p.padSelectedIndicator = p.accent1;
     p.padFlash      = p.accent2;
     p.padPlaying    = hex (0xFFAA00);
@@ -190,8 +188,9 @@ static ThemePalette makePixelGrid()
     p.playhead      = hex (0x5EEBFF);
 
     p.padEmpty      = hex (0x071007);
+    p.padEmptySelected = hex (0x173617);
     p.padLoaded     = hex (0x020602);
-    p.padSelected   = hexA (0x66FF66, 0.22f);
+    p.padLoadedSelected = hex (0x1B481B);
     p.padSelectedIndicator = p.accent1;
     p.padFlash      = hex (0x5EEBFF);
     p.padPlaying    = hex (0x33FF33);
@@ -233,8 +232,9 @@ static ThemePalette makePixelGrid()
     p.playhead      = hex (0xBF40FF);
 
     p.padEmpty      = hex (0x120B22);
+    p.padEmptySelected = hex (0x2B1747);
     p.padLoaded     = hex (0x221640);
-    p.padSelected   = hexA (0xBF40FF, 0.15f);
+    p.padLoadedSelected = hex (0x4D2178);
     p.padSelectedIndicator = p.accent1;
     p.padFlash      = p.accent2;
     p.padPlaying    = hex (0xBF40FF);
@@ -278,8 +278,9 @@ static ThemePalette makeMarathonAcid()
     p.playhead      = hex (0xFF2BD6);
 
     p.padEmpty      = hex (0x0D0F2B);
-    p.padLoaded     = hex (0x020307);
-    p.padSelected   = hexA (0xB7FF00, 0.26f);
+    p.padEmptySelected = hex (0x20245F);
+    p.padLoaded     = hex (0x0B1848);
+    p.padLoadedSelected = hex (0x2E3C78);
     p.padSelectedIndicator = p.accent1;
     p.padFlash      = p.accent2;
     p.padPlaying    = p.accent3;
@@ -325,8 +326,9 @@ static ThemePalette makeToxicSorbet()
     p.playhead      = hex (0xFF3B00);
 
     p.padEmpty      = hex (0xFFB8E0);
-    p.padLoaded     = hex (0x46002D);
-    p.padSelected   = hexA (0xFFFFFF, 0.32f);
+    p.padEmptySelected = hex (0xE6C7FF);
+    p.padLoaded     = hex (0x65005D);
+    p.padLoadedSelected = hex (0x3B1694);
     p.padSelectedIndicator = p.accent1;
     p.padFlash      = hex (0x00D9C7);
     p.padPlaying    = p.accent1;
@@ -368,8 +370,9 @@ static ThemePalette makeToxicSorbet()
     p.playhead      = hex (0xC06030);
 
     p.padEmpty      = hex (0xEDE8E0);
+    p.padEmptySelected = hex (0xE8CBB9);
     p.padLoaded     = hex (0xF5F0E8);
-    p.padSelected   = hexA (0xC06030, 0.15f);
+    p.padLoadedSelected = hex (0xDDAF94);
     p.padSelectedIndicator = p.accent1;
     p.padFlash      = p.accent2;
     p.padPlaying    = hex (0xC06030);
@@ -411,8 +414,9 @@ static ThemePalette makeToxicSorbet()
     p.playhead      = hex (0x2D7DD2);
 
     p.padEmpty      = hex (0xE2EBF5);
+    p.padEmptySelected = hex (0xC6DCF2);
     p.padLoaded     = hex (0xEEF3FA);
-    p.padSelected   = hexA (0x2D7DD2, 0.15f);
+    p.padLoadedSelected = hex (0xB8D5F2);
     p.padSelectedIndicator = p.accent1;
     p.padFlash      = p.accent2;
     p.padPlaying    = hex (0x2D7DD2);
@@ -454,8 +458,9 @@ static ThemePalette makeToxicSorbet()
     p.playhead      = hex (0xF76707);
 
     p.padEmpty      = hex (0xF3F1ED);
+    p.padEmptySelected = hex (0xDDE4FC);
     p.padLoaded     = hex (0xF5F4F0);
-    p.padSelected   = hexA (0x5C7CFA, 0.15f);
+    p.padLoadedSelected = hex (0xCCD8FB);
     p.padSelectedIndicator = p.accent1;
     p.padFlash      = p.accent2;
     p.padPlaying    = hex (0x5C7CFA);
@@ -497,8 +502,9 @@ static ThemePalette makeControlSurface()
     p.playhead      = hex (0xF04B35);
 
     p.padEmpty      = hex (0xF5F1E7);
+    p.padEmptySelected = hex (0xE5EED6);
     p.padLoaded     = hex (0xE3DED0);
-    p.padSelected   = hexA (0xF8FFE5, 0.62f);
+    p.padLoadedSelected = hex (0xC7D9BD);
     p.padSelectedIndicator = hex (0x3F9364);
     p.padFlash      = hex (0xF36A2D);
     p.padPlaying    = hex (0x54A866);
@@ -540,8 +546,9 @@ static ThemePalette makeControlSurface()
     p.playhead      = hex (0x4A72A8);
 
     p.padEmpty      = hex (0xDDE0E4);
+    p.padEmptySelected = hex (0xC8D3E1);
     p.padLoaded     = hex (0xE8EAED);
-    p.padSelected   = hexA (0x4A72A8, 0.18f);
+    p.padLoadedSelected = hex (0xB8C9DF);
     p.padSelectedIndicator = p.accent1;
     p.padFlash      = p.accent2;
     p.padPlaying    = hex (0x4A72A8);
@@ -583,8 +590,9 @@ static ThemePalette makeGruvbox()
     p.playhead      = hex (0xFABD2F);
 
     p.padEmpty      = hex (0x1D2021);
-    p.padLoaded     = hex (0x1D2021);
-    p.padSelected   = hexA (0xEBDBB2, 0.24f);
+    p.padEmptySelected = hex (0x3C3836);
+    p.padLoaded     = hex (0x282828);
+    p.padLoadedSelected = hex (0x504945);
     p.padSelectedIndicator = p.accent1;
     p.padFlash      = hex (0x83D8C5);
     p.padPlaying    = hex (0xB8BB26);
@@ -627,8 +635,9 @@ static ThemePalette makeIIgsWriter()
     p.playhead      = hex (0xFFF18A);
 
     p.padEmpty      = hex (0x2929C9);
+    p.padEmptySelected = hex (0x5555EE);
     p.padLoaded     = hex (0x181880);
-    p.padSelected   = hexA (0xFFFFFF, 0.28f);
+    p.padLoadedSelected = hex (0x5454B8);
     p.padSelectedIndicator = p.accent1;
     p.padFlash      = hex (0xFF72D2);
     p.padPlaying    = hex (0x8CFFB0);
@@ -671,8 +680,9 @@ static ThemePalette makeOrangeChaos()
     p.playhead      = hex (0x2AEEFF);
 
     p.padEmpty      = hex (0x9C1800);
-    p.padLoaded     = hex (0x31102D);
-    p.padSelected   = hexA (0xC6FF00, 0.38f);
+    p.padEmptySelected = hex (0xD13E00);
+    p.padLoaded     = hex (0x0B4966);
+    p.padLoadedSelected = hex (0x223F9A);
     p.padSelectedIndicator = p.accent1;
     p.padFlash      = hex (0xFFFD3D);
     p.padPlaying    = hex (0x2AEEFF);
@@ -717,8 +727,9 @@ static ThemePalette makeGameBoy()
     p.playhead      = p.waveformFill;
 
     p.padEmpty      = hex (0x8BAC0F);
+    p.padEmptySelected = hex (0x9BBC0F);
     p.padLoaded     = hex (0x0F380F);
-    p.padSelected   = hexA (0xD7E85B, 0.34f);
+    p.padLoadedSelected = hex (0x306230);
     p.padSelectedIndicator = p.accent1;
     p.padFlash      = hex (0xE5F25A);
     p.padPlaying    = hex (0x9BBC0F);
@@ -897,8 +908,9 @@ void ThemeEngine::updateBlendedPalette()
     blendedPalette.waveformFill = lerpColour (a.waveformFill, b.waveformFill, t);
     blendedPalette.playhead     = lerpColour (a.playhead, b.playhead, t);
     blendedPalette.padEmpty     = lerpColour (a.padEmpty, b.padEmpty, t);
+    blendedPalette.padEmptySelected = lerpColour (a.padEmptySelected, b.padEmptySelected, t);
     blendedPalette.padLoaded    = lerpColour (a.padLoaded, b.padLoaded, t);
-    blendedPalette.padSelected  = lerpColour (a.padSelected, b.padSelected, t);
+    blendedPalette.padLoadedSelected = lerpColour (a.padLoadedSelected, b.padLoadedSelected, t);
     blendedPalette.padSelectedIndicator = lerpColour (a.padSelectedIndicator, b.padSelectedIndicator, t);
     blendedPalette.padFlash     = lerpColour (a.padFlash, b.padFlash, t);
     blendedPalette.padPlaying   = lerpColour (a.padPlaying, b.padPlaying, t);

@@ -49,8 +49,9 @@ enum class ColorRole
     Playhead,
 
     PadEmpty,
+    PadEmptySelected,
     PadLoaded,
-    PadSelected,
+    PadLoadedSelected,
     PadSelectedIndicator,
     PadFlash,
     PadPlaying
@@ -92,9 +93,13 @@ struct ThemePalette
     juce::Colour knobTrack;
     juce::Colour waveformFill;
     juce::Colour playhead;
+
+    // Complete, opaque pad-state fills. Selection is represented by choosing
+    // a state colour, never by compositing a shared tint over another fill.
     juce::Colour padEmpty;
+    juce::Colour padEmptySelected;
     juce::Colour padLoaded;
-    juce::Colour padSelected;
+    juce::Colour padLoadedSelected;
     juce::Colour padSelectedIndicator;
     juce::Colour padFlash;
     juce::Colour padPlaying;

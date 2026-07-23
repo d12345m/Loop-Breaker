@@ -10,16 +10,6 @@ juce::Colour rgb (juce::uint32 value)
                          static_cast<juce::uint8> (value & 0xff));
 }
 
-juce::Colour compositeOver (juce::Colour overlay, juce::Colour base)
-{
-    const auto alpha = overlay.getFloatAlpha();
-    const auto inverseAlpha = 1.0f - alpha;
-    return juce::Colour::fromFloatRGBA (overlay.getFloatRed() * alpha + base.getFloatRed() * inverseAlpha,
-                                        overlay.getFloatGreen() * alpha + base.getFloatGreen() * inverseAlpha,
-                                        overlay.getFloatBlue() * alpha + base.getFloatBlue() * inverseAlpha,
-                                        1.0f);
-}
-
 class ThemePadColourTest : public juce::UnitTest
 {
 public:
@@ -48,6 +38,8 @@ public:
         if (controlSurface != nullptr)
         {
             expect (controlSurface->padLoaded == rgb (0xE3DED0));
+            expect (controlSurface->padEmptySelected == rgb (0xE5EED6));
+            expect (controlSurface->padLoadedSelected == rgb (0xC7D9BD));
             expect (controlSurface->waveformFill == rgb (0x292B29));
             expect (controlSurface->padSelectedIndicator == rgb (0x3F9364));
             expect (controlSurface->padFlash == rgb (0xF36A2D));
@@ -70,6 +62,8 @@ public:
             expect (sorbet->bg == rgb (0xFF9BD7));
             expect (sorbet->accent1 == rgb (0x4C00CC));
             expect (sorbet->waveformFill == rgb (0xFFD447));
+            expect (sorbet->padLoaded == rgb (0x65005D));
+            expect (sorbet->padLoadedSelected == rgb (0x3B1694));
             expectWithinAbsoluteError (sorbet->glowIntensity, 0.75f, 0.001f);
             expectWithinAbsoluteError (sorbet->borderRadius, 9.0f, 0.001f);
         }
@@ -81,6 +75,8 @@ public:
             expect (marathon->bg == rgb (0x05060D));
             expect (marathon->accent1 == rgb (0xB7FF00));
             expect (marathon->accent2 == rgb (0xFF2BD6));
+            expect (marathon->padLoaded == rgb (0x0B1848));
+            expect (marathon->padLoadedSelected == rgb (0x2E3C78));
             expectWithinAbsoluteError (marathon->glowIntensity, 1.0f, 0.001f);
             expectWithinAbsoluteError (marathon->borderRadius, 1.0f, 0.001f);
         }
@@ -94,6 +90,8 @@ public:
             expect (orangeChaos->accent1 == rgb (0xC6FF00));
             expect (orangeChaos->accent2 == rgb (0x2AEEFF));
             expect (orangeChaos->accent3 == rgb (0x4E7DFF));
+            expect (orangeChaos->padLoaded == rgb (0x0B4966));
+            expect (orangeChaos->padLoadedSelected == rgb (0x223F9A));
             expectWithinAbsoluteError (orangeChaos->glowIntensity, 1.0f, 0.001f);
             expectWithinAbsoluteError (orangeChaos->borderRadius, 12.0f, 0.001f);
         }
@@ -107,7 +105,7 @@ public:
             expect (gameBoy->playhead == gameBoy->waveformFill);
         }
 
-        beginTest ("Every theme brightens loaded and empty pads when selected");
+        beginTest ("Every theme defines four opaque, distinct pad states");
         for (const auto& name : names)
         {
             const auto* palette = engine.getBuiltInPalette (name);
@@ -115,12 +113,18 @@ public:
             if (palette == nullptr)
                 continue;
 
-            const auto loadedSelected = compositeOver (palette->padSelected, palette->padLoaded);
-            const auto emptySelected = compositeOver (palette->padSelected, palette->padEmpty);
-            expect (loadedSelected.getPerceivedBrightness() > palette->padLoaded.getPerceivedBrightness(),
-                    name + " should brighten loaded pads");
-            expect (emptySelected.getPerceivedBrightness() > palette->padEmpty.getPerceivedBrightness(),
-                    name + " should brighten empty pads");
+            expect (palette->padEmpty.isOpaque(), name + " empty state should be opaque");
+            expect (palette->padEmptySelected.isOpaque(), name + " selected empty state should be opaque");
+            expect (palette->padLoaded.isOpaque(), name + " loaded state should be opaque");
+            expect (palette->padLoadedSelected.isOpaque(), name + " selected loaded state should be opaque");
+            expect (palette->padEmpty != palette->padEmptySelected,
+                    name + " should distinguish empty selection");
+            expect (palette->padLoaded != palette->padLoadedSelected,
+                    name + " should distinguish loaded selection");
+            expect (palette->padEmpty != palette->padLoaded,
+                    name + " should distinguish loaded pads");
+            expect (palette->padEmptySelected != palette->padLoadedSelected,
+                    name + " should distinguish selected loaded pads");
         }
 
         beginTest ("Each theme has an intentional saturated modifier flash");

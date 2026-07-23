@@ -564,8 +564,13 @@ private:
             {
                 auto r = btn->getBounds().toFloat();
 
-                // ── Ivory outer tile ──
                 const bool hasWave = (thumbnails[i] != nullptr && thumbnails[i]->getTotalLength() > 0.0);
+                const bool isSelected = padButtons[i]->getToggleState();
+                const auto apertureFill = hasWave
+                    ? (isSelected ? palette.padLoadedSelected : palette.padLoaded)
+                    : (isSelected ? palette.padEmptySelected : palette.padEmpty);
+
+                // ── Outer tile ──
                 g.setColour (palette.padEmpty);
                 g.fillRoundedRectangle(r, cr);
                 g.setColour(palette.border);
@@ -581,15 +586,10 @@ private:
                 {
                     auto* thumb = thumbnails[i];
 
-                    // Loaded pads use a true black display aperture. This is
-                    // deliberately separate from the ivory tile around it.
-                    g.setColour (palette.padLoaded);
+                    // The four base pad states are complete opaque colours.
+                    // Choosing one here avoids state-dependent alpha blending.
+                    g.setColour (apertureFill);
                     g.fillRect (aperture);
-                    if (padButtons[i]->getToggleState())
-                    {
-                        g.setColour (palette.padSelected);
-                        g.fillRect (aperture);
-                    }
                     g.setColour (palette.border.withAlpha (0.65f));
                     g.drawRect (aperture, 1.0f);
 
@@ -601,11 +601,13 @@ private:
                         g.drawHorizontalLine((int)ly, inner.getX(), inner.getRight());
                     }
 
-                    g.setColour (palette.waveformFill.withAlpha (0.78f));
-                    thumb->drawChannels(g, inner.toNearestInt(), 0.0,
-                                        thumb->getTotalLength(), 1.0f);
+                    const auto drawWaveform = [&] (float alpha)
+                    {
+                        g.setColour (palette.waveformFill.withAlpha (alpha));
+                        thumb->drawChannels(g, inner.toNearestInt(), 0.0,
+                                            thumb->getTotalLength(), 1.0f);
+                    };
 
-                    // Loop overlay with diagonal hatching
                     if (loopEnabled[(size_t)i])
                     {
                         const double denom = juce::jmax(1.0, totalFileSamples[(size_t)i]);
@@ -613,28 +615,35 @@ private:
                         const double endProp   = juce::jlimit(0.0, 1.0, loopEndSamples[(size_t)i]   / denom);
                         const float x1 = inner.getX() + (float)(inner.getWidth() * startProp);
                         const float x2 = inner.getX() + (float)(inner.getWidth() * endProp);
-                        juce::Rectangle<float> loopRect(x1, inner.getY(), juce::jmax(1.0f, x2 - x1), inner.getHeight());
 
-                        // Semi-transparent fill
-                        g.setColour(palette.warn.withAlpha(0.12f));
-                        g.fillRect(loopRect);
-
-                        // Diagonal hatching (45° lines, 4px apart)
+                        // Keep the state fill untouched: distinguish the loop
+                        // by de-emphasising waveform content outside it.
+                        drawWaveform (0.30f);
                         {
                             g.saveState();
-                            g.reduceClipRegion(loopRect.toNearestInt());
-                            g.setColour(palette.warn.withAlpha(0.10f));
-                            const float step = 4.0f;
-                            for (float d = -loopRect.getHeight(); d < loopRect.getWidth() + loopRect.getHeight(); d += step)
-                                g.drawLine(loopRect.getX() + d, loopRect.getBottom(),
-                                           loopRect.getX() + d + loopRect.getHeight(), loopRect.getY(), 0.5f);
+                            g.reduceClipRegion (
+                                juce::Rectangle<float> (x1, inner.getY(),
+                                                        juce::jmax (1.0f, x2 - x1),
+                                                        inner.getHeight())
+                                    .toNearestInt());
+                            drawWaveform (0.82f);
                             g.restoreState();
                         }
 
-                        // Loop boundary lines
+                        // Inward-facing caps make the boundary lines read as
+                        // one bracketed region rather than two playheads.
                         g.setColour(palette.warn.withAlpha(0.85f));
                         g.drawLine(x1, inner.getY(), x1, inner.getBottom(), 1.5f);
                         g.drawLine(x2, inner.getY(), x2, inner.getBottom(), 1.5f);
+                        constexpr float capLength = 5.0f;
+                        g.drawLine(x1, inner.getY(), x1 + capLength, inner.getY(), 1.5f);
+                        g.drawLine(x1, inner.getBottom(), x1 + capLength, inner.getBottom(), 1.5f);
+                        g.drawLine(x2 - capLength, inner.getY(), x2, inner.getY(), 1.5f);
+                        g.drawLine(x2 - capLength, inner.getBottom(), x2, inner.getBottom(), 1.5f);
+                    }
+                    else
+                    {
+                        drawWaveform (0.78f);
                     }
 
                     // Playhead with triangle head and glow
@@ -662,11 +671,8 @@ private:
                 else
                 {
                     // ── Empty pad: four load brackets + "+" icon ──
-                    if (padButtons[i]->getToggleState())
-                    {
-                        g.setColour (palette.padSelected);
-                        g.fillRect (aperture);
-                    }
+                    g.setColour (apertureFill);
+                    g.fillRect (aperture);
 
                     {
                         const float bracket = juce::jlimit (8.0f, 16.0f,
@@ -697,8 +703,8 @@ private:
                     g.drawLine(cx, cy - plusSize * 0.5f, cx, cy + plusSize * 0.5f, 1.5f);
                 }
 
-                // ── Selection overlay ──
-                if (padButtons[i]->getToggleState())
+                // ── Selection indicators ──
+                if (isSelected)
                 {
                     g.setColour (palette.padSelectedIndicator);
                     g.fillEllipse (r.getX() + 8.0f, r.getBottom() - 14.0f, 5.0f, 5.0f);

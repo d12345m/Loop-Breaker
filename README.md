@@ -67,9 +67,3 @@ The [documentation index](docs/README.md) links to the user guide, DSP architect
 - `Installer/` — macOS packaging scripts and resources
 - `website/` — static project website
 - `docs/` — project documentation
-
-## License
-
-Copyright (c) 2026 Glow Machine Audio.
-
-Loop Breaker is licensed under the [GNU General Public License, version 3](LICENSE) (`GPL-3.0-only`). The repository includes third-party submodules and bundled fonts under their own licenses; retain their included license and attribution files when redistributing builds.

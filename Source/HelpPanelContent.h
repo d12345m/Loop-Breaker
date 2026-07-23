@@ -375,24 +375,16 @@ private:
             contentHolder.sections.push_back(s);
         }
 
-        // ---- Version / licensing ----
+        // ---- Version / about ----
         {
             Section s;
-            s.heading = "About & License";
+            s.heading = "About";
             s.table = {
                 { "Version",     LOOP_BREAKER_VERSION },
                 { "Built",       LOOP_BREAKER_BUILD_TIMESTAMP },
-                { "License",     "GNU GPL v3 or later" },
             };
             s.body =
-                "Copyright (C) 2025-2026 Glow Machine, LLC.\n\n"
-                "Loop Breaker is free software: you can redistribute it and/or modify it under "
-                "the terms of the GNU General Public License as published by the Free Software "
-                "Foundation, either version 3 of the License, or (at your option) any later version.\n\n"
-                "Loop Breaker is distributed without any warranty; without even the implied "
-                "warranty of merchantability or fitness for a particular purpose. The complete "
-                "license is included in the source distribution as LICENSE and is available at "
-                "gnu.org/licenses/gpl-3.0.html.";
+                "Copyright (C) 2025-2026 Glow Machine, LLC.";
             contentHolder.sections.push_back(s);
         }
 

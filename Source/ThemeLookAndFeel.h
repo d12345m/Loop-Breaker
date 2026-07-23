@@ -126,7 +126,7 @@ public:
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    //  drawRotarySlider — arc + dot indicator + center gradient
+    //  drawRotarySlider — arc + dot indicator + flat center
     // ──────────────────────────────────────────────────────────────────────
 
     void drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height,
@@ -138,6 +138,9 @@ public:
         const float centreX = (float) x + (float) width  * 0.5f;
         const float centreY = (float) y + (float) height * 0.5f;
         const float angle   = rotaryStartAngle + sliderPosProportional * (rotaryEndAngle - rotaryStartAngle);
+        const auto knobFill = slider.isColourSpecified (juce::Slider::rotarySliderFillColourId)
+                                ? slider.findColour (juce::Slider::rotarySliderFillColourId)
+                                : palette.knobFill;
 
         // Track arc (background)
         const float arcWidth = 3.0f;
@@ -154,17 +157,14 @@ public:
             juce::Path fillArc;
             fillArc.addCentredArc (centreX, centreY, radius, radius, 0.0f,
                                    rotaryStartAngle, angle, true);
-            g.setColour (palette.knobFill);
+            g.setColour (knobFill);
             g.strokePath (fillArc, juce::PathStrokeType (arcWidth, juce::PathStrokeType::curved,
                                                           juce::PathStrokeType::rounded));
         }
 
-        // Center circle fill — radial gradient for depth
+        // Flat center keeps the rotary controls aligned with the app's graphic language.
         const float innerRadius = radius * 0.62f;
-        juce::ColourGradient centerGrad (palette.panel, centreX, centreY,
-                                         palette.panelAlt, centreX + innerRadius, centreY + innerRadius,
-                                         true);
-        g.setGradientFill (centerGrad);
+        g.setColour (palette.panelAlt);
         g.fillEllipse (centreX - innerRadius, centreY - innerRadius,
                        innerRadius * 2.0f, innerRadius * 2.0f);
 
@@ -174,7 +174,7 @@ public:
             const float dotDist   = innerRadius * 0.65f;
             const float dx = centreX + dotDist * std::cos (angle - juce::MathConstants<float>::halfPi);
             const float dy = centreY + dotDist * std::sin (angle - juce::MathConstants<float>::halfPi);
-            g.setColour (palette.knobFill);
+            g.setColour (knobFill);
             g.fillEllipse (dx - dotRadius, dy - dotRadius, dotRadius * 2.0f, dotRadius * 2.0f);
         }
 

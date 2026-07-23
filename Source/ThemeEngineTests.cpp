@@ -85,25 +85,17 @@ public:
             expectWithinAbsoluteError (marathon->borderRadius, 1.0f, 0.001f);
         }
 
-        beginTest ("Orange themes preserve the colour-field and white-control treatment");
-        const auto* deepOrange = engine.getBuiltInPalette ("Deep Orange");
-        expect (deepOrange != nullptr);
-        if (deepOrange != nullptr)
+        beginTest ("Orange Chaos has intentional high-energy signals");
+        const auto* orangeChaos = engine.getBuiltInPalette ("Orange Chaos (Wild)");
+        expect (orangeChaos != nullptr);
+        if (orangeChaos != nullptr)
         {
-            expect (deepOrange->bg == rgb (0xB52D00));
-            expect (deepOrange->accent1 == rgb (0xFFFFFF));
-            expect (deepOrange->waveformFill == rgb (0xFFFFFF));
-            expectWithinAbsoluteError (deepOrange->borderRadius, 0.0f, 0.001f);
-        }
-
-        const auto* lightOrange = engine.getBuiltInPalette ("Light Orange");
-        expect (lightOrange != nullptr);
-        if (lightOrange != nullptr)
-        {
-            expect (lightOrange->bg == rgb (0xF26A21));
-            expect (lightOrange->accent1 == rgb (0xFFFFFF));
-            expect (lightOrange->waveformFill == rgb (0xFFFFFF));
-            expectWithinAbsoluteError (lightOrange->borderRadius, 0.0f, 0.001f);
+            expect (orangeChaos->bg == rgb (0xFF4D00));
+            expect (orangeChaos->accent1 == rgb (0xC6FF00));
+            expect (orangeChaos->accent2 == rgb (0x2AEEFF));
+            expect (orangeChaos->accent3 == rgb (0xFF3CB8));
+            expectWithinAbsoluteError (orangeChaos->glowIntensity, 1.0f, 0.001f);
+            expectWithinAbsoluteError (orangeChaos->borderRadius, 12.0f, 0.001f);
         }
 
         beginTest ("Game Boy playhead matches its visible waveform colour");
@@ -143,8 +135,7 @@ public:
             { "Toxic Sorbet (Light)", 0x00D9C7 },
             { "Marathon Acid (Dark)", 0xFF2BD6 },
             { "IIgs Writer (Blue)",   0xFF72D2 },
-            { "Deep Orange",        0xFF72D2 },
-            { "Light Orange",       0xD95CFF },
+            { "Orange Chaos (Wild)", 0xFFFD3D },
             { "Game Boy (Light)",     0xE5F25A },
             { "Gruvbox (Dark)",       0x83D8C5 },
             { "Pixel Grid (Dark)",    0x5EEBFF }

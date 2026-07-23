@@ -144,7 +144,7 @@ public:
             // Occupied slots retain a clearly filled state; the lamp is a
             // secondary cue, not the only indication that a preset exists.
             g.setColour (occupied
-                ? palette.panel.interpolatedWith (palette.accent1, 0.20f)
+                ? palette.panel.interpolatedWith (palette.accent3, 0.20f)
                 : palette.panel);
             g.fillRoundedRectangle (btnBounds, 2.0f);
 
@@ -188,7 +188,7 @@ public:
 
             if (occupied)
             {
-                g.setColour (palette.accent1);
+                g.setColour (palette.accent3);
                 g.fillEllipse (btnBounds.getRight() - 9.0f, btnBounds.getY() + 6.0f,
                                3.5f, 3.5f);
             }
@@ -273,7 +273,7 @@ public:
     }
 
     /** Trigger a transient highlight on a preset slot.
-        Save = accent1 (periwinkle), Recall = accent2 (teal). */
+        Saved state = accent3; Save = accent1, Recall = accent2. */
     void triggerHighlight(int slot, HighlightType type)
     {
         if (slot < 0 || slot >= kNumSlots) return;

@@ -741,9 +741,9 @@ private:
     void applyThemeColors()
     {
         // Master volume knob
-        masterVolumeSlider.setColour(juce::Slider::rotarySliderFillColourId, Theme::accent());
+        masterVolumeSlider.setColour(juce::Slider::rotarySliderFillColourId, Theme::warn());
         masterVolumeSlider.setColour(juce::Slider::rotarySliderOutlineColourId, Theme::panelAlt());
-        masterVolumeSlider.setColour(juce::Slider::thumbColourId, Theme::accent().brighter(0.2f));
+        masterVolumeSlider.setColour(juce::Slider::thumbColourId, Theme::warn());
         masterVolumeSlider.setColour(juce::Slider::textBoxBackgroundColourId, Theme::panelAlt());
         masterVolumeSlider.setColour(juce::Slider::textBoxTextColourId, Theme::text());
         masterVolumeSlider.setColour(juce::Slider::textBoxOutlineColourId, Theme::border());

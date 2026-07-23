@@ -23,6 +23,17 @@ static juce::Colour hexA (juce::uint32 rgb, float alpha)
     return hex (rgb).withAlpha (alpha);
 }
 
+static juce::String canonicalThemeName (const juce::String& name)
+{
+    if (name == "Control Surface (Light)" || name.startsWith ("Control Surface /"))
+        return "Control Surface";
+
+    if (name == "Basic Light" || name == "Basic Dark")
+        return "Control Surface";
+
+    return name;
+}
+
 // ─── ThemePalette::getColor ──────────────────────────────────────────────────
 
 juce::Colour ThemePalette::getColor (ColorRole role) const
@@ -234,90 +245,94 @@ static ThemePalette makePixelGrid()
     return p;
 }
 
-static ThemePalette makeBasicDark()
+static ThemePalette makeMarathonAcid()
 {
     ThemePalette p;
-    p.name          = "Basic Dark";
+    p.name          = "Marathon Acid (Dark)";
 
-    p.bg            = hex (0x181A1D);
-    p.bgAlt         = hex (0x202328);
-    p.panel         = hex (0x272B30);
-    p.panelAlt      = hex (0x30353B);
+    // Near-black tactical hardware, electric indigo panels, and the
+    // unmistakable acid-lime / magenta / cyan signal palette.
+    p.bg            = hex (0x05060D);
+    p.bgAlt         = hex (0x0C0E29);
+    p.panel         = hex (0x111442);
+    p.panelAlt      = hex (0x20245F);
 
-    p.border        = hex (0x555B63);
-    p.borderGlow    = hex (0x6EA8FE);
+    p.border        = hex (0x5963C7);
+    p.borderGlow    = hex (0xB7FF00);
 
-    p.textPrimary   = hex (0xF1F3F5);
-    p.textSecondary = hex (0xA1A7AF);
-    p.textOnAccent  = hex (0x101214);
+    p.textPrimary   = hex (0xF7F8FF);
+    p.textSecondary = hex (0xB9C0FF);
+    p.textOnAccent  = hex (0x080A0D);
 
-    p.accent1       = hex (0x6EA8FE);
-    p.accent2       = hex (0x63C5A8);
-    p.accent3       = hex (0xC89BE8);
+    p.accent1       = hex (0xB7FF00);
+    p.accent2       = hex (0xFF2BD6);
+    p.accent3       = hex (0x00E5FF);
 
-    p.good          = hex (0x63C174);
-    p.warn          = hex (0xE2B95B);
-    p.bad           = hex (0xE06C75);
+    p.good          = hex (0x5CFF9D);
+    p.warn          = hex (0xFFE45C);
+    p.bad           = hex (0xFF315D);
 
-    p.knobFill      = hex (0x6EA8FE);
-    p.knobTrack     = hex (0x3A4047);
-    p.waveformFill  = hex (0xDDE7F5);
-    p.playhead      = hex (0x6EA8FE);
+    p.knobFill      = hex (0xB7FF00);
+    p.knobTrack     = hex (0x292E70);
+    p.waveformFill  = hex (0x00E5FF);
+    p.playhead      = hex (0xFF2BD6);
 
-    p.padEmpty      = hex (0x202328);
-    p.padLoaded     = hex (0x101214);
-    p.padSelected   = hexA (0xDCEBFF, 0.28f);
+    p.padEmpty      = hex (0x0D0F2B);
+    p.padLoaded     = hex (0x020307);
+    p.padSelected   = hexA (0xB7FF00, 0.26f);
     p.padSelectedIndicator = p.accent1;
-    p.padFlash      = hex (0x26D9C2);
-    p.padPlaying    = hex (0x63C174);
+    p.padFlash      = p.accent2;
+    p.padPlaying    = p.accent3;
 
-    p.glowIntensity = 0.0f;
-    p.borderRadius  = 2.0f;
+    p.glowIntensity = 1.0f;
+    p.borderRadius  = 1.0f;
 
     return p;
 }
 
 // ─── Light mode themes ───────────────────────────────────────────────────────
 
-static ThemePalette makeBasicLight()
+static ThemePalette makeToxicSorbet()
 {
     ThemePalette p;
-    p.name          = "Basic Light";
+    p.name          = "Toxic Sorbet (Light)";
 
-    p.bg            = hex (0xF2F3F5);
-    p.bgAlt         = hex (0xE5E7EA);
-    p.panel         = hex (0xFFFFFF);
-    p.panelAlt      = hex (0xECEEF1);
+    // Bubblegum shell, ultraviolet ink, tangerine playheads, and cyan flashes:
+    // a deliberately loud candy-coated instrument panel.
+    p.bg            = hex (0xFF9BD7);
+    p.bgAlt         = hex (0xF36DC1);
+    p.panel         = hex (0xFFD6EF);
+    p.panelAlt      = hex (0xFFB4DE);
 
-    p.border        = hex (0xAEB3BA);
-    p.borderGlow    = hex (0x356FC0);
+    p.border        = hex (0x7A155A);
+    p.borderGlow    = hex (0x4C00CC);
 
-    p.textPrimary   = hex (0x202328);
-    p.textSecondary = hex (0x646A73);
-    p.textOnAccent  = hex (0xFFFFFF);
+    p.textPrimary   = hex (0x260018);
+    p.textSecondary = hex (0x60103F);
+    p.textOnAccent  = hex (0xFFF8FC);
 
-    p.accent1       = hex (0x356FC0);
-    p.accent2       = hex (0x2B8A6E);
-    p.accent3       = hex (0xA8568A);
+    p.accent1       = hex (0x4C00CC);
+    p.accent2       = hex (0xFF3B00);
+    p.accent3       = hex (0x007D8A);
 
-    p.good          = hex (0x388A34);
-    p.warn          = hex (0xB46C00);
-    p.bad           = hex (0xC52317);
+    p.good          = hex (0x006B4F);
+    p.warn          = hex (0x8A3E00);
+    p.bad           = hex (0xB0003A);
 
-    p.knobFill      = hex (0x356FC0);
-    p.knobTrack     = hex (0xCDD1D6);
-    p.waveformFill  = hex (0xE8EDF5);
-    p.playhead      = hex (0x356FC0);
+    p.knobFill      = hex (0x4C00CC);
+    p.knobTrack     = hex (0xE975B8);
+    p.waveformFill  = hex (0xFFD447);
+    p.playhead      = hex (0xFF3B00);
 
-    p.padEmpty      = hex (0xECEEF1);
-    p.padLoaded     = hex (0x202328);
-    p.padSelected   = hexA (0xF5FAFF, 0.35f);
+    p.padEmpty      = hex (0xFFB8E0);
+    p.padLoaded     = hex (0x46002D);
+    p.padSelected   = hexA (0xFFFFFF, 0.32f);
     p.padSelectedIndicator = p.accent1;
-    p.padFlash      = hex (0x2997FF);
-    p.padPlaying    = hex (0x2B8A6E);
+    p.padFlash      = hex (0x00D9C7);
+    p.padPlaying    = p.accent1;
 
-    p.glowIntensity = 0.0f;
-    p.borderRadius  = 2.0f;
+    p.glowIntensity = 0.75f;
+    p.borderRadius  = 9.0f;
 
     return p;
 }
@@ -655,7 +670,7 @@ static ThemePalette makeGameBoy()
     p.knobFill      = hex (0x306230);
     p.knobTrack     = hex (0x8BAC0F);
     p.waveformFill  = hex (0x9BBC0F);
-    p.playhead      = hex (0x0F380F);
+    p.playhead      = p.waveformFill;
 
     p.padEmpty      = hex (0x8BAC0F);
     p.padLoaded     = hex (0x0F380F);
@@ -679,8 +694,8 @@ ThemeEngine::ThemeEngine()
     // Control Surface is intentionally first: it is the product default and
     // the visual baseline. The remaining list stays short and distinct.
     builtInPalettes.push_back (makeControlSurface());
-    builtInPalettes.push_back (makeBasicLight());
-    builtInPalettes.push_back (makeBasicDark());
+    builtInPalettes.push_back (makeToxicSorbet());
+    builtInPalettes.push_back (makeMarathonAcid());
     builtInPalettes.push_back (makeIIgsWriter());
     builtInPalettes.push_back (makeGameBoy());
     builtInPalettes.push_back (makeGruvbox());
@@ -715,10 +730,7 @@ juce::Colour ThemeEngine::overlay (float alpha)
 
 void ThemeEngine::setTheme (const juce::String& themeName)
 {
-    const auto requestedName = (themeName == "Control Surface (Light)"
-                                || themeName.startsWith ("Control Surface /"))
-                                   ? juce::String ("Control Surface")
-                                   : themeName;
+    const auto requestedName = canonicalThemeName (themeName);
 
     for (const auto& palette : builtInPalettes)
     {
@@ -770,10 +782,7 @@ juce::StringArray ThemeEngine::getAvailableThemeNames() const
 
 const ThemePalette* ThemeEngine::getBuiltInPalette (const juce::String& name) const
 {
-    const auto requestedName = (name == "Control Surface (Light)"
-                                || name.startsWith ("Control Surface /"))
-                                   ? juce::String ("Control Surface")
-                                   : name;
+    const auto requestedName = canonicalThemeName (name);
 
     for (const auto& p : builtInPalettes)
         if (p.name.equalsIgnoreCase (requestedName))

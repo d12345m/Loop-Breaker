@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create New Theme"
+  short_description: "Design and wire a Loop Breaker theme"
+  default_prompt: "Use $create-new-theme to add a bold new visual theme to Loop Breaker."

@@ -627,7 +627,7 @@ def build_manual():
         "Available themes:"
     )
     themes = [
-        "Control Surface (Light)", "Basic Light", "Basic Dark", "IIgs Writer (Blue)",
+        "Control Surface", "Toxic Sorbet (Light)", "Marathon Acid (Dark)", "IIgs Writer (Blue)",
         "Game Boy (Light)", "Gruvbox (Dark)", "Pixel Grid (Dark)"
     ]
     for t in themes:
@@ -1009,9 +1009,9 @@ def build_manual():
 
     pdf.chapter_title("Available Themes", level=2)
     theme_descs = [
-        ("Control Surface (Light)", "The default warm-ivory instrument panel with vermilion, blue, violet, and signal-green markings."),
-        ("Basic Light", "A quiet neutral light theme with a conventional blue accent."),
-        ("Basic Dark", "A restrained charcoal theme with soft white text and a conventional blue accent."),
+        ("Control Surface", "The default warm-ivory instrument panel with vermilion, blue, violet, and signal-green markings."),
+        ("Toxic Sorbet (Light)", "A candy-coated collision of bubblegum pink, ultraviolet, tangerine, cyan, and custard yellow."),
+        ("Marathon Acid (Dark)", "Tactical near-black and electric indigo punched through with acid lime, hot magenta, and cyan signals."),
         ("IIgs Writer (Blue)", "A high-contrast blue screen with white monospaced text, inspired by late-1980s IIgs word processors."),
         ("Game Boy (Light)", "A four-tone green LCD palette framed by a muted beige shell, with pixel typography."),
         ("Gruvbox (Dark)", "A flatter, high-contrast refinement of the warm retro Gruvbox palette."),

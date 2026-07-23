@@ -1178,10 +1178,10 @@ void BufferTestAudioProcessor::setStateInformation (const void* data, int sizeIn
     if (obj->hasProperty ("windowLayoutMode"))
         app.settings.windowLayoutMode = static_cast<WindowLayoutMode> (
             juce::jlimit (0, 1, static_cast<int> (obj->getProperty ("windowLayoutMode"))));
-    if (app.settings.themeName == "Control Surface (Light)"
-        || app.settings.themeName.startsWith ("Control Surface /"))
-        app.settings.themeName = "Control Surface";
-    if (ThemeEngine::getInstance().getBuiltInPalette (app.settings.themeName) == nullptr)
+    if (const auto* restoredPalette =
+            ThemeEngine::getInstance().getBuiltInPalette (app.settings.themeName))
+        app.settings.themeName = restoredPalette->name;
+    else
         app.settings.themeName = "Control Surface";
     // Motion was historically default-off while its controls were hidden.
     // Treat state without the version marker as legacy and opt it into the

@@ -36,6 +36,10 @@ public:
         beginTest ("Control Surface is the sole canonical control-surface theme");
         expect (names.contains ("Control Surface"));
         expect (! names.contains ("Control Surface (Light)"));
+        expect (names.contains ("Toxic Sorbet (Light)"));
+        expect (names.contains ("Marathon Acid (Dark)"));
+        expect (! names.contains ("Basic Light"));
+        expect (! names.contains ("Basic Dark"));
         for (const auto& name : names)
             expect (! name.startsWith ("Control Surface /"));
 
@@ -53,6 +57,42 @@ public:
         expect (engine.getBuiltInPalette ("Control Surface (Light)") == controlSurface);
         expect (engine.getBuiltInPalette ("Control Surface / Nostromo Bone") == controlSurface);
         expect (engine.getBuiltInPalette ("Control Surface / Amber Instrument") == controlSurface);
+
+        beginTest ("Retired basic theme names migrate to the product default");
+        expect (engine.getBuiltInPalette ("Basic Light") == controlSurface);
+        expect (engine.getBuiltInPalette ("Basic Dark") == controlSurface);
+
+        beginTest ("Replacement themes keep their signature colours and geometry");
+        const auto* sorbet = engine.getBuiltInPalette ("Toxic Sorbet (Light)");
+        expect (sorbet != nullptr);
+        if (sorbet != nullptr)
+        {
+            expect (sorbet->bg == rgb (0xFF9BD7));
+            expect (sorbet->accent1 == rgb (0x4C00CC));
+            expect (sorbet->waveformFill == rgb (0xFFD447));
+            expectWithinAbsoluteError (sorbet->glowIntensity, 0.75f, 0.001f);
+            expectWithinAbsoluteError (sorbet->borderRadius, 9.0f, 0.001f);
+        }
+
+        const auto* marathon = engine.getBuiltInPalette ("Marathon Acid (Dark)");
+        expect (marathon != nullptr);
+        if (marathon != nullptr)
+        {
+            expect (marathon->bg == rgb (0x05060D));
+            expect (marathon->accent1 == rgb (0xB7FF00));
+            expect (marathon->accent2 == rgb (0xFF2BD6));
+            expectWithinAbsoluteError (marathon->glowIntensity, 1.0f, 0.001f);
+            expectWithinAbsoluteError (marathon->borderRadius, 1.0f, 0.001f);
+        }
+
+        beginTest ("Game Boy playhead matches its visible waveform colour");
+        const auto* gameBoy = engine.getBuiltInPalette ("Game Boy (Light)");
+        expect (gameBoy != nullptr);
+        if (gameBoy != nullptr)
+        {
+            expect (gameBoy->waveformFill == rgb (0x9BBC0F));
+            expect (gameBoy->playhead == gameBoy->waveformFill);
+        }
 
         beginTest ("Every theme brightens loaded and empty pads when selected");
         for (const auto& name : names)
@@ -78,13 +118,13 @@ public:
         };
 
         constexpr ExpectedFlash expected[] {
-            { "Control Surface",    0xF36A2D },
-            { "Basic Light",        0x2997FF },
-            { "Basic Dark",         0x26D9C2 },
-            { "IIgs Writer (Blue)", 0xFF72D2 },
-            { "Game Boy (Light)",   0xE5F25A },
-            { "Gruvbox (Dark)",     0x83D8C5 },
-            { "Pixel Grid (Dark)",  0x5EEBFF }
+            { "Control Surface",      0xF36A2D },
+            { "Toxic Sorbet (Light)", 0x00D9C7 },
+            { "Marathon Acid (Dark)", 0xFF2BD6 },
+            { "IIgs Writer (Blue)",   0xFF72D2 },
+            { "Game Boy (Light)",     0xE5F25A },
+            { "Gruvbox (Dark)",       0x83D8C5 },
+            { "Pixel Grid (Dark)",    0x5EEBFF }
         };
 
         for (const auto& item : expected)

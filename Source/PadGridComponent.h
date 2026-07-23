@@ -277,6 +277,7 @@ private:
     std::array<bool, numPads> playingStates { {false,false,false,false,false,false,false,false} };
     std::array<ModifierStickerOverlay::Mask, numPads> activeStickerMasks {};
     std::array<ModifierStickerOverlay::Mask, numPads> transientStickerMasks {};
+    float stickerGlyphPhase = 0.0f;
     std::array<std::array<double, static_cast<size_t>(ModifierType::Unknown)>,
                numPads> transientStickerExpiryMs {};
     // Bottom row left->right = 36-39 (pads 1-4, idx 0-3), top row left->right = 40-43 (pads 5-8, idx 4-7)
@@ -774,9 +775,12 @@ private:
                                             & momentaryEffectBits);
                     const auto active = activeStickerMasks[(size_t)i]
                                       | transientStickerMasks[(size_t)i];
+                    const auto& animation =
+                        ThemeEngine::getInstance().getAnimationConfig();
                     ModifierStickerOverlay::draw(
                         g, inner, active, transient,
-                        ControlSurfacePalette::fromTheme(palette));
+                        ControlSurfacePalette::fromTheme(palette),
+                        stickerGlyphPhase, ! animation.enabled);
                 }
 
                 // ── File drag hover ──
@@ -839,6 +843,7 @@ private:
     {
         const double dt = 1.0 / 15.0;  // matches 15 Hz timer
         bool any = false;
+        bool anyStickerVisible = false;
         const double nowMs = juce::Time::getMillisecondCounterHiRes();
         for (int i = 0; i < numPads; ++i)
         {
@@ -863,6 +868,22 @@ private:
                 expiry = 0.0;
                 any = true;
             }
+
+            anyStickerVisible = anyStickerVisible
+                             || activeStickerMasks[(size_t)i] != 0
+                             || transientStickerMasks[(size_t)i] != 0;
+        }
+
+        const auto& stickerAnimation =
+            ThemeEngine::getInstance().getAnimationConfig();
+        if (anyStickerVisible && stickerAnimation.enabled)
+        {
+            // Match the main glyph display's approximately two-second cycle.
+            stickerGlyphPhase += static_cast<float>(
+                dt * 0.5 * static_cast<double>(stickerAnimation.animationSpeed));
+            if (stickerGlyphPhase >= 1.0f)
+                stickerGlyphPhase -= 1.0f;
+            any = true;
         }
 
         // Advance marching-ants offset for MIDI learn borders

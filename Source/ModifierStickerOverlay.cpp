@@ -87,7 +87,9 @@ void ModifierStickerOverlay::draw (juce::Graphics& graphics,
                                    juce::Rectangle<float> aperture,
                                    Mask activeMask,
                                    Mask transientMask,
-                                   const ControlSurfacePalette& palette)
+                                   const ControlSurfacePalette& palette,
+                                   float animationPhase01,
+                                   bool reducedMotion)
 {
     if (aperture.isEmpty() || activeMask == 0)
         return;
@@ -114,7 +116,7 @@ void ModifierStickerOverlay::draw (juce::Graphics& graphics,
         graphics.fillRoundedRectangle (chip, cornerRadius);
 
         const auto face = chip.reduced (borderWidth);
-        graphics.setColour (palette.raisedTile);
+        graphics.setColour (palette.raisedTile.withAlpha (0.5f));
         graphics.fillRoundedRectangle (face, juce::jmax (0.5f, cornerRadius - borderWidth));
 
         graphics.setColour (isTransient
@@ -126,10 +128,10 @@ void ModifierStickerOverlay::draw (juce::Graphics& graphics,
 
         ModifierGlyphState glyphState;
         glyphState.descriptor = ModifierRegistry::makeDescriptor (type);
-        glyphState.phase01 = ModifierRegistry::get (type).representativeGlyphPhase01;
+        glyphState.phase01 = animationPhase01;
         glyphState.emphasis01 = 0.96f;
         glyphState.compact = true;
-        glyphState.reducedMotion = true;
+        glyphState.reducedMotion = reducedMotion;
 
         const float glyphInset = juce::jmax (1.0f, shortSide * 0.14f);
         ModifierGlyphRenderer::draw (graphics, face.reduced (glyphInset),

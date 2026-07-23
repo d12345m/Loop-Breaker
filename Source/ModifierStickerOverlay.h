@@ -39,5 +39,7 @@ public:
                       juce::Rectangle<float> aperture,
                       Mask activeMask,
                       Mask transientMask,
-                      const ControlSurfacePalette& palette);
+                      const ControlSurfacePalette& palette,
+                      float animationPhase01 = 0.0f,
+                      bool reducedMotion = true);
 };

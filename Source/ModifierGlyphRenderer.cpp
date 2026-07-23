@@ -138,21 +138,22 @@ juce::Path wavePath (const GlyphCanvas& c, float left, float right, float centre
     return path;
 }
 
-juce::Path irregularArc (const GlyphCanvas& c, float cx, float cy, float radius,
-                         float wobble, float phase, float startAngle, float endAngle)
+juce::Path irregularRing (const GlyphCanvas& c, float cx, float cy, float radius,
+                          float wobble, float phase)
 {
     juce::Path path;
     constexpr int points = 64;
     for (int i = 0; i <= points; ++i)
     {
         const float t = static_cast<float> (i) / static_cast<float> (points);
-        const float a = startAngle + (endAngle - startAngle) * t;
+        const float a = t * juce::MathConstants<float>::twoPi;
         const float r = radius
                       + std::sin (a * 3.0f + phase * juce::MathConstants<float>::twoPi) * wobble
                       + std::sin (a * 5.0f - phase * juce::MathConstants<float>::twoPi) * wobble * 0.22f;
         const auto point = c.pt (cx + std::cos (a) * r, cy + std::sin (a) * r);
         if (i == 0) path.startNewSubPath (point); else path.lineTo (point);
     }
+    path.closeSubPath();
     return path;
 }
 
@@ -272,15 +273,10 @@ void drawPitch (GlyphCanvas& c, float phase, bool up)
     }
     c.colour (c.p.ink);
     c.machineStroke (steps, 2.3f);
-    constexpr float upperRegisterY = 13.0f;
-    constexpr float lowerRegisterY = 87.0f;
-    const float registerY = up ? upperRegisterY : lowerRegisterY;
-    const float destinationX = 18.0f + stepCount * stepWidth;
     const float destinationY = (up ? 72.0f : 28.0f) + direction * stepCount * stepHeight;
+    const float registerY = destinationY + direction * 7.0f;
     c.colour (c.p.mutedInk);
-    c.line (destinationX, destinationY, destinationX, registerY, 1.4f);
-    c.line (destinationX - 17.0f, registerY, destinationX + 4.0f, registerY, 1.2f);
-    c.terminal (destinationX + 4.0f, registerY, 0.0f, c.p.ink, 7.0f, 1.4f);
+    c.line (14.0f, registerY, 88.0f, registerY, 1.15f);
     const float travel = wrapped (phase) * static_cast<float> (stepCount);
     const int step = juce::jlimit (0, stepCount - 1, static_cast<int> (travel));
     const float signalX = 18.0f + stepWidth * (static_cast<float> (step) + 0.5f);
@@ -394,22 +390,29 @@ void drawSliceBlocks (GlyphCanvas& c, float phase, ModifierType type, const Modi
 
     if (! repeatMode)
     {
-        constexpr float heights[] = { 35.0f, 50.0f, 31.0f, 45.0f, 38.0f, 54.0f, 33.0f };
-        const float gap = c.compact ? 3.3f : 3.8f;
-        const float width = c.compact ? 8.5f : 7.0f;
-        const float totalWidth = count * width + (count - 1) * gap;
-        const float left = 50.0f - totalWidth * 0.5f;
-        for (int i = 0; i < count; ++i)
-        {
-            const float height = heights[i];
-            c.filledRect (left + i * (width + gap), 71.0f - height,
-                          width, height,
-                          i == active ? c.p.vermilion : c.p.ink,
-                          i == active ? 1.0f : 0.78f);
-        }
+        const float span = c.compact ? 68.0f : 76.0f;
+        const float left = 50.0f - span * 0.5f;
+        const float gap = c.compact ? 3.2f : 2.5f;
+        const float width = (span - gap * (count - 1)) / static_cast<float> (count);
+        constexpr float top = 38.0f;
+        constexpr float height = 32.0f;
 
         c.colour (c.p.mutedInk);
-        c.line (left - 3.0f, 78.0f, left + totalWidth + 3.0f, 78.0f, 1.1f);
+        c.line (left - 2.0f, 79.0f, left + span + 2.0f, 79.0f, 1.15f);
+        c.terminal (left - 2.0f, 79.0f, 0.0f, c.p.ink, 6.0f, 1.3f);
+        c.terminal (left + span + 2.0f, 79.0f, 0.0f, c.p.ink, 6.0f, 1.3f);
+
+        for (int i = 0; i < count; ++i)
+        {
+            const float x = left + i * (width + gap);
+            const bool selected = i == active;
+            c.filledRect (x, top, width, height,
+                          selected ? c.p.vermilion : c.p.ink,
+                          selected ? 1.0f : 0.78f);
+            c.dot (x + width * 0.5f, 79.0f,
+                   selected ? 2.8f : 1.35f,
+                   selected ? c.p.vermilion : c.p.mutedInk);
+        }
         return;
     }
 
@@ -636,25 +639,19 @@ void drawDubDelay (GlyphCanvas& c, float phase, const ModifierDescriptor& descri
 void drawReverb (GlyphCanvas& c, float phase)
 {
     const int contourCount = c.compact ? 3 : 4;
-    constexpr float centreX = 48.0f;
-    constexpr float centreY = 51.0f;
-    constexpr float start = 0.34f;
-    constexpr float end = juce::MathConstants<float>::twoPi - 0.42f;
+    constexpr float centreX = 50.0f;
+    constexpr float centreY = 50.0f;
     for (int i = contourCount - 1; i >= 0; --i)
     {
         const float radius = 11.0f + i * (c.compact ? 10.0f : 9.0f);
         c.colour (i == 0 ? c.p.ink : c.p.mutedInk, 0.96f - i * 0.12f);
-        c.stroke (irregularArc (c, centreX, centreY, radius,
-                                0.55f + i * 0.28f, phase + i * 0.13f,
-                                start, end),
+        c.stroke (irregularRing (c, centreX, centreY, radius,
+                                 0.55f + i * 0.28f, phase + i * 0.13f),
                   i == 0 ? 2.2f : 1.55f);
     }
 
     c.ring (centreX, centreY, 5.0f, c.p.vermilion, 2.0f);
     c.dot (centreX, centreY, 2.2f, c.p.vermilion);
-    c.colour (c.p.vermilion);
-    c.line (79.0f, 39.0f, 86.0f, 36.0f, 2.0f);
-    c.terminal (86.0f, 36.0f, -0.38f, c.p.ink, 6.0f, 1.2f);
 }
 
 void drawFilter (GlyphCanvas& c, float phase, bool highPass, bool sampleHold, bool master)
@@ -705,13 +702,11 @@ void drawFilter (GlyphCanvas& c, float phase, bool highPass, bool sampleHold, bo
                               i == activeSample ? 1.0f : 0.72f);
         }
 
-        // A short mirrored filter fin acts as a family badge.  It avoids the
-        // visual language of a prohibition slash through the held signal.
+        // Match the standard filters: one centred cutoff line, mirrored for
+        // low-pass and high-pass.
         c.colour (c.p.vermilion);
-        c.line (77.0f, highPass ? 68.0f : 32.0f,
-                89.0f, highPass ? 45.0f : 55.0f, 2.8f);
-        c.terminal (89.0f, highPass ? 45.0f : 55.0f,
-                    highPass ? -1.09f : 1.09f, c.p.ink, 6.0f, 1.3f);
+        c.line (23.0f, highPass ? 76.0f : 24.0f,
+                77.0f, highPass ? 24.0f : 76.0f, 2.5f);
         return;
     }
 
@@ -721,22 +716,41 @@ void drawFilter (GlyphCanvas& c, float phase, bool highPass, bool sampleHold, bo
     const float stepHeight = c.compact ? 13.0f : 9.0f;
     const float direction = highPass ? -1.0f : 1.0f;
     float y = highPass ? 72.0f : 28.0f;
+
+    juce::Path terrain;
+    terrain.startNewSubPath (c.pt (left, y));
     for (int i = 0; i < stepCount; ++i)
     {
-        const bool passed = highPass ? i >= stepCount / 2 : i <= stepCount / 2;
-        c.colour (passed ? c.p.ink : c.p.mutedInk, passed ? 1.0f : 0.65f);
-        const float x0 = left + i * stepWidth;
-        c.line (x0, y, x0 + stepWidth, y, passed ? 2.2f : 1.5f);
-        c.line (x0 + stepWidth, y, x0 + stepWidth, y + direction * stepHeight,
-                passed ? 2.0f : 1.35f);
+        const float nextX = left + (i + 1) * stepWidth;
+        terrain.lineTo (c.pt (nextX, y));
         y += direction * stepHeight;
+        terrain.lineTo (c.pt (nextX, y));
     }
+    c.colour (c.p.ink);
+    c.machineStroke (terrain, 2.0f);
 
-    const float sweep = (triangle (phase) - 0.5f) * 5.0f;
-    c.colour (c.p.vermilion);
-    c.line (32.0f, highPass ? 70.0f - sweep : 30.0f + sweep,
-            69.0f, highPass ? 33.0f + sweep : 67.0f - sweep, 2.7f);
-    c.dot (50.5f, 51.5f, c.compact ? 2.2f : 2.8f, c.p.vermilion);
+    const float edgeLeft = master ? 27.0f : 23.0f;
+    const float edgeRight = master ? 73.0f : 77.0f;
+    const float edgeTop = 24.0f;
+    const float edgeBottom = 76.0f;
+    if (! highPass && ! master)
+    {
+        c.colour (c.p.vermilion);
+        c.line (edgeLeft, edgeTop, edgeRight, edgeBottom, 2.5f);
+    }
+    else
+    {
+        c.colour (c.p.vermilion);
+        c.line (edgeLeft, highPass ? edgeBottom : edgeTop,
+                edgeRight, highPass ? edgeTop : edgeBottom, 2.5f);
+
+        const float beadTravel = 0.24f + triangle (phase) * 0.52f;
+        const float beadX = edgeLeft + (edgeRight - edgeLeft) * beadTravel;
+        const float beadY = (highPass ? edgeBottom : edgeTop)
+                          + ((highPass ? edgeTop : edgeBottom)
+                             - (highPass ? edgeBottom : edgeTop)) * beadTravel;
+        c.dot (beadX, beadY, c.compact ? 2.2f : 2.7f, c.p.vermilion);
+    }
 
     if (master)
     {
@@ -835,30 +849,57 @@ void drawVolumeRamp (GlyphCanvas& c, float phase)
 void drawTremolo (GlyphCanvas& c, float phase)
 {
     c.colour (c.p.mutedInk);
-    c.line (17.0f, 50.0f, 89.0f, 50.0f, 1.0f);
+    c.line (18.0f, 50.0f, 88.0f, 50.0f, 1.0f);
 
     juce::Path modulated;
     constexpr int points = 72;
-    const float depth = 0.55f + triangle (phase) * 0.45f;
+    const float cycle = wrapped (phase);
     for (int i = 0; i <= points; ++i)
     {
         const float t = static_cast<float> (i) / static_cast<float> (points);
-        const float halfWave = std::floor (t * 7.0f);
-        const float alternating = static_cast<int> (halfWave) % 2 == 0 ? 1.0f : 0.52f;
-        const float y = 50.0f + std::sin (t * 7.0f * juce::MathConstants<float>::pi)
-                                  * 21.0f * depth * alternating;
+        const float carrier = std::sin (
+            t * 5.0f * juce::MathConstants<float>::twoPi);
+        const float lfo = 0.5f + 0.5f * std::cos (
+            (t * 2.0f - cycle) * juce::MathConstants<float>::twoPi);
+        const float amplitude = 5.0f + lfo * 15.0f;
+        const float y = 50.0f + carrier * amplitude;
         if (i == 0) modulated.startNewSubPath (c.pt (18.0f, y));
         else        modulated.lineTo (c.pt (18.0f + t * 70.0f, y));
     }
     c.colour (c.p.ink);
-    c.stroke (modulated, 2.5f);
+    c.stroke (modulated, 2.4f);
 
     c.colour (c.p.ink);
     c.line (12.0f, 29.0f, 12.0f, 71.0f, 1.7f);
     c.line (9.0f, 29.0f, 15.0f, 29.0f, 1.3f);
     c.line (9.0f, 50.0f, 15.0f, 50.0f, 1.3f);
     c.line (9.0f, 71.0f, 15.0f, 71.0f, 1.3f);
-    c.dot (12.0f, 50.0f - depth * 19.0f, c.compact ? 2.3f : 2.8f, c.p.vermilion);
+
+    const float markerPhases[] = {
+        wrapped (cycle * 0.5f + 0.25f),
+        wrapped (cycle * 0.5f + 0.75f)
+    };
+    for (int marker = 0; marker < 2; ++marker)
+    {
+        const float markerT = markerPhases[marker];
+        const float markerX = 18.0f + markerT * 70.0f;
+        const float edgeFade = juce::jlimit (
+            0.0f, 1.0f, juce::jmin (markerT, 1.0f - markerT) / 0.08f);
+        const float capWidth = c.compact ? 6.0f : 8.0f;
+        c.filledRect (markerX - capWidth * 0.5f, 18.0f,
+                      capWidth, c.compact ? 2.5f : 3.5f,
+                      c.p.vermilion, edgeFade);
+        c.filledRect (markerX - capWidth * 0.5f, c.compact ? 79.5f : 78.5f,
+                      capWidth, c.compact ? 2.5f : 3.5f,
+                      c.p.vermilion, edgeFade);
+        c.colour (c.p.vermilion, edgeFade);
+        c.line (markerX, 21.5f, markerX, 35.0f, c.compact ? 2.2f : 2.7f);
+        c.arrowHead (markerX, 40.0f, juce::MathConstants<float>::halfPi,
+                     c.compact ? 3.6f : 4.3f);
+        c.line (markerX, 65.0f, markerX, 78.5f, c.compact ? 2.2f : 2.7f);
+        c.arrowHead (markerX, 60.0f, -juce::MathConstants<float>::halfPi,
+                     c.compact ? 3.6f : 4.3f);
+    }
 }
 
 void drawChorus (GlyphCanvas& c, float phase, const ModifierDescriptor& descriptor)
@@ -970,50 +1011,60 @@ void drawGranular (GlyphCanvas& c, float phase, bool momentary, const ModifierDe
     const float sizeScale = static_cast<float> (juce::jlimit (0.75, 1.35,
         d.plannedGrainSizeMs.value_or (160.0) / 160.0));
 
-    if (momentary)
-    {
-        constexpr float plume[][2] = {
-            { 0.25f, -0.85f }, { 0.55f, -0.62f }, { 0.82f, -0.35f },
-            { 0.96f, -0.05f }, { 0.70f,  0.23f }, { 0.42f,  0.48f },
-            { 0.08f, -0.48f }, { 0.62f, -0.92f }, { 0.98f,  0.36f }
-        };
-        const float burst = c.compact ? juce::jmax (0.72f, triangle (phase))
-                                      : triangle (phase);
-        const float seedX = c.compact ? 24.0f : 28.0f;
-        const float seedY = c.compact ? 64.0f : 63.0f;
-
-        c.colour (c.p.mutedInk);
-        c.stroke (wavePath (c, c.compact ? 10.0f : 15.0f, c.compact ? 43.0f : 45.0f,
-                            seedY, c.compact ? 4.8f : 4.0f, 1.4f), 1.6f);
-        c.ring (seedX, seedY, c.compact ? 6.0f : 5.0f, c.p.vermilion, 2.0f);
-        c.dot (seedX, seedY, c.compact ? 2.6f : 2.1f, c.p.vermilion);
-
-        for (int i = 0; i < count; ++i)
-        {
-            const float distance = (c.compact ? 17.0f + i * 5.0f
-                                              : 13.0f + i * 4.0f) * burst;
-            const float px = seedX + plume[i][0] * distance;
-            const float py = seedY + plume[i][1] * distance;
-            const float opacity = 0.38f + (1.0f - burst) * 0.52f;
-            c.dot (px, py, (1.35f + (i % 3) * 0.45f) * sizeScale
-                           * (c.compact ? 1.15f : 1.0f),
-                   i == 2 || i == 7 ? c.p.vermilion : c.p.ink, opacity);
-        }
-
-        if (! c.compact)
-        {
-            c.colour (c.p.vermilion, 0.55f + burst * 0.35f);
-            c.line (34.0f, 49.0f, 38.0f + burst * 5.0f, 42.0f - burst * 3.0f, 1.4f);
-            c.line (43.0f, 57.0f, 50.0f + burst * 5.0f, 55.0f - burst * 2.0f, 1.4f);
-        }
-        return;
-    }
-
     constexpr float cloud[][2] = {
         { -27.0f, -8.0f }, { -19.0f, 14.0f }, { -11.0f, -20.0f },
         {  -3.0f, 17.0f }, {   7.0f, -12.0f }, {  16.0f, 10.0f },
         {  27.0f, -5.0f }, {  13.0f, 24.0f }, { -25.0f, 23.0f }
     };
+
+    if (momentary)
+    {
+        const float envelope = std::pow (triangle (phase), 0.72f);
+        const float spread = (c.compact ? 0.55f : 0.24f)
+                           + (c.compact ? 0.45f : 0.76f) * envelope;
+        c.colour (c.p.mutedInk);
+        c.stroke (wavePath (c, 22.0f, 78.0f, 52.0f, 5.0f, 2.0f), 1.7f);
+
+        for (int i = 0; i < count; ++i)
+        {
+            const float driftX = std::sin (
+                phase * juce::MathConstants<float>::twoPi + i * 1.7f) * 1.8f;
+            const float driftY = std::cos (
+                phase * juce::MathConstants<float>::twoPi + i * 1.1f) * 1.4f;
+            const float px = 50.0f + (cloud[i][0] + driftX) * spread;
+            const float py = 49.0f + (cloud[i][1] + driftY) * spread;
+            c.dot (px, py, (1.4f + (i % 3) * 0.45f) * sizeScale,
+                   i == 2 || i == 6 ? c.p.vermilion : c.p.ink,
+                   0.55f + envelope * 0.45f);
+        }
+
+        c.ring (50.0f, 49.0f, 4.0f + envelope * 6.0f,
+                c.p.vermilion, 1.4f, 0.88f - envelope * 0.38f);
+
+        constexpr float rayAngles[] = { -2.35f, -0.85f, 0.55f };
+        const int rayCount = c.compact ? 2 : 3;
+        const float rayRadius = (c.compact ? 12.0f : 14.0f)
+                              + envelope * (c.compact ? 18.0f : 25.0f);
+        for (int ray = 0; ray < rayCount; ++ray)
+        {
+            const float angle = rayAngles[ray];
+            const float outer = rayRadius + (c.compact ? 4.0f : 5.0f)
+                              + envelope * (c.compact ? 2.0f : 3.0f);
+            c.colour (c.p.vermilion, 0.45f + envelope * 0.45f);
+            c.line (50.0f + std::cos (angle) * rayRadius,
+                    49.0f + std::sin (angle) * rayRadius * 0.72f,
+                    50.0f + std::cos (angle) * outer,
+                    49.0f + std::sin (angle) * outer * 0.72f, 1.5f);
+        }
+
+        c.colour (c.p.ink);
+        c.line (15.0f, 27.0f, 15.0f, 36.0f, 1.5f);
+        c.line (15.0f, 27.0f, 24.0f, 27.0f, 1.5f);
+        c.line (85.0f, 66.0f, 85.0f, 75.0f, 1.5f);
+        c.line (76.0f, 75.0f, 85.0f, 75.0f, 1.5f);
+        return;
+    }
+
     c.colour (c.p.mutedInk);
     c.stroke (wavePath (c, 22.0f, 78.0f, 52.0f, 5.0f, 2.0f), 1.7f);
 

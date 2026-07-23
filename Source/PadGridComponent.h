@@ -613,27 +613,6 @@ private:
                     g.drawLine(cx, cy - plusSize * 0.5f, cx, cy + plusSize * 0.5f, 1.5f);
                 }
 
-                // ── Pad number badge (top-left) ──
-                {
-                    auto badgeRect = juce::Rectangle<float>(aperture.getX() + 4.0f, aperture.getY() + 4.0f, 20.0f, 18.0f);
-                    g.setColour(palette.accent1.withAlpha(0.30f));
-                    g.fillRoundedRectangle(badgeRect, 3.0f);
-                    g.setColour(palette.textPrimary);
-                    g.setFont(ThemeFonts::getInstance().monoBoldFont(12.0f));
-                    g.drawText(juce::String(i + 1), badgeRect, juce::Justification::centred);
-                }
-
-                // ── MIDI note badge (top-right) ──
-                if (!midiLearnActive[(size_t)i] && midiNotes[(size_t)i] >= 0)
-                {
-                    auto noteRect = juce::Rectangle<float>(aperture.getRight() - 40.0f, aperture.getY() + 4.0f, 36.0f, 18.0f);
-                    g.setColour(palette.panelAlt);
-                    g.fillRoundedRectangle(noteRect, 3.0f);
-                    g.setColour(palette.textSecondary);
-                    g.setFont(ThemeFonts::getInstance().monoFont(12.0f));
-                    g.drawText(juce::String(midiNotes[(size_t)i]), noteRect, juce::Justification::centred);
-                }
-
                 // ── Selection overlay ──
                 if (padButtons[i]->getToggleState())
                 {

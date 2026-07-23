@@ -250,15 +250,13 @@ public:
     void paint(juce::Graphics& g) override
     {
         // No opaque fill — BackgroundAnimator paints the background
-        g.setColour(Theme::border());
-        g.drawRect(getLocalBounds(), 1);
 
         // ── "LOOP BREAKER" branding in the top-left with progress fill ──
         {
             auto brandArea = brandingBounds.toFloat();
             auto wordmarkArea = brandArea;
             auto& fonts = ThemeFonts::getInstance();
-            const auto font = fonts.displayFont(30.0f);
+            const auto font = fonts.displayFont(30.0f * uiScale);
             g.setFont(font);
 
             const juce::String logoText("LOOP BREAKER");
@@ -325,6 +323,8 @@ public:
             }
 
         }
+
+        modifierDisplay.paintProgressBar (g, modifierProgressBounds.toFloat());
 
 #if JUCE_DEBUG
         // Draw MIDI note badge on modifier toggle (below the toggle)
@@ -411,55 +411,82 @@ public:
 
     void resized() override
     {
-        auto area = getLocalBounds().reduced(8);
+        const float widthScale = static_cast<float> (getWidth())
+                               / (portraitLayout ? 540.0f : 1200.0f);
+        const float heightScale = static_cast<float> (getHeight())
+                                / (portraitLayout ? 930.0f : 770.0f);
+        uiScale = juce::jlimit (0.75f, 2.0f, juce::jmin (widthScale, heightScale));
+        modifierDisplay.setUiScale (uiScale);
+        masterVolumeLabel.setFont (
+            ThemeFonts::getInstance().controlLabelFont (15.0f * uiScale));
+
+        const auto scaled = [this] (float value)
+        {
+            return juce::jmax (1, juce::roundToInt (value * uiScale));
+        };
+
+        auto area = getLocalBounds().reduced(scaled (8.0f));
 
         if (portraitLayout)
         {
-            auto brandRow = area.removeFromTop (52);
-            brandingBounds = brandRow.reduced (4, 3);
+            auto brandRow = area.removeFromTop (scaled (52.0f));
+            brandingBounds = brandRow.reduced (scaled (4.0f), scaled (3.0f));
 
 #if JUCE_DEBUG
-            auto debugArea = brandingBounds.removeFromRight (94);
-            modifiersToggle.setBounds (debugArea.reduced (2));
+            auto debugArea = brandingBounds.removeFromRight (scaled (94.0f));
+            modifiersToggle.setBounds (debugArea.reduced (scaled (2.0f)));
 #endif
 
-            area.removeFromTop (4);
-            modifierDisplay.setBounds (area.removeFromTop (116).reduced (4));
+            area.removeFromTop (scaled (4.0f));
+            auto modifierBlock = area.removeFromTop (scaled (116.0f));
+            auto modifierPanel = modifierBlock.reduced (scaled (4.0f));
+            modifierDisplay.setBounds (modifierPanel);
+            modifierProgressBounds = {
+                0, modifierPanel.getBottom(), getWidth(), scaled (3.0f)
+            };
             masterVolumeLabel.setBounds ({});
             masterVolumeSlider.setBounds ({});
 
-            area.removeFromTop (6);
-            presetBar.setBounds (area.removeFromTop (82));
+            area.removeFromTop (scaled (6.0f));
+            presetBar.setBounds (area.removeFromTop (scaled (82.0f)));
         }
         else
         {
             // ── Top bar: branding | centred modifier display | controls ──
-            auto topBar = area.removeFromTop(110);
-            const int sideW = 245;
+            auto topBar = area.removeFromTop (scaled (110.0f));
+            const int sideW = scaled (245.0f);
 
-            brandingBounds = topBar.removeFromLeft(sideW).reduced(4, 8);
+            brandingBounds = topBar.removeFromLeft(sideW).reduced (
+                scaled (4.0f), scaled (8.0f));
 
             auto controlBar = topBar.removeFromRight(sideW);
-            auto volRegion = controlBar.reduced(2);
-            auto volLabelArea = volRegion.removeFromTop(16);
+            auto volRegion = controlBar.reduced(scaled (2.0f));
+            volRegion.removeFromBottom (scaled (4.0f));
+            auto volLabelArea = volRegion.removeFromTop(scaled (16.0f));
             masterVolumeLabel.setBounds(volLabelArea);
-            auto knobSize = juce::jmin(volRegion.getWidth(), volRegion.getHeight());
+            const auto knobSize = juce::jmin (
+                scaled (80.0f), juce::jmin (volRegion.getWidth(), volRegion.getHeight()));
             masterVolumeSlider.setBounds(volRegion.withSizeKeepingCentre(knobSize, knobSize));
 
 #if JUCE_DEBUG
-            auto debugToggleBar = topBar.removeFromRight(100);
-            const int toggleW = 100;
-            auto toggleArea = debugToggleBar.withSizeKeepingCentre(toggleW, debugToggleBar.getHeight()).reduced(2);
+            auto debugToggleBar = topBar.removeFromRight(scaled (100.0f));
+            const int toggleW = scaled (100.0f);
+            auto toggleArea = debugToggleBar.withSizeKeepingCentre(
+                toggleW, debugToggleBar.getHeight()).reduced(scaled (2.0f));
             modifiersToggle.setBounds(toggleArea);
 #endif
 
-            modifierDisplay.setBounds(topBar.reduced(4));
+            auto modifierPanel = topBar.reduced(scaled (4.0f));
+            modifierDisplay.setBounds(modifierPanel);
+            modifierProgressBounds = {
+                0, modifierPanel.getBottom(), getWidth(), scaled (3.0f)
+            };
 
-            area.removeFromTop(6);
-            presetBar.setBounds(area.removeFromTop(38));
+            area.removeFromTop(scaled (6.0f));
+            presetBar.setBounds(area.removeFromTop(scaled (38.0f)));
         }
 
-        area.removeFromTop(6);
+        area.removeFromTop(scaled (6.0f));
         padGrid.setBounds(area);
     }
 
@@ -570,8 +597,10 @@ private:
 #endif
 
     juce::Rectangle<int> brandingBounds;
+    juce::Rectangle<int> modifierProgressBounds;
     float brandingProgress = 0.0f;
     bool brandingSuppressed = false;
+    float uiScale = 1.0f;
 
     PresetBarComponent presetBar;
     int presetLearnSlot = -1; // which preset slot is in MIDI learn mode (-1 = none)
@@ -876,6 +905,7 @@ private:
         // Show paused styling when modifiers are disabled.
         bool isSuppressed = (! app.settings.modifiersEnabled) || app.scheduler.isSuppressed();
         modifierDisplay.setSuppressed(isSuppressed);
+        repaint (modifierProgressBounds);
 
         // Update branding progress for logo fill effect
         float newProgress = app.scheduler.isRunning() ? (float)app.scheduler.getProgressToNextTrigger() : 0.0f;
@@ -1239,6 +1269,7 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
     setLookAndFeel(&editorLnf);
 
     tabComponent = std::make_unique<juce::TabbedComponent>(juce::TabbedButtonBar::TabsAtTop);
+    tabComponent->setOutline (0);
     auto tabBg = juce::Colour (0x00000000);  // transparent — BackgroundAnimator shows through
     helpPanel = std::make_unique<HelpPanelContent>();
 

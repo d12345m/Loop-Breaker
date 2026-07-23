@@ -7,6 +7,7 @@
 #include "AppState.h"
 #include "PluginProcessor.h"
 #include "TimeStretchSoundTouch.h"
+#include "UpcomingModifierDisplay.h"
 
 class ModifierRegistryTest : public juce::UnitTest
 {
@@ -480,6 +481,29 @@ public:
         }
         expect (! hasCornerResizer);
         expect (hasVisibleTabBar);
+
+        std::function<UpcomingModifierDisplay* (juce::Component*)> findModifierDisplay;
+        findModifierDisplay = [&findModifierDisplay] (juce::Component* parent)
+            -> UpcomingModifierDisplay*
+        {
+            if (auto* display = dynamic_cast<UpcomingModifierDisplay*> (parent))
+                return display;
+            for (int i = 0; i < parent->getNumChildComponents(); ++i)
+                if (auto* found = findModifierDisplay (parent->getChildComponent (i)))
+                    return found;
+            return nullptr;
+        };
+
+        auto* modifierDisplay = findModifierDisplay (portraitEditor.get());
+        expect (modifierDisplay != nullptr);
+        if (modifierDisplay != nullptr)
+        {
+            const auto baseBounds = modifierDisplay->getBounds();
+            portraitEditor->setSize (1080, 1920);
+            const auto scaledBounds = modifierDisplay->getBounds();
+            expect (scaledBounds.getWidth() >= juce::roundToInt (baseBounds.getWidth() * 1.9f));
+            expect (scaledBounds.getHeight() >= juce::roundToInt (baseBounds.getHeight() * 1.9f));
+        }
 
         processor.releaseResources();
     }

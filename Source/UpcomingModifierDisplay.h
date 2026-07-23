@@ -35,6 +35,16 @@ public:
         repaint();
     }
 
+    void setUiScale (float newScale)
+    {
+        newScale = juce::jlimit (0.75f, 2.0f, newScale);
+        if (std::abs (uiScale - newScale) < 0.001f)
+            return;
+
+        uiScale = newScale;
+        repaint();
+    }
+
     void setUpcoming(const std::optional<ModifierDescriptor>& desc)
     {
         upcomingDescriptor = desc;
@@ -80,14 +90,30 @@ public:
         tempoBpm = juce::jlimit (20.0, 400.0, bpm);
     }
 
+    void paintProgressBar (juce::Graphics& g, juce::Rectangle<float> bounds) const
+    {
+        if (bounds.isEmpty())
+            return;
+
+        const auto glyphPalette = ControlSurfacePalette::fromTheme (
+            ThemeEngine::getInstance().getCurrentPalette());
+        g.setColour (glyphPalette.ink.withAlpha (0.28f));
+        g.fillRect (bounds.withHeight (juce::jmax (1.0f, uiScale)));
+        if (progress > 0.0)
+        {
+            g.setColour (suppressed ? glyphPalette.safetyYellow : glyphPalette.vermilion);
+            g.fillRect (bounds.withWidth (bounds.getWidth()
+                                         * juce::jlimit (0.0f, 1.0f,
+                                                        static_cast<float> (progress))));
+        }
+    }
+
     void paint(juce::Graphics& g) override
     {
         const auto& palette = ThemeEngine::getInstance().getCurrentPalette();
         const auto glyphPalette = ControlSurfacePalette::fromTheme (palette);
         auto bounds = getLocalBounds().toFloat();
         if (bounds.isEmpty()) return;
-        const auto fullBounds = bounds;
-
         // A flat instrument tile: separation comes from rules, not shadows.
         g.setColour (glyphPalette.raisedTile);
         g.fillRect (bounds);
@@ -102,59 +128,64 @@ public:
             // equal modules. Landscape retains the wider glyph-led split.
             const float queueWidth = portraitLayout
                 ? bounds.getWidth() * 0.5f
-                : juce::jlimit (130.0f, 260.0f, bounds.getWidth() * 0.44f);
+                : juce::jlimit (130.0f * uiScale, 260.0f * uiScale,
+                                bounds.getWidth() * 0.44f);
             queueBounds = nextBounds.removeFromRight (queueWidth);
             g.setColour (glyphPalette.ink.withAlpha (0.72f));
             g.drawVerticalLine (juce::roundToInt (queueBounds.getX()),
                                 bounds.getY() + 1.0f, bounds.getBottom() - 1.0f);
         }
 
-        auto content = nextBounds.reduced (10.0f, 8.0f);
+        auto content = nextBounds.reduced (10.0f * uiScale, 8.0f * uiScale);
         const float metaWidth = portraitLayout && ! queueBounds.isEmpty()
-            ? juce::jmax (1.0f, bounds.getWidth() * 0.25f - 13.0f)
-            : juce::jlimit (90.0f,
-                            juce::jmax (90.0f, content.getWidth() * 0.48f),
+            ? juce::jmax (1.0f, bounds.getWidth() * 0.25f - 13.0f * uiScale)
+            : juce::jlimit (90.0f * uiScale,
+                            juce::jmax (90.0f * uiScale, content.getWidth() * 0.48f),
                             content.getWidth() * 0.38f);
         auto meta = content.removeFromLeft (metaWidth);
 
         // The vertical rule makes the cell read as a modular control board.
         g.setColour (glyphPalette.ink.withAlpha (0.55f));
-        g.drawVerticalLine (juce::roundToInt (meta.getRight() + 3.0f),
+        g.drawVerticalLine (juce::roundToInt (meta.getRight() + 3.0f * uiScale),
                             bounds.getY() + 1.0f, bounds.getBottom() - 1.0f);
 
         // Centre the glyph in the area bounded by the rule and the NEXT-cell
         // edge.  Deriving this from the rendered divider avoids the subtle
         // left bias caused by the metadata content inset.
-        const auto glyphCell = nextBounds.withLeft (meta.getRight() + 3.0f);
-        const auto glyph = glyphCell.reduced (6.0f, 8.0f);
+        const auto glyphCell = nextBounds.withLeft (meta.getRight() + 3.0f * uiScale);
+        const auto glyph = glyphCell.reduced (6.0f * uiScale, 8.0f * uiScale);
 
         auto& fonts = ThemeFonts::getInstance();
-        auto nextRow = meta.removeFromTop (18.0f);
+        auto nextRow = meta.removeFromTop (18.0f * uiScale);
         g.setColour (suppressed ? glyphPalette.safetyYellow : glyphPalette.vermilion);
-        g.setFont (fonts.monoBoldFont (12.0f));
+        g.setFont (fonts.monoBoldFont (12.0f * uiScale));
         g.drawText (suppressed ? "PAUSED" : "NEXT", nextRow, juce::Justification::centredLeft);
         if (upcomingDescriptor.has_value())
         {
             // Queue-cell pips are centred in a 14 px label row inset 7 px
             // from the tile top. Use that same vertical geometry here.
-            auto pipRow = nextRow.withY (bounds.getY() + 7.0f).withHeight (14.0f);
-            drawCategoryPips (g, pipRow.withTrimmedLeft (44.0f).withTrimmedRight (4.0f),
+            auto pipRow = nextRow.withY (bounds.getY() + 7.0f * uiScale)
+                                  .withHeight (14.0f * uiScale);
+            drawCategoryPips (g, pipRow.withTrimmedLeft (44.0f * uiScale)
+                                       .withTrimmedRight (4.0f * uiScale),
                               upcomingDescriptor->type,
-                              glyphPalette, true);
+                              glyphPalette, true, uiScale);
         }
 
-        meta.removeFromTop (2.0f);
-        auto nameRow = meta.removeFromTop (juce::jmin (28.0f, meta.getHeight() * 0.42f));
+        meta.removeFromTop (2.0f * uiScale);
+        auto nameRow = meta.removeFromTop (juce::jmin (28.0f * uiScale,
+                                                      meta.getHeight() * 0.42f));
         g.setColour (glyphPalette.ink);
-        g.setFont (fonts.modifierNameFont (20.0f));
+        g.setFont (fonts.modifierNameFont (20.0f * uiScale));
         g.drawFittedText (upcomingName.toUpperCase(), nameRow.toNearestInt(),
                           juce::Justification::centredLeft, 1, 0.7f);
 
         if (upcomingVariant.isNotEmpty())
         {
-            auto variantRow = meta.removeFromTop (juce::jmin (28.0f, meta.getHeight() * 0.55f));
+            auto variantRow = meta.removeFromTop (juce::jmin (28.0f * uiScale,
+                                                             meta.getHeight() * 0.55f));
             g.setColour (glyphPalette.mutedInk);
-            g.setFont (fonts.monoFont (10.5f));
+            g.setFont (fonts.monoFont (10.5f * uiScale));
             g.drawFittedText (upcomingVariant.toUpperCase(), variantRow.toNearestInt(),
                               juce::Justification::centredLeft, 2, 0.75f);
         }
@@ -169,8 +200,9 @@ public:
         if (countdown.isNotEmpty())
         {
             g.setColour (suppressed ? glyphPalette.safetyYellow : glyphPalette.mutedInk);
-            g.setFont (fonts.monoFont (10.5f));
-            g.drawText (countdown, meta.removeFromBottom (16.0f), juce::Justification::centredLeft);
+            g.setFont (fonts.monoFont (10.5f * uiScale));
+            g.drawText (countdown, meta.removeFromBottom (16.0f * uiScale),
+                        juce::Justification::centredLeft);
         }
 
         if (upcomingDescriptor.has_value())
@@ -179,12 +211,12 @@ public:
             glyphState.descriptor = *upcomingDescriptor;
             glyphState.phase01 = glyphPhase;
             glyphState.emphasis01 = suppressed ? 0.46f : 1.0f;
-            glyphState.compact = glyph.getWidth() < 110.0f;
+            glyphState.compact = glyph.getWidth() < 110.0f * uiScale;
             glyphState.reducedMotion = ! ThemeEngine::getInstance().getAnimationConfig().enabled;
             ModifierGlyphRenderer::draw (g, glyph, glyphState, glyphPalette);
         }
 
-        // Stable brand rule plus a truthful coarse countdown fill.
+        // Planned queue cells.
         if (! queueBounds.isEmpty())
         {
             const float cellWidth = queueBounds.getWidth() * 0.5f;
@@ -202,18 +234,8 @@ public:
                 const size_t queueIndex = static_cast<size_t> (i + 1);
                 drawQueueCell (g, cell, queueIndex < plannedQueue.size()
                                             ? &plannedQueue[queueIndex] : nullptr,
-                               i + 1, glyphPalette);
+                               i + 1, glyphPalette, uiScale);
             }
-        }
-
-        auto progressTrack = fullBounds.withTrimmedTop (fullBounds.getHeight() - 3.0f);
-        g.setColour (glyphPalette.ink.withAlpha (0.28f));
-        g.fillRect (progressTrack.withHeight (1.0f));
-        if (progress > 0.0)
-        {
-            g.setColour (suppressed ? glyphPalette.safetyYellow : glyphPalette.vermilion);
-            g.fillRect (progressTrack.withWidth (progressTrack.getWidth()
-                                                * juce::jlimit (0.0f, 1.0f, static_cast<float> (progress))));
         }
     }
 
@@ -241,14 +263,14 @@ private:
 
     static void drawCategoryPips (juce::Graphics& g, juce::Rectangle<float> area,
                                   ModifierType type, const ControlSurfacePalette& palette,
-                                  bool alignRight)
+                                  bool alignRight, float scale)
     {
         const auto style = categoryPipStyle (type, palette);
         if (style.count == 0)
             return;
 
-        constexpr float diameter = 5.0f;
-        constexpr float gap = 3.0f;
+        const float diameter = 5.0f * scale;
+        const float gap = 3.0f * scale;
         const float width = style.count * diameter + juce::jmax (0, style.count - 1) * gap;
         float x = alignRight ? area.getRight() - width : area.getX();
         const float y = area.getCentreY() - diameter * 0.5f;
@@ -262,13 +284,13 @@ private:
 
     static void drawQueueCell (juce::Graphics& g, juce::Rectangle<float> bounds,
                                const PlannedModifier* planned, int position,
-                               const ControlSurfacePalette& palette)
+                               const ControlSurfacePalette& palette, float scale)
     {
-        auto content = bounds.reduced (7.0f, 7.0f);
+        auto content = bounds.reduced (7.0f * scale, 7.0f * scale);
         auto& fonts = ThemeFonts::getInstance();
-        auto labelRow = content.removeFromTop (14.0f);
+        auto labelRow = content.removeFromTop (14.0f * scale);
         g.setColour (palette.mutedInk);
-        g.setFont (fonts.monoBoldFont (9.0f));
+        g.setFont (fonts.monoBoldFont (9.0f * scale));
         g.drawText ("QUEUE " + juce::String (position), labelRow,
                     juce::Justification::centredLeft);
 
@@ -278,22 +300,22 @@ private:
             return;
         }
 
-        drawCategoryPips (g, labelRow.withTrimmedLeft (42.0f), planned->descriptor.type,
-                          palette, true);
+        drawCategoryPips (g, labelRow.withTrimmedLeft (42.0f * scale),
+                          planned->descriptor.type, palette, true, scale);
 
         const auto compactVariant = ModifierVariantFormatter::compact (planned->descriptor);
         if (compactVariant.isNotEmpty())
         {
-            auto variantRow = content.removeFromBottom (11.0f);
+            auto variantRow = content.removeFromBottom (11.0f * scale);
             g.setColour (palette.mutedInk);
-            g.setFont (fonts.monoBoldFont (7.5f));
+            g.setFont (fonts.monoBoldFont (7.5f * scale));
             g.drawFittedText (compactVariant, variantRow.toNearestInt(),
                               juce::Justification::centred, 1, 0.72f);
         }
 
-        auto nameRow = content.removeFromBottom (16.0f);
+        auto nameRow = content.removeFromBottom (16.0f * scale);
         g.setColour (palette.ink);
-        g.setFont (fonts.modifierNameFont (11.0f));
+        g.setFont (fonts.modifierNameFont (11.0f * scale));
         g.drawFittedText (planned->descriptor.shortName.toUpperCase(), nameRow.toNearestInt(),
                           juce::Justification::centred, 2, 0.68f);
 
@@ -303,7 +325,7 @@ private:
         state.emphasis01 = 0.82f;
         state.compact = true;
         state.reducedMotion = true;
-        ModifierGlyphRenderer::draw (g, content.reduced (2.0f), state, palette);
+        ModifierGlyphRenderer::draw (g, content.reduced (2.0f * scale), state, palette);
     }
 
     void timerCallback() override
@@ -339,4 +361,5 @@ private:
     float glyphPhase = 0.0f;
     double tempoBpm = 120.0;
     double lastAnimationTickMs = 0.0;
+    float uiScale = 1.0f;
 };

@@ -228,6 +228,30 @@ public:
             statusLabel.setText(msg, juce::dontSendNotification);
             appendLog(msg);
             padGrid.flashPads(t);
+            syncModifierStickers();
+
+            switch (d.type)
+            {
+                case ModifierType::ResetAll:
+                    padGrid.clearModifierStickers(t);
+                    syncModifierStickers();
+                    break;
+                case ModifierType::SwitchPart:
+                    padGrid.showTransientModifierSticker(d.type, {}, 900.0);
+                    break;
+                case ModifierType::QuarterNoteBurst:
+                    padGrid.showTransientModifierSticker(
+                        d.type, {},
+                        1000.0 * d.plannedBurstBars.value_or(1)
+                            * app.settings.getSecondsPerBar());
+                    break;
+                case ModifierType::SwapModifierStack:
+                    padGrid.showTransientModifierSticker(d.type, t, 1100.0);
+                    break;
+                default:
+                    break;
+            }
+
             if (!t.isEmpty()) padGrid.clearSelections();
         };
         if (juce::MessageManager::getInstance()->isThisTheMessageThread()) doUi(desc, targets);
@@ -251,6 +275,7 @@ private:
     {
         refreshStatus();
         padGrid.setPlayingStates(app.bufferManager.getPlayingBufferIndices());
+        syncModifierStickers();
         for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
         {
             if (auto* buf = app.bufferManager.getBuffer(i))
@@ -271,6 +296,13 @@ private:
                                          app.scheduler.getProgressToNextTrigger());
             modifierDisplay.setSuppressed(app.scheduler.isSuppressed());
         }
+    }
+
+    void syncModifierStickers()
+    {
+        for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
+            padGrid.setModifierStickerMask(
+                i, app.getActiveModifierStickerMask(i));
     }
 
     void playAllClicked()

@@ -289,6 +289,30 @@ void MainAppComponent::modifierTriggered(const ModifierDescriptor& desc, const j
         juce::String details = d.description.isNotEmpty() ? (" | " + d.description) : juce::String();
         statusLabel.setText("Triggered: " + d.shortName + " -> " + targetStr + details, juce::dontSendNotification);
         padGrid.flashPads(t);
+        syncModifierStickers();
+
+        switch (d.type)
+        {
+            case ModifierType::ResetAll:
+                padGrid.clearModifierStickers(t);
+                syncModifierStickers();
+                break;
+            case ModifierType::SwitchPart:
+                padGrid.showTransientModifierSticker(d.type, {}, 900.0);
+                break;
+            case ModifierType::QuarterNoteBurst:
+                padGrid.showTransientModifierSticker(
+                    d.type, {},
+                    1000.0 * d.plannedBurstBars.value_or(1)
+                        * app.settings.getSecondsPerBar());
+                break;
+            case ModifierType::SwapModifierStack:
+                padGrid.showTransientModifierSticker(d.type, t, 1100.0);
+                break;
+            default:
+                break;
+        }
+
         modifierHistory.addEntry(d, t);
         if (!t.isEmpty())
         {
@@ -317,6 +341,7 @@ void MainAppComponent::timerCallback()
     refreshStatus();
     const auto playingIndices = app.bufferManager.getPlayingBufferIndices();
     padGrid.setPlayingStates(playingIndices);
+    syncModifierStickers();
     
     // Update per-pad playheads and loop windows for waveform overlays
     for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
@@ -371,6 +396,13 @@ void MainAppComponent::updatePadSelectionTargets()
 {
     auto selected = padGrid.getSelectedPadIndices();
     app.scheduler.setUserSelectedBuffers(selected);
+}
+
+void MainAppComponent::syncModifierStickers()
+{
+    for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
+        padGrid.setModifierStickerMask(
+            i, app.getActiveModifierStickerMask(i));
 }
 
 void MainAppComponent::refreshStatus()

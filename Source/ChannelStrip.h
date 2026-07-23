@@ -655,6 +655,14 @@ public:
             switch (curve) { case Curve::Linear: default: return start + (target - start) * t; }
         }
         void advance(float barsDelta) { progressBars += barsDelta; }
+        float advanceAndGet(float fallback, float barsDelta)
+        {
+            if (! isActive())
+                return fallback;
+
+            advance(barsDelta);
+            return isActive() ? current(fallback) : target;
+        }
     };
 
     // Current parameter values (data-only for now)
@@ -710,6 +718,98 @@ public:
         float grainTexture = 0.3f;       // window shape 0=smooth..1=sharp
     };
 
+    /** Runtime state that belongs to a pad's modifier stack.
+
+        Swap Stack must move the envelope controllers as well as the current
+        parameter values.  Otherwise a temporary effect can appear to move to
+        another pad while its rise/fall state keeps running on the old strip.
+        DSP history buffers and oscillator phases deliberately stay with the
+        destination strip; only user-visible modifier state is transferred.
+    */
+    struct TemporaryReturnState
+    {
+        bool active = false;
+        bool fallingStarted = false;
+        float returnTarget = 0.0f;
+        float fallDurationBars = 0.0f;
+    };
+
+    struct TemporaryGranularState
+    {
+        bool active = false;
+        bool fallingStarted = false;
+        float returnTarget = 0.0f;
+        float fallDurationBars = 0.0f;
+        bool restorePersistentGranular = false;
+        float baselineDensityHz = 4.0f;
+        float baselineSizeMs = 150.0f;
+        float baselinePitchSpread = 0.0f;
+        float baselineMix = 0.0f;
+        float baselineTexture = 0.3f;
+        EffectEnvelope baselineMixEnvelope;
+    };
+
+    struct TemporaryVolumeRampState
+    {
+        bool active = false;
+        bool holdingStarted = false;
+        bool fallingStarted = false;
+        float holdTarget = 0.0f;
+        float holdBars = 0.0f;
+        float rampUpBars = 0.0f;
+        float returnTarget = 1.0f;
+    };
+
+    struct DubDelayBurstState
+    {
+        bool active = false;
+        bool fallingStarted = false;
+        float fallTarget = 0.0f;
+        float fallDurationBars = 0.0f;
+        bool baselineCaptured = false;
+        bool restorePersistentDelay = false;
+        float baselineFeedback = 0.0f;
+        float baselineTimeMs = 400.0f;
+        float baselineWet = 0.35f;
+        bool baselinePingPong = false;
+        float baselineFeedbackHighCutHz = 6000.0f;
+        float baselineFeedbackDrive = 1.0f;
+        bool baselineWowFlutter = false;
+        float baselineWowDepthMs = 3.0f;
+        float baselineWowRateHz = 0.35f;
+        float baselineFlutterDepthMs = 0.8f;
+        float baselineFlutterRateHz = 6.0f;
+        float baselineWowPeriodBars = 0.0f;
+        float baselineFlutterPeriodBars = 0.0f;
+        EffectEnvelope baselineWetEnvelope;
+        EffectEnvelope baselineFeedbackEnvelope;
+        juce::Array<float> baselineTapTimesMs;
+    };
+
+    struct ModifierRuntimeState
+    {
+        EffectChainPlaceholder chain;
+        FxParams params;
+        EffectEnvelope reverbWetEnv;
+        EffectEnvelope reverbPreDelayEnv;
+        EffectEnvelope delayWetEnv;
+        EffectEnvelope delayFeedbackEnv;
+        EffectEnvelope lowPassCutoffEnv;
+        EffectEnvelope highPassCutoffEnv;
+        EffectEnvelope tremoloDepthEnv;
+        EffectEnvelope chorusMixEnv;
+        EffectEnvelope panMixEnv;
+        EffectEnvelope volumeGainEnv;
+        EffectEnvelope grainMixEnv;
+        TemporaryReturnState tempLowPass;
+        TemporaryReturnState tempHighPass;
+        TemporaryGranularState tempGranular;
+        TemporaryVolumeRampState tempVolumeRamp;
+        DubDelayBurstState dubDelayBurst;
+        juce::Array<float> delayTapTimesMs;
+        float sampleAndHoldPhaseBars = 0.0f;
+    };
+
     void reset()
     {
         chain.reset();
@@ -727,6 +827,10 @@ public:
         grainMixEnv = {};
         tempGranular = {};
         tempVolRamp = {};
+        tempLpf = {};
+        tempHpf = {};
+        dubBurst = {};
+        delayTapTimesMs.clear();
         shPhaseBars = 0.0f;
         granular.reset();
         // BUG 6: reset boundary-declick state.
@@ -737,9 +841,111 @@ public:
         if (buffer) buffer->resetToDefaults();
     }
 
+    ModifierRuntimeState captureModifierRuntimeState() const
+    {
+        ModifierRuntimeState state;
+        state.chain = chain;
+        state.params = params;
+        state.reverbWetEnv = reverbWetEnv;
+        state.reverbPreDelayEnv = reverbPreDelayEnv;
+        state.delayWetEnv = delayWetEnv;
+        state.delayFeedbackEnv = delayFeedbackEnv;
+        state.lowPassCutoffEnv = lowPassCutoffEnv;
+        state.highPassCutoffEnv = highPassCutoffEnv;
+        state.tremoloDepthEnv = tremoloDepthEnv;
+        state.chorusMixEnv = chorusMixEnv;
+        state.panMixEnv = panMixEnv;
+        state.volumeGainEnv = volumeGainEnv;
+        state.grainMixEnv = grainMixEnv;
+        state.tempLowPass = tempLpf;
+        state.tempHighPass = tempHpf;
+        state.tempGranular = tempGranular;
+        state.tempVolumeRamp = tempVolRamp;
+        state.dubDelayBurst = dubBurst;
+        state.delayTapTimesMs = delayTapTimesMs;
+        state.sampleAndHoldPhaseBars = shPhaseBars;
+        return state;
+    }
+
+    void restoreModifierRuntimeState(const ModifierRuntimeState& state)
+    {
+        chain = state.chain;
+        params = state.params;
+        reverbWetEnv = state.reverbWetEnv;
+        reverbPreDelayEnv = state.reverbPreDelayEnv;
+        delayWetEnv = state.delayWetEnv;
+        delayFeedbackEnv = state.delayFeedbackEnv;
+        lowPassCutoffEnv = state.lowPassCutoffEnv;
+        highPassCutoffEnv = state.highPassCutoffEnv;
+        tremoloDepthEnv = state.tremoloDepthEnv;
+        chorusMixEnv = state.chorusMixEnv;
+        panMixEnv = state.panMixEnv;
+        volumeGainEnv = state.volumeGainEnv;
+        grainMixEnv = state.grainMixEnv;
+        tempLpf = state.tempLowPass;
+        tempHpf = state.tempHighPass;
+        tempGranular = state.tempGranular;
+        tempVolRamp = state.tempVolumeRamp;
+        dubBurst = state.dubDelayBurst;
+        delayTapTimesMs = state.delayTapTimesMs;
+        shPhaseBars = state.sampleAndHoldPhaseBars;
+        requestDeclickFadeIn(512);
+    }
+
+    void clearModifierAutomation()
+    {
+        reverbWetEnv = {};
+        reverbPreDelayEnv = {};
+        delayWetEnv = {};
+        delayFeedbackEnv = {};
+        lowPassCutoffEnv = {};
+        highPassCutoffEnv = {};
+        tremoloDepthEnv = {};
+        chorusMixEnv = {};
+        panMixEnv = {};
+        volumeGainEnv = {};
+        grainMixEnv = {};
+        tempLpf = {};
+        tempHpf = {};
+        tempGranular = {};
+        tempVolRamp = {};
+        dubBurst = {};
+    }
+
+    void cancelDubDelayBurst()
+    {
+        delayWetEnv = {};
+        delayFeedbackEnv = {};
+        dubBurst = {};
+    }
+
+    void cancelTemporaryGranular()
+    {
+        grainMixEnv = {};
+        tempGranular = {};
+    }
+
+    bool isDubDelayBurstActive() const noexcept       { return dubBurst.active; }
+    bool isTemporaryGranularActive() const noexcept   { return tempGranular.active; }
+    bool isTemporaryVolumeRampActive() const noexcept { return tempVolRamp.active; }
+    bool hasPersistentDelayUnderDubBurst() const noexcept
+    {
+        return dubBurst.active && dubBurst.restorePersistentDelay;
+    }
+    bool hasPersistentGranularUnderBurst() const noexcept
+    {
+        return tempGranular.active && tempGranular.restorePersistentGranular;
+    }
+
     // Envelope setters (expand as needed)
     void setReverbWetEnvelope(float start, float target, float durationBars)
     {
+        if (durationBars <= 0.0f)
+        {
+            params.reverbWet = target;
+            reverbWetEnv = {};
+            return;
+        }
         reverbWetEnv = { start, target, durationBars, 0.0f, EffectEnvelope::Curve::Linear };
     }
 
@@ -748,56 +954,129 @@ public:
         // Clamp to sensible range 0..60 ms
         startMs = juce::jlimit(0.0f, 60.0f, startMs);
         targetMs = juce::jlimit(0.0f, 60.0f, targetMs);
+        if (durationBars <= 0.0f)
+        {
+            params.reverbPreDelayMs = targetMs;
+            reverbPreDelayEnv = {};
+            return;
+        }
         reverbPreDelayEnv = { startMs, targetMs, durationBars, 0.0f, EffectEnvelope::Curve::Linear };
     }
 
     void setDelayWetEnvelope(float start, float target, float durationBars)
     {
+        if (durationBars <= 0.0f)
+        {
+            params.delayWet = target;
+            delayWetEnv = {};
+            return;
+        }
         delayWetEnv = { start, target, durationBars, 0.0f, EffectEnvelope::Curve::Linear };
     }
 
     void setDelayFeedbackEnvelope(float start, float target, float durationBars)
     {
+        if (durationBars <= 0.0f)
+        {
+            params.delayFeedback = target;
+            delayFeedbackEnv = {};
+            return;
+        }
         delayFeedbackEnv = { start, target, durationBars, 0.0f, EffectEnvelope::Curve::Linear };
     }
 
     void setLowPassCutoffEnvelope(float start, float target, float durationBars)
     {
+        if (durationBars <= 0.0f)
+        {
+            params.lowPassCutoff = target;
+            lowPassCutoffEnv = {};
+            return;
+        }
         lowPassCutoffEnv = { start, target, durationBars, 0.0f, EffectEnvelope::Curve::Linear };
     }
 
     void setHighPassCutoffEnvelope(float start, float target, float durationBars)
     {
+        if (durationBars <= 0.0f)
+        {
+            params.highPassCutoff = target;
+            highPassCutoffEnv = {};
+            return;
+        }
         highPassCutoffEnv = { start, target, durationBars, 0.0f, EffectEnvelope::Curve::Linear };
     }
 
     void setTremoloDepthEnvelope(float start, float target, float durationBars)
     {
+        if (durationBars <= 0.0f)
+        {
+            params.tremoloDepth = target;
+            tremoloDepthEnv = {};
+            return;
+        }
         tremoloDepthEnv = { start, target, durationBars, 0.0f, EffectEnvelope::Curve::Linear };
     }
 
     void setChorusMixEnvelope(float start, float target, float durationBars)
     {
+        if (durationBars <= 0.0f)
+        {
+            params.chorusMix = target;
+            chorusMixEnv = {};
+            return;
+        }
         chorusMixEnv = { start, target, durationBars, 0.0f, EffectEnvelope::Curve::Linear };
     }
 
     void setPanMixEnvelope(float start, float target, float durationBars)
     {
+        if (durationBars <= 0.0f)
+        {
+            params.panMix = target;
+            panMixEnv = {};
+            return;
+        }
         panMixEnv = { start, target, durationBars, 0.0f, EffectEnvelope::Curve::Linear };
     }
 
     void setVolumeGainEnvelope(float start, float target, float durationBars)
     {
+        if (durationBars <= 0.0f)
+        {
+            params.volumeGain = target;
+            volumeGainEnv = {};
+            return;
+        }
         volumeGainEnv = { start, target, durationBars, 0.0f, EffectEnvelope::Curve::Linear };
     }
 
     void setGrainMixEnvelope(float start, float target, float durationBars)
     {
+        if (durationBars <= 0.0f)
+        {
+            params.grainMix = target;
+            grainMixEnv = {};
+            return;
+        }
         grainMixEnv = { start, target, durationBars, 0.0f, EffectEnvelope::Curve::Linear };
     }
 
     void startTemporaryGranular(float riseTarget, float riseDurationBars, float returnTarget, float returnDurationBars)
     {
+        if (! tempGranular.active)
+        {
+            tempGranular = {};
+            tempGranular.restorePersistentGranular = chain.granularEnabled;
+            tempGranular.baselineDensityHz = params.grainDensityHz;
+            tempGranular.baselineSizeMs = params.grainSizeMs;
+            tempGranular.baselinePitchSpread = params.grainPitchSpread;
+            tempGranular.baselineMix = params.grainMix;
+            tempGranular.baselineTexture = params.grainTexture;
+            tempGranular.baselineMixEnvelope = grainMixEnv;
+        }
+
+        chain.granularEnabled = true;
         setGrainMixEnvelope(params.grainMix, riseTarget, juce::jmax(0.0f, riseDurationBars));
         tempGranular.active = true;
         tempGranular.fallingStarted = false;
@@ -808,6 +1087,9 @@ public:
     // Temporary volume ramp: ramp down over rampDownBars, hold for holdBars, ramp back up over rampUpBars
     void startTemporaryVolumeRamp(float targetGain, float rampDownBars, float holdBars, float rampUpBars)
     {
+        const float originalReturnTarget = tempVolRamp.active
+                                             ? tempVolRamp.returnTarget
+                                             : params.volumeGain;
         chain.volumeRampEnabled = true;
         tempVolRamp.active = true;
         tempVolRamp.holdingStarted = false;
@@ -815,7 +1097,7 @@ public:
         tempVolRamp.holdTarget = juce::jlimit(0.0f, 1.0f, targetGain);
         tempVolRamp.holdBars = juce::jmax(0.0f, holdBars);
         tempVolRamp.rampUpBars = juce::jmax(0.0f, rampUpBars);
-        tempVolRamp.returnTarget = params.volumeGain; // remember where we were
+        tempVolRamp.returnTarget = originalReturnTarget;
         // Start the ramp down
         setVolumeGainEnvelope(params.volumeGain, targetGain, juce::jmax(0.0f, rampDownBars));
     }
@@ -824,36 +1106,53 @@ public:
     void advanceEnvelopes(float barsDelta)
     {
         // Reverb wet
-        params.reverbWet = reverbWetEnv.isActive() ? reverbWetEnv.current(params.reverbWet) : params.reverbWet;
-        if (reverbWetEnv.isActive()) reverbWetEnv.advance(barsDelta);
+        params.reverbWet = reverbWetEnv.advanceAndGet(params.reverbWet, barsDelta);
         // PreDelay
-        params.reverbPreDelayMs = reverbPreDelayEnv.isActive() ? reverbPreDelayEnv.current(params.reverbPreDelayMs) : params.reverbPreDelayMs;
-        if (reverbPreDelayEnv.isActive()) reverbPreDelayEnv.advance(barsDelta);
+        params.reverbPreDelayMs = reverbPreDelayEnv.advanceAndGet(params.reverbPreDelayMs, barsDelta);
         // Auto-disable reverb when wet reaches zero and no active envelope
         if (chain.reverbEnabled && !reverbWetEnv.isActive() && params.reverbWet <= 0.0001f)
             chain.reverbEnabled = false;
     // Delay wet
-    params.delayWet = delayWetEnv.isActive() ? delayWetEnv.current(params.delayWet) : params.delayWet;
-    if (delayWetEnv.isActive()) delayWetEnv.advance(barsDelta);
+    params.delayWet = delayWetEnv.advanceAndGet(params.delayWet, barsDelta);
     // Delay feedback
-    params.delayFeedback = delayFeedbackEnv.isActive() ? delayFeedbackEnv.current(params.delayFeedback) : params.delayFeedback;
-        if (delayFeedbackEnv.isActive()) delayFeedbackEnv.advance(barsDelta);
+        params.delayFeedback = delayFeedbackEnv.advanceAndGet(params.delayFeedback, barsDelta);
         // If a dub burst is active, and the rise finished, start the fall envelope exactly once
         if (dubBurst.active && !dubBurst.fallingStarted && !delayFeedbackEnv.isActive())
         {
             setDelayFeedbackEnvelope(params.delayFeedback, dubBurst.fallTarget, dubBurst.fallDurationBars);
             dubBurst.fallingStarted = true;
         }
-        // Auto-disable delay when feedback essentially zero and no active envelope
-        if (chain.delayEnabled && !delayFeedbackEnv.isActive() && params.delayFeedback <= 0.0001f)
+        if (dubBurst.active && dubBurst.fallingStarted && ! delayFeedbackEnv.isActive())
         {
-            chain.delayEnabled = false;
-            dubBurst.active = false;
-            dubBurst.fallingStarted = false;
+            if (dubBurst.restorePersistentDelay)
+            {
+                chain.delayEnabled = true;
+                params.delayFeedback = dubBurst.baselineFeedback;
+                params.delayTimeMs = dubBurst.baselineTimeMs;
+                params.delayWet = dubBurst.baselineWet;
+                params.delayPingPong = dubBurst.baselinePingPong;
+                params.delayFeedbackHighCutHz = dubBurst.baselineFeedbackHighCutHz;
+                params.delayFbDrive = dubBurst.baselineFeedbackDrive;
+                params.wowFlutterEnabled = dubBurst.baselineWowFlutter;
+                params.wowDepthMs = dubBurst.baselineWowDepthMs;
+                params.wowRateHz = dubBurst.baselineWowRateHz;
+                params.flutterDepthMs = dubBurst.baselineFlutterDepthMs;
+                params.flutterRateHz = dubBurst.baselineFlutterRateHz;
+                params.wowPeriodBars = dubBurst.baselineWowPeriodBars;
+                params.flutterPeriodBars = dubBurst.baselineFlutterPeriodBars;
+                delayWetEnv = dubBurst.baselineWetEnvelope;
+                delayFeedbackEnv = dubBurst.baselineFeedbackEnvelope;
+                delayTapTimesMs = dubBurst.baselineTapTimesMs;
+            }
+            else
+            {
+                chain.delayEnabled = false;
+            }
+
+            dubBurst = {};
         }
         // LPF cutoff
-        params.lowPassCutoff = lowPassCutoffEnv.isActive() ? lowPassCutoffEnv.current(params.lowPassCutoff) : params.lowPassCutoff;
-        if (lowPassCutoffEnv.isActive()) lowPassCutoffEnv.advance(barsDelta);
+        params.lowPassCutoff = lowPassCutoffEnv.advanceAndGet(params.lowPassCutoff, barsDelta);
         // If a temporary LPF action is active, schedule the return envelope once the rise completes
         if (tempLpf.active && !tempLpf.fallingStarted && !lowPassCutoffEnv.isActive())
         {
@@ -861,31 +1160,26 @@ public:
             tempLpf.fallingStarted = true;
         }
         // HPF cutoff
-        params.highPassCutoff = highPassCutoffEnv.isActive() ? highPassCutoffEnv.current(params.highPassCutoff) : params.highPassCutoff;
-        if (highPassCutoffEnv.isActive()) highPassCutoffEnv.advance(barsDelta);
+        params.highPassCutoff = highPassCutoffEnv.advanceAndGet(params.highPassCutoff, barsDelta);
         if (tempHpf.active && !tempHpf.fallingStarted && !highPassCutoffEnv.isActive())
         {
             setHighPassCutoffEnvelope(params.highPassCutoff, tempHpf.returnTarget, tempHpf.fallDurationBars);
             tempHpf.fallingStarted = true;
         }
         // Tremolo depth
-        params.tremoloDepth = tremoloDepthEnv.isActive() ? tremoloDepthEnv.current(params.tremoloDepth) : params.tremoloDepth;
-        if (tremoloDepthEnv.isActive()) tremoloDepthEnv.advance(barsDelta);
+        params.tremoloDepth = tremoloDepthEnv.advanceAndGet(params.tremoloDepth, barsDelta);
         // Chorus mix
-        params.chorusMix = chorusMixEnv.isActive() ? chorusMixEnv.current(params.chorusMix) : params.chorusMix;
-        if (chorusMixEnv.isActive()) chorusMixEnv.advance(barsDelta);
+        params.chorusMix = chorusMixEnv.advanceAndGet(params.chorusMix, barsDelta);
         // Auto-disable chorus when mix reaches zero and no active envelope
         if (chain.chorusEnabled && !chorusMixEnv.isActive() && params.chorusMix <= 0.0001f)
             chain.chorusEnabled = false;
         // Pan mix
-        params.panMix = panMixEnv.isActive() ? panMixEnv.current(params.panMix) : params.panMix;
-        if (panMixEnv.isActive()) panMixEnv.advance(barsDelta);
+        params.panMix = panMixEnv.advanceAndGet(params.panMix, barsDelta);
         // Auto-disable auto-pan when mix reaches zero and no active envelope
         if (chain.autoPanEnabled && !panMixEnv.isActive() && params.panMix <= 0.0001f)
             chain.autoPanEnabled = false;
         // Volume gain ramp
-        params.volumeGain = volumeGainEnv.isActive() ? volumeGainEnv.current(params.volumeGain) : params.volumeGain;
-        if (volumeGainEnv.isActive()) volumeGainEnv.advance(barsDelta);
+        params.volumeGain = volumeGainEnv.advanceAndGet(params.volumeGain, barsDelta);
         // Temp volume ramp state machine: ramp down -> hold -> ramp up
         if (tempVolRamp.active && !tempVolRamp.holdingStarted && !volumeGainEnv.isActive())
         {
@@ -908,17 +1202,29 @@ public:
             tempVolRamp.active = false;
         }
         // Granular mix
-        params.grainMix = grainMixEnv.isActive() ? grainMixEnv.current(params.grainMix) : params.grainMix;
-        if (grainMixEnv.isActive()) grainMixEnv.advance(barsDelta);
+        params.grainMix = grainMixEnv.advanceAndGet(params.grainMix, barsDelta);
         if (tempGranular.active && !tempGranular.fallingStarted && !grainMixEnv.isActive())
         {
             setGrainMixEnvelope(params.grainMix, tempGranular.returnTarget, tempGranular.fallDurationBars);
             tempGranular.fallingStarted = true;
         }
-        // Auto-disable granular when mix reaches zero and no active envelope
-        if (chain.granularEnabled && !grainMixEnv.isActive() && params.grainMix <= 0.0001f)
+        if (tempGranular.active && tempGranular.fallingStarted && ! grainMixEnv.isActive())
         {
-            chain.granularEnabled = false;
+            if (tempGranular.restorePersistentGranular)
+            {
+                chain.granularEnabled = true;
+                params.grainDensityHz = tempGranular.baselineDensityHz;
+                params.grainSizeMs = tempGranular.baselineSizeMs;
+                params.grainPitchSpread = tempGranular.baselinePitchSpread;
+                params.grainMix = tempGranular.baselineMix;
+                params.grainTexture = tempGranular.baselineTexture;
+                grainMixEnv = tempGranular.baselineMixEnvelope;
+            }
+            else
+            {
+                chain.granularEnabled = false;
+            }
+
             tempGranular = {};
         }
         // S&H filter: advance phase and trigger new random cutoff/Q at each division
@@ -982,6 +1288,34 @@ private:
     // Multi-tap support: user may select multiple divisions (times in ms)
     juce::Array<float> delayTapTimesMs; // if empty -> single params.delayTimeMs
 public:
+    void prepareDubDelayBurst()
+    {
+        // Retriggering extends the burst but keeps the original persistent
+        // delay baseline so the overlay still returns to the right state.
+        if (dubBurst.active || dubBurst.baselineCaptured)
+            return;
+
+        dubBurst = {};
+        dubBurst.baselineCaptured = true;
+        dubBurst.restorePersistentDelay = chain.delayEnabled;
+        dubBurst.baselineFeedback = params.delayFeedback;
+        dubBurst.baselineTimeMs = params.delayTimeMs;
+        dubBurst.baselineWet = params.delayWet;
+        dubBurst.baselinePingPong = params.delayPingPong;
+        dubBurst.baselineFeedbackHighCutHz = params.delayFeedbackHighCutHz;
+        dubBurst.baselineFeedbackDrive = params.delayFbDrive;
+        dubBurst.baselineWowFlutter = params.wowFlutterEnabled;
+        dubBurst.baselineWowDepthMs = params.wowDepthMs;
+        dubBurst.baselineWowRateHz = params.wowRateHz;
+        dubBurst.baselineFlutterDepthMs = params.flutterDepthMs;
+        dubBurst.baselineFlutterRateHz = params.flutterRateHz;
+        dubBurst.baselineWowPeriodBars = params.wowPeriodBars;
+        dubBurst.baselineFlutterPeriodBars = params.flutterPeriodBars;
+        dubBurst.baselineWetEnvelope = delayWetEnv;
+        dubBurst.baselineFeedbackEnvelope = delayFeedbackEnv;
+        dubBurst.baselineTapTimesMs = delayTapTimesMs;
+    }
+
     void setDelayTapTimesMs(const juce::Array<float>& times)
     {
         delayTapTimesMs.clear();
@@ -994,6 +1328,9 @@ public:
     // Dub-style burst controller
     void startDubDelayBurst(float /*riseTarget*/, float /*riseDurationBars*/, float fallTarget, float fallDurationBars)
     {
+        if (! dubBurst.baselineCaptured)
+            prepareDubDelayBurst();
+
         dubBurst.active = true;
         dubBurst.fallingStarted = false;
         dubBurst.fallTarget = juce::jlimit(0.0f, 0.95f, fallTarget);
@@ -1049,20 +1386,11 @@ private:
     }
 
     // Temporary filter helpers (for master LPF/HPF ramp up then down)
-    struct TempFilterBurst { bool active = false; bool fallingStarted = false; float returnTarget = 0.0f; float fallDurationBars = 0.0f; };
-    TempFilterBurst tempLpf;
-    TempFilterBurst tempHpf;
-    TempFilterBurst tempGranular;
+    TemporaryReturnState tempLpf;
+    TemporaryReturnState tempHpf;
+    TemporaryGranularState tempGranular;
     // Volume ramp state: ramp down -> hold -> ramp up
-    struct TempVolRampState {
-        bool active = false;
-        bool holdingStarted = false;
-        bool fallingStarted = false;
-        float holdTarget = 0.0f;
-        float holdBars = 0.0f;
-        float rampUpBars = 0.0f;
-        float returnTarget = 1.0f;
-    } tempVolRamp;
+    TemporaryVolumeRampState tempVolRamp;
 public:
     void startTemporaryLowPass(float riseTarget, float riseDurationBars, float returnTarget, float returnDurationBars)
     {
@@ -1125,7 +1453,7 @@ public:
         lastSHHpfCutoff = cutoff;
         lastSHHpfQ = q;
     }
-    struct DubBurstState { bool active = false; bool fallingStarted = false; float fallTarget = 0.0f; float fallDurationBars = 0.0f; } dubBurst;
+    DubDelayBurstState dubBurst;
 
     // ── Granular processor (Clouds-inspired) ──
     struct GranularProcessor

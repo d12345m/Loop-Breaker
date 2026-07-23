@@ -52,6 +52,14 @@
             resource="0" file="Source/ModifierGlyphRenderer.h"/>
       <FILE id="modifierGlyphRendererCpp" name="ModifierGlyphRenderer.cpp" compile="1"
             resource="0" file="Source/ModifierGlyphRenderer.cpp"/>
+      <FILE id="modifierStickerOverlayH" name="ModifierStickerOverlay.h" compile="0"
+            resource="0" file="Source/ModifierStickerOverlay.h"/>
+      <FILE id="modifierStickerOverlayCpp" name="ModifierStickerOverlay.cpp" compile="1"
+            resource="0" file="Source/ModifierStickerOverlay.cpp"/>
+      <FILE id="modifierStickerTestsCpp" name="ModifierStickerTests.cpp" compile="1"
+            resource="0" file="Source/ModifierStickerTests.cpp"/>
+      <FILE id="modifierStickerLifecycleTestsCpp" name="ModifierStickerLifecycleTests.cpp"
+            compile="1" resource="0" file="Source/ModifierStickerLifecycleTests.cpp"/>
       <FILE id="glyphLabComponentH" name="GlyphLabComponent.h" compile="0"
             resource="0" file="Source/GlyphLabComponent.h"/>
       <FILE id="modifierSchedulerH" name="ModifierScheduler.h" compile="0"

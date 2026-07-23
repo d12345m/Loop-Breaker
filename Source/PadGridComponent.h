@@ -13,6 +13,7 @@
 #include "ThemeEngine.h"
 #include "ThemeFonts.h"
 #include "Animator.h"
+#include "ModifierStickerOverlay.h"
 
 // Simple 2x4 pad grid showing selectable pads and (new) filename indicators.
 class PadGridComponent : public juce::Component,
@@ -168,6 +169,9 @@ public:
         padFileNames.set(padIndex, filePath);
         updatePadLabel(padIndex);
 
+        if (filePath.isEmpty())
+            clearModifierStickersForPad(padIndex);
+
         auto* thumb = thumbnails[padIndex];
         thumb->clear();
         if (filePath.isNotEmpty() && juce::File(filePath).existsAsFile())
@@ -271,6 +275,10 @@ private:
     std::array<Animator, numPads> glowAnimators;
     float midiLearnDashOffset = 0.0f;  // marching ants
     std::array<bool, numPads> playingStates { {false,false,false,false,false,false,false,false} };
+    std::array<ModifierStickerOverlay::Mask, numPads> activeStickerMasks {};
+    std::array<ModifierStickerOverlay::Mask, numPads> transientStickerMasks {};
+    std::array<std::array<double, static_cast<size_t>(ModifierType::Unknown)>,
+               numPads> transientStickerExpiryMs {};
     // Bottom row left->right = 36-39 (pads 1-4, idx 0-3), top row left->right = 40-43 (pads 5-8, idx 4-7)
     std::array<int, numPads> midiNotes { {36, 37, 38, 39, 40, 41, 42, 43} };
     std::array<bool, numPads> midiLearnActive { {false,false,false,false,false,false,false,false} };
@@ -419,8 +427,83 @@ public:
         }
     }
 
+    void setModifierStickerMask(int padIndex, ModifierStickerOverlay::Mask mask)
+    {
+        if (! juce::isPositiveAndBelow(padIndex, numPads))
+            return;
+
+        auto& current = activeStickerMasks[static_cast<size_t>(padIndex)];
+        if (current != mask)
+        {
+            current = mask;
+            repaint(padButtons[padIndex]->getBounds());
+        }
+    }
+
+    /** Shows a short-lived utility sticker. Empty targets means every pad. */
+    void showTransientModifierSticker(ModifierType type,
+                                      const juce::Array<int>& padIndices,
+                                      double durationMs = 900.0)
+    {
+        const auto bit = ModifierStickerOverlay::bitForType(type);
+        const int typeIndex = static_cast<int>(type);
+        if (bit == 0
+            || ! juce::isPositiveAndBelow(typeIndex,
+                                          static_cast<int>(ModifierType::Unknown)))
+            return;
+
+        const double expiresAt = juce::Time::getMillisecondCounterHiRes()
+                               + juce::jmax(100.0, durationMs);
+        const auto applyToPad = [this, bit, typeIndex, expiresAt] (int padIndex)
+        {
+            if (! juce::isPositiveAndBelow(padIndex, numPads))
+                return;
+
+            transientStickerMasks[static_cast<size_t>(padIndex)] |= bit;
+            auto& expiry = transientStickerExpiryMs[static_cast<size_t>(padIndex)]
+                                                    [static_cast<size_t>(typeIndex)];
+            expiry = juce::jmax(expiry, expiresAt);
+        };
+
+        if (padIndices.isEmpty())
+            for (int i = 0; i < numPads; ++i)
+                applyToPad(i);
+        else
+            for (const int padIndex : padIndices)
+                applyToPad(padIndex);
+
+        repaint();
+    }
+
+    /** Clears active and transient stickers on the targets; empty means all. */
+    void clearModifierStickers(const juce::Array<int>& padIndices = {})
+    {
+        if (padIndices.isEmpty())
+        {
+            for (int i = 0; i < numPads; ++i)
+                clearModifierStickersForPad(i);
+        }
+        else
+        {
+            for (const int padIndex : padIndices)
+                clearModifierStickersForPad(padIndex);
+        }
+
+        repaint();
+    }
+
 private:
-    static constexpr int flashDurationTicks = 10; // ~333ms at 30Hz
+    static constexpr int flashDurationTicks = 10; // ~667 ms at 15 Hz
+
+    void clearModifierStickersForPad(int padIndex)
+    {
+        if (! juce::isPositiveAndBelow(padIndex, numPads))
+            return;
+
+        activeStickerMasks[static_cast<size_t>(padIndex)] = 0;
+        transientStickerMasks[static_cast<size_t>(padIndex)] = 0;
+        transientStickerExpiryMs[static_cast<size_t>(padIndex)].fill(0.0);
+    }
 
     void updatePadLabel(int padIndex)
     {
@@ -676,6 +759,26 @@ private:
                     }
                 }
 
+                // ── Applied modifier stickers ──
+                if (! midiLearnActive[(size_t)i])
+                {
+                    const auto momentaryEffectBits =
+                        ModifierStickerOverlay::bitForType (
+                            ModifierType::BufferDelayDubBurst)
+                      | ModifierStickerOverlay::bitForType (
+                            ModifierType::BufferVolumeRampDown)
+                      | ModifierStickerOverlay::bitForType (
+                            ModifierType::BufferGranularMomentary);
+                    const auto transient = transientStickerMasks[(size_t)i]
+                                         | (activeStickerMasks[(size_t)i]
+                                            & momentaryEffectBits);
+                    const auto active = activeStickerMasks[(size_t)i]
+                                      | transientStickerMasks[(size_t)i];
+                    ModifierStickerOverlay::draw(
+                        g, inner, active, transient,
+                        ControlSurfacePalette::fromTheme(palette));
+                }
+
                 // ── File drag hover ──
                 if (isFileDragActive && hoveredPadIndex >= 0)
                 {
@@ -736,12 +839,28 @@ private:
     {
         const double dt = 1.0 / 15.0;  // matches 15 Hz timer
         bool any = false;
+        const double nowMs = juce::Time::getMillisecondCounterHiRes();
         for (int i = 0; i < numPads; ++i)
         {
             if (flashCounters[(size_t)i] > 0) { --flashCounters[(size_t)i]; any = true; }
             if (glowAnimators[(size_t)i].isRunning())
             {
                 glowAnimators[(size_t)i].tick (dt);
+                any = true;
+            }
+
+            for (int typeIndex = 0;
+                 typeIndex < static_cast<int>(ModifierType::Unknown);
+                 ++typeIndex)
+            {
+                auto& expiry = transientStickerExpiryMs[(size_t)i][(size_t)typeIndex];
+                if (expiry <= 0.0 || nowMs < expiry)
+                    continue;
+
+                transientStickerMasks[(size_t)i]
+                    &= ~ModifierStickerOverlay::bitForType(
+                        static_cast<ModifierType>(typeIndex));
+                expiry = 0.0;
                 any = true;
             }
         }

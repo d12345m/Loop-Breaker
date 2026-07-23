@@ -615,6 +615,38 @@ public:
             if (self->externalModifierHistory != nullptr)
                 self->externalModifierHistory->addEntry(desc, targets);
             self->padGrid.flashPads(targets);
+
+            // Pull the post-trigger engine snapshot so resets and stack swaps
+            // update every sticker together.
+            self->syncModifierStickers();
+
+            switch (desc.type)
+            {
+                case ModifierType::ResetAll:
+                    self->padGrid.clearModifierStickers(targets);
+                    self->syncModifierStickers();
+                    break;
+                case ModifierType::SwitchPart:
+                    self->padGrid.showTransientModifierSticker(
+                        desc.type, {}, 900.0);
+                    break;
+                case ModifierType::QuarterNoteBurst:
+                {
+                    const double durationMs = 1000.0
+                        * desc.plannedBurstBars.value_or(1)
+                        * self->app.settings.getSecondsPerBar();
+                    self->padGrid.showTransientModifierSticker(
+                        desc.type, {}, durationMs);
+                    break;
+                }
+                case ModifierType::SwapModifierStack:
+                    self->padGrid.showTransientModifierSticker(
+                        desc.type, targets, 1100.0);
+                    break;
+                default:
+                    break;
+            }
+
             if (! targets.isEmpty())
                 self->padGrid.clearSelections();
 
@@ -768,6 +800,7 @@ private:
         refreshStatus();
         updateMasterVolumeMidiTooltip();
         padGrid.setPlayingStates(app.bufferManager.getPlayingBufferIndices());
+        syncModifierStickers();
 
         // Poll for MIDI pad toggle requests (from audio thread)
         for (int i = 0; i < 8; ++i)
@@ -1007,6 +1040,13 @@ private:
     {
         app.scheduler.setUserSelectedBuffers(padGrid.getSelectedPadIndices());
         refreshStatus();
+    }
+
+    void syncModifierStickers()
+    {
+        for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
+            padGrid.setModifierStickerMask(
+                i, app.getActiveModifierStickerMask(i));
     }
 
     void modifiersToggleChanged()

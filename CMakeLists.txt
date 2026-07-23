@@ -80,9 +80,11 @@ target_sources(LoopBreaker PRIVATE
     Source/Modifier.cpp
     Source/GlyphContactSheet.cpp
     Source/ModifierGlyphRenderer.cpp
+    Source/ModifierStickerOverlay.cpp
     Source/ModifierScheduler.cpp
     Source/ProjectManager.cpp
     Source/ModifierSchedulerTests.cpp
+    Source/ModifierStickerTests.cpp
     Source/ThemeEngine.cpp
 )
 
@@ -165,6 +167,8 @@ if(LOOP_BREAKER_BUILD_TESTS)
     target_sources(LoopBreakerTests PRIVATE
         Source/UnitTestMain.cpp
         Source/ModifierSchedulerTests.cpp
+        Source/ModifierStickerTests.cpp
+        Source/ModifierStickerLifecycleTests.cpp
         Source/ThemeEngineTests.cpp
     )
     target_include_directories(LoopBreakerTests PRIVATE

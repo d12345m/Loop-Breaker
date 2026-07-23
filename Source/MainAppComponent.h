@@ -84,6 +84,7 @@ private:
   void modifiersToggleChanged();
 
     void updatePadSelectionTargets();
+    void syncModifierStickers();
     void refreshStatus();
   void implementedOnlyToggled();
   void bpmChanged();

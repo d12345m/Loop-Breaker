@@ -13,6 +13,7 @@
 #include "AudioBufferManager.h"
 #include "ChannelStrip.h"
 #include "ModifierPreset.h"
+#include "ModifierStickerOverlay.h"
 #include "NodeClipDetector.h"
 
 struct AppState : public ModifierSchedulerListener
@@ -32,11 +33,17 @@ struct AppState : public ModifierSchedulerListener
     // Channel strips for FX placeholder wrapping existing buffers
     juce::OwnedArray<ChannelStrip> channelStrips;
 
+    std::array<std::atomic<ModifierStickerOverlay::Mask>,
+               AudioBufferManager::MAX_BUFFERS> activeModifierStickerMasks;
+
     // Per-node clip detection system (debug)
     ClipDetectorSystem clipDetector;
 
     AppState()
     {
+        for (auto& mask : activeModifierStickerMasks)
+            mask.store(0, std::memory_order_relaxed);
+
         // Initialize channel strips referencing underlying buffers
         for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
             channelStrips.add(new ChannelStrip(bufferManager.getBuffer(i)));
@@ -143,6 +150,127 @@ struct AppState : public ModifierSchedulerListener
         const int64_t endClamped   = juce::jlimit<int64_t>(startClamped + 1, dur, endS);
         b->setLoopWindow(startClamped, endClamped);
         b->setPlayheadSamples(startClamped);
+    }
+
+    /** Returns the modifiers that are currently in force on one pad.
+
+        The sticker UI intentionally derives this from live engine state rather
+        than trigger history.  That makes neutral toggles disappear, temporary
+        effects expire with their envelopes, presets restore accurately, Reset
+        clear immediately, and Swap Stack follow the state it actually moves.
+    */
+    ModifierStickerOverlay::Mask getActiveModifierStickerMask(int bufferIndex) const
+    {
+        if (! juce::isPositiveAndBelow(bufferIndex,
+                                       static_cast<int>(activeModifierStickerMasks.size())))
+            return 0;
+
+        return activeModifierStickerMasks[static_cast<size_t>(bufferIndex)]
+            .load(std::memory_order_acquire);
+    }
+
+    void refreshActiveModifierStickerMask(int bufferIndex)
+    {
+        using Stickers = ModifierStickerOverlay;
+        Stickers::Mask mask = 0;
+
+        if (! juce::isPositiveAndBelow(bufferIndex,
+                                       static_cast<int>(activeModifierStickerMasks.size())))
+            return;
+
+        const auto* buffer = bufferManager.getBuffer(bufferIndex);
+        if (buffer == nullptr || ! buffer->hasAudioLoaded()
+            || ! juce::isPositiveAndBelow(bufferIndex, channelStrips.size()))
+        {
+            activeModifierStickerMasks[static_cast<size_t>(bufferIndex)]
+                .store(0, std::memory_order_release);
+            return;
+        }
+
+        const auto add = [&mask] (ModifierType type)
+        {
+            mask |= Stickers::bitForType(type);
+        };
+
+        constexpr double epsilon = 1.0e-6;
+        const double speed = buffer->getSpeed();
+        if (speed < -epsilon)
+            add(ModifierType::Reverse);
+        if (std::abs(std::abs(speed) - 1.0) > epsilon)
+            add(ModifierType::Speed);
+        if (std::abs(buffer->getStretchRatio() - 1.0) > epsilon)
+            add(ModifierType::Stretch);
+
+        const double pitch = buffer->getPitchSemiTones();
+        if (pitch > epsilon)
+            add(ModifierType::PitchUpOctave);
+        else if (pitch < -epsilon)
+            add(ModifierType::PitchDownOctave);
+
+        if (buffer->isInSliceRepeaterMode())
+            add(ModifierType::SliceRepeater);
+        else if (buffer->isInArpSliceMode())
+            add(ModifierType::ArpSlice);
+        else if (buffer->isInContinuousRandomMode())
+            add(ModifierType::BeatSliceRandom);
+
+        if (buffer->isPingPongModeEnabled())
+            add(ModifierType::PingPong);
+
+        const auto* strip = channelStrips[bufferIndex];
+        if (strip == nullptr)
+        {
+            activeModifierStickerMasks[static_cast<size_t>(bufferIndex)]
+                .store(mask, std::memory_order_release);
+            return;
+        }
+
+        const auto& fx = strip->effects();
+        if (fx.delayEnabled)
+        {
+            if (! strip->isDubDelayBurstActive()
+                || strip->hasPersistentDelayUnderDubBurst())
+                add(ModifierType::BufferDelayOn);
+            if (strip->isDubDelayBurstActive())
+                add(ModifierType::BufferDelayDubBurst);
+        }
+        if (fx.reverbEnabled)
+            add(ModifierType::BufferReverbOn);
+        if (fx.lowPassEnabled)
+            add(ModifierType::BufferLowPassOn);
+        if (fx.highPassEnabled)
+            add(ModifierType::BufferHighPassOn);
+        if (fx.volumeRampEnabled)
+            add(ModifierType::BufferVolumeRampDown);
+        if (fx.tremoloEnabled)
+            add(ModifierType::BufferTremolo);
+        if (fx.chorusEnabled)
+            add(ModifierType::BufferChorusOn);
+        if (fx.autoPanEnabled)
+            add(ModifierType::BufferAutoPan);
+        if (fx.shLowPassEnabled)
+            add(ModifierType::BufferSHLowPassOn);
+        if (fx.shHighPassEnabled)
+            add(ModifierType::BufferSHHighPassOn);
+        if (fx.granularEnabled)
+        {
+            if (! strip->isTemporaryGranularActive()
+                || strip->hasPersistentGranularUnderBurst())
+                add(ModifierType::BufferGranularOn);
+            if (strip->isTemporaryGranularActive())
+                add(ModifierType::BufferGranularMomentary);
+        }
+
+        // Ducking is an always-on wet-path behavior, not a scheduled modifier.
+        // Its glyph remains available in the renderer if the modifier returns.
+        activeModifierStickerMasks[static_cast<size_t>(bufferIndex)]
+            .store(mask, std::memory_order_release);
+    }
+
+    void refreshAllModifierStickerMasks()
+    {
+        for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
+            refreshActiveModifierStickerMask(i);
     }
 
 
@@ -271,7 +399,12 @@ struct AppState : public ModifierSchedulerListener
             buf->setPingPongMode(snap.pingPongEnabled, snap.pingPongDivision,
                                  settings.bpm, buf->getFileSampleRate());
 
-            // ChannelStrip: clear envelopes and reset FX state, then apply snapshot
+            // Presets describe a settled snapshot, never an in-flight fade.
+            // Cancel old controllers before assigning the captured state so a
+            // pre-recall burst cannot later overwrite the restored stack.
+            strip->clearModifierAutomation();
+
+            // ChannelStrip: apply the captured FX state.
             auto& fx = strip->effects();
             fx.delayEnabled      = snap.delayEnabled;
             fx.reverbEnabled     = snap.reverbEnabled;
@@ -280,7 +413,10 @@ struct AppState : public ModifierSchedulerListener
             fx.tremoloEnabled    = snap.tremoloEnabled;
             fx.chorusEnabled     = snap.chorusEnabled;
             fx.autoPanEnabled    = snap.autoPanEnabled;
-            fx.volumeRampEnabled = snap.volumeRampEnabled;
+            // Volume Ramp is momentary. A preset may have been captured while
+            // it was passing through, but recall must not create a permanent
+            // sticker with no controller available to finish it.
+            fx.volumeRampEnabled = false;
             fx.shLowPassEnabled  = snap.shLowPassEnabled;
             fx.shHighPassEnabled = snap.shHighPassEnabled;
             fx.granularEnabled   = snap.granularEnabled;
@@ -316,7 +452,8 @@ struct AppState : public ModifierSchedulerListener
             fp.panDepth               = snap.panDepth;
             fp.panMix                 = snap.panMix;
             fp.panPeriodBars          = snap.panPeriodBars;
-            fp.volumeGain             = snap.volumeGain;
+            fp.volumeGain             = snap.volumeRampEnabled ? 1.0f
+                                                                : snap.volumeGain;
             fp.shLpfCutoff            = snap.shLpfCutoff;
             fp.shLpfQ                 = snap.shLpfQ;
             fp.shHpfCutoff            = snap.shHpfCutoff;
@@ -340,6 +477,8 @@ struct AppState : public ModifierSchedulerListener
             if (buf->hasAudioLoaded() && !buf->isPlaying())
                 buf->play();
         }
+
+        refreshAllModifierStickerMasks();
     }
 
     ~AppState() override
@@ -515,6 +654,8 @@ struct AppState : public ModifierSchedulerListener
             default:
                 break; // Unimplemented modifiers ignored for now
         }
+
+        refreshAllModifierStickerMasks();
     }
 private:
     void applyPitchSemiTones(double deltaSemiTones, const juce::Array<int>& targets)
@@ -770,6 +911,7 @@ private:
             if (juce::isPositiveAndBelow(idx, channelStrips.size()))
             {
                 auto& strip = *channelStrips[idx];
+                strip.cancelDubDelayBurst();
                 strip.effects().delayEnabled = true;
                 // Division handling kept as before
                 // Wet/feedback targets
@@ -886,6 +1028,7 @@ private:
             if (juce::isPositiveAndBelow(idx, channelStrips.size()))
             {
                 auto& strip = *channelStrips[idx];
+                strip.prepareDubDelayBurst();
                 strip.effects().delayEnabled = true;
                 // Determine tap times similar to Delay On
                 double beatMs = settings.getSecondsPerBeat() * 1000.0;
@@ -1173,6 +1316,7 @@ private:
             if (juce::isPositiveAndBelow(idx, channelStrips.size()))
             {
                 auto& strip = *channelStrips[idx];
+                strip.cancelTemporaryGranular();
                 strip.effects().granularEnabled = true;
                 float targetMix   = desc.plannedGrainMix.has_value()         ? (float)desc.plannedGrainMix.value()         : 0.75f;
                 float density     = desc.plannedGrainDensityHz.has_value()   ? (float)desc.plannedGrainDensityHz.value()   : 8.0f;
@@ -1197,19 +1341,18 @@ private:
             if (juce::isPositiveAndBelow(idx, channelStrips.size()))
             {
                 auto& strip = *channelStrips[idx];
-                strip.effects().granularEnabled = true;
                 float targetMix   = desc.plannedGrainMix.has_value()         ? (float)desc.plannedGrainMix.value()         : 0.75f;
                 float density     = desc.plannedGrainDensityHz.has_value()   ? (float)desc.plannedGrainDensityHz.value()   : 8.0f;
                 float size        = desc.plannedGrainSizeMs.has_value()      ? (float)desc.plannedGrainSizeMs.value()      : 150.0f;
                 float pitchSpread = desc.plannedGrainPitchSpread.has_value() ? (float)desc.plannedGrainPitchSpread.value() : 0.0f;
                 float texture     = desc.plannedGrainTexture.has_value()     ? (float)desc.plannedGrainTexture.value()     : 0.3f;
                 double totalBars  = desc.plannedFxFadeBars.value_or(4.0);
+                float half = (float)juce::jmax(0.0001, totalBars * 0.5);
+                strip.startTemporaryGranular(targetMix, half, 0.0f, half);
                 strip.getMutableFxParams().grainDensityHz   = density;
                 strip.getMutableFxParams().grainSizeMs      = size;
                 strip.getMutableFxParams().grainPitchSpread = pitchSpread;
                 strip.getMutableFxParams().grainTexture     = texture;
-                float half = (float)juce::jmax(0.0001, totalBars * 0.5);
-                strip.startTemporaryGranular(targetMix, half, 0.0f, half);
             }
         }
     }
@@ -1250,6 +1393,7 @@ private:
 
         // 1. Capture a BufferModifierSnapshot for each target
         std::vector<BufferModifierSnapshot> snapshots(static_cast<size_t>(targets.size()));
+        std::vector<ChannelStrip::ModifierRuntimeState> stripStates(static_cast<size_t>(targets.size()));
         for (int t = 0; t < targets.size(); ++t)
         {
             int idx = targets[t];
@@ -1257,6 +1401,8 @@ private:
             auto* buf = bufferManager.getBuffer(idx);
             auto* strip = (juce::isPositiveAndBelow(idx, channelStrips.size())) ? channelStrips[idx] : nullptr;
             if (buf == nullptr || strip == nullptr) continue;
+
+            stripStates[static_cast<size_t>(t)] = strip->captureModifierRuntimeState();
 
             // AudioBuffer transform state
             snap.speed                   = buf->getSpeed();
@@ -1336,8 +1482,13 @@ private:
         //    For 2 buffers this is a simple swap.
         const auto n = static_cast<int>(snapshots.size());
         std::vector<BufferModifierSnapshot> rotated(static_cast<size_t>(n));
+        std::vector<ChannelStrip::ModifierRuntimeState> rotatedStripStates(static_cast<size_t>(n));
         for (int i = 0; i < n; ++i)
+        {
             rotated[static_cast<size_t>(i)] = snapshots[static_cast<size_t>((i + n - 1) % n)];
+            rotatedStripStates[static_cast<size_t>(i)]
+                = stripStates[static_cast<size_t>((i + n - 1) % n)];
+        }
 
         // 3. Restore each target from its new (rotated) snapshot
         for (int t = 0; t < targets.size(); ++t)
@@ -1367,66 +1518,10 @@ private:
             buf->setPingPongMode(snap.pingPongEnabled, snap.pingPongDivision,
                                  settings.bpm, buf->getFileSampleRate());
 
-            // ChannelStrip FX enable flags
-            auto& fx = strip->effects();
-            fx.delayEnabled      = snap.delayEnabled;
-            fx.reverbEnabled     = snap.reverbEnabled;
-            fx.lowPassEnabled    = snap.lowPassEnabled;
-            fx.highPassEnabled   = snap.highPassEnabled;
-            fx.tremoloEnabled    = snap.tremoloEnabled;
-            fx.chorusEnabled     = snap.chorusEnabled;
-            fx.autoPanEnabled    = snap.autoPanEnabled;
-            fx.volumeRampEnabled = snap.volumeRampEnabled;
-            fx.shLowPassEnabled  = snap.shLowPassEnabled;
-            fx.shHighPassEnabled = snap.shHighPassEnabled;
-            fx.granularEnabled   = snap.granularEnabled;
-
-            // ChannelStrip FxParams
-            auto& fp = strip->getMutableFxParams();
-            fp.reverbWet              = snap.reverbWet;
-            fp.reverbPreDelayMs       = snap.reverbPreDelayMs;
-            fp.delayFeedback          = snap.delayFeedback;
-            fp.delayTimeMs            = snap.delayTimeMs;
-            fp.delayWet               = snap.delayWet;
-            fp.delayPingPong          = snap.delayPingPong;
-            fp.delayFeedbackHighCutHz = snap.delayFeedbackHighCutHz;
-            fp.delayFbDrive           = snap.delayFbDrive;
-            fp.duckingEnabled         = snap.duckingEnabled;
-            fp.duckAmount             = snap.duckAmount;
-            fp.duckReleaseMs          = snap.duckReleaseMs;
-            fp.wowFlutterEnabled      = snap.wowFlutterEnabled;
-            fp.wowDepthMs             = snap.wowDepthMs;
-            fp.wowRateHz              = snap.wowRateHz;
-            fp.flutterDepthMs         = snap.flutterDepthMs;
-            fp.flutterRateHz          = snap.flutterRateHz;
-            fp.wowPeriodBars          = snap.wowPeriodBars;
-            fp.flutterPeriodBars      = snap.flutterPeriodBars;
-            fp.lowPassCutoff          = snap.lowPassCutoff;
-            fp.highPassCutoff         = snap.highPassCutoff;
-            fp.tremoloDepth           = snap.tremoloDepth;
-            fp.tremoloRateHz          = snap.tremoloRateHz;
-            fp.chorusDepth            = snap.chorusDepth;
-            fp.chorusRateHz           = snap.chorusRateHz;
-            fp.chorusMix              = snap.chorusMix;
-            fp.chorusDelayMs          = snap.chorusDelayMs;
-            fp.panRateHz              = snap.panRateHz;
-            fp.panDepth               = snap.panDepth;
-            fp.panMix                 = snap.panMix;
-            fp.panPeriodBars          = snap.panPeriodBars;
-            fp.volumeGain             = snap.volumeGain;
-            fp.shLpfCutoff            = snap.shLpfCutoff;
-            fp.shLpfQ                 = snap.shLpfQ;
-            fp.shHpfCutoff            = snap.shHpfCutoff;
-            fp.shHpfQ                 = snap.shHpfQ;
-            fp.shDivisionBars         = snap.shDivisionBars;
-            fp.grainDensityHz         = snap.grainDensityHz;
-            fp.grainSizeMs            = snap.grainSizeMs;
-            fp.grainPitchSpread       = snap.grainPitchSpread;
-            fp.grainMix               = snap.grainMix;
-            fp.grainTexture           = snap.grainTexture;
-
-            // Declick: fade-in over ~12ms to mask FX parameter discontinuities
-            strip->requestDeclickFadeIn(512);
+            // Move the full FX runtime — including temporary rise/fall/hold
+            // controllers — so audio behavior and pad stickers stay aligned.
+            strip->restoreModifierRuntimeState(
+                rotatedStripStates[static_cast<size_t>(t)]);
 
             if (buf->hasAudioLoaded() && !buf->isPlaying())
                 buf->play();
@@ -1473,6 +1568,9 @@ public:
         if (secondsPerBar <= 0.0) secondsPerBar = 1.0;
         float barsDelta = (float)(blockSeconds / secondsPerBar);
         for (int i = 0; i < channelStrips.size(); ++i)
+        {
             channelStrips[i]->advanceEnvelopes(barsDelta);
+            refreshActiveModifierStickerMask(i);
+        }
     }
 };

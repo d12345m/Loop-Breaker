@@ -666,26 +666,26 @@ static ThemePalette makeOrangeChaos()
     p.textSecondary = hex (0xFFE1A8);
     p.textOnAccent  = hex (0x391006);
 
-    p.accent1       = hex (0xC6FF00);
-    p.accent2       = hex (0x2AEEFF);
-    p.accent3       = hex (0x4E7DFF);
+    p.accent1       = hex (0xFF1744);
+    p.accent2       = hex (0xFFB000);
+    p.accent3       = hex (0xC6FF00);
 
-    p.good          = hex (0x2AEEFF);
+    p.good          = hex (0xC6FF00);
     p.warn          = hex (0xFFE600);
     p.bad           = hex (0xFF3CB8);
 
     p.knobFill      = hex (0xFF3CB8);
     p.knobTrack     = hex (0x4A0B2F);
     p.waveformFill  = hex (0xFFE600);
-    p.playhead      = hex (0x2AEEFF);
+    p.playhead      = hex (0xC6FF00);
 
     p.padEmpty      = hex (0x9C1800);
     p.padEmptySelected = hex (0xD13E00);
-    p.padLoaded     = hex (0x0B4966);
-    p.padLoadedSelected = hex (0x223F9A);
-    p.padSelectedIndicator = p.accent1;
+    p.padLoaded     = hex (0x8A2D00);
+    p.padLoadedSelected = hex (0xC74A00);
+    p.padSelectedIndicator = p.accent3;
     p.padFlash      = hex (0xFFFD3D);
-    p.padPlaying    = hex (0x2AEEFF);
+    p.padPlaying    = p.accent3;
 
     p.glowIntensity = 1.0f;
     p.borderRadius  = 12.0f;

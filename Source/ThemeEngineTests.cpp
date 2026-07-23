@@ -81,17 +81,20 @@ public:
             expectWithinAbsoluteError (marathon->borderRadius, 1.0f, 0.001f);
         }
 
-        beginTest ("Orange Chaos has intentional high-energy signals");
+        beginTest ("Orange Chaos keeps its pad signals warm with a lime accent");
         const auto* orangeChaos = engine.getBuiltInPalette ("Orange Chaos (Wild)");
         expect (orangeChaos != nullptr);
         if (orangeChaos != nullptr)
         {
             expect (orangeChaos->bg == rgb (0xFF4D00));
-            expect (orangeChaos->accent1 == rgb (0xC6FF00));
-            expect (orangeChaos->accent2 == rgb (0x2AEEFF));
-            expect (orangeChaos->accent3 == rgb (0x4E7DFF));
-            expect (orangeChaos->padLoaded == rgb (0x0B4966));
-            expect (orangeChaos->padLoadedSelected == rgb (0x223F9A));
+            expect (orangeChaos->accent1 == rgb (0xFF1744));
+            expect (orangeChaos->accent2 == rgb (0xFFB000));
+            expect (orangeChaos->accent3 == rgb (0xC6FF00));
+            expect (orangeChaos->good == rgb (0xC6FF00));
+            expect (orangeChaos->playhead == rgb (0xC6FF00));
+            expect (orangeChaos->padLoaded == rgb (0x8A2D00));
+            expect (orangeChaos->padLoadedSelected == rgb (0xC74A00));
+            expect (orangeChaos->padPlaying == rgb (0xC6FF00));
             expectWithinAbsoluteError (orangeChaos->glowIntensity, 1.0f, 0.001f);
             expectWithinAbsoluteError (orangeChaos->borderRadius, 12.0f, 0.001f);
         }

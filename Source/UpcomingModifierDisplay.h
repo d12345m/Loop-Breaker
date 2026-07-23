@@ -18,6 +18,8 @@
 #include "ModifierVariantFormatter.h"
 #include "UiGridLayout.h"
 
+#include <cmath>
+
 class UpcomingModifierDisplay : public juce::Component,
                                 private juce::Timer
 {
@@ -33,6 +35,7 @@ public:
             return;
 
         portraitLayout = shouldUsePortraitLayout;
+        resetNameMarquee();
         repaint();
     }
 
@@ -43,21 +46,25 @@ public:
             return;
 
         uiScale = newScale;
+        resetNameMarquee();
         repaint();
     }
 
     void setUpcoming(const std::optional<ModifierDescriptor>& desc)
     {
         upcomingDescriptor = desc;
+        const juce::String newName = desc.has_value() ? desc->shortName : "--";
+        if (newName != upcomingName)
+            resetNameMarquee();
+
+        upcomingName = newName;
         if (desc.has_value())
         {
-            upcomingName = desc->shortName;
             upcomingVariant = ModifierVariantFormatter::full (*desc);
 
         }
         else
         {
-            upcomingName = "--";
             upcomingVariant.clear();
         }
         repaint();
@@ -73,6 +80,9 @@ public:
 
     void setPlannedQueue (const std::vector<PlannedModifier>& queue)
     {
+        if ((plannedQueue.size() > 1) != (queue.size() > 1))
+            resetNameMarquee();
+
         plannedQueue = queue;
         if (! plannedQueue.empty())
             setUpcoming (plannedQueue.front().descriptor);
@@ -89,6 +99,11 @@ public:
     void setTempoBpm (double bpm)
     {
         tempoBpm = juce::jlimit (20.0, 400.0, bpm);
+    }
+
+    void resized() override
+    {
+        resetNameMarquee();
     }
 
     void paintProgressBar (juce::Graphics& g, juce::Rectangle<float> bounds) const
@@ -201,9 +216,71 @@ public:
         auto nameRow = meta.removeFromTop (juce::jmin (28.0f * uiScale,
                                                       meta.getHeight() * 0.42f));
         g.setColour (glyphPalette.ink);
-        g.setFont (fonts.modifierNameFont (20.0f * uiScale));
-        g.drawFittedText (upcomingName.toUpperCase(), nameRow.toNearestInt(),
-                          juce::Justification::centredLeft, 1, 0.7f);
+        const auto nameFont = fonts.modifierNameFont (20.0f * uiScale);
+        const auto displayName = upcomingName.toUpperCase();
+        const float nameWidth =
+            juce::GlyphArrangement::getStringWidth (nameFont, displayName);
+        const float marqueeOverflow = portraitLayout
+            ? juce::jmax (0.0f, nameWidth - nameRow.getWidth())
+            : 0.0f;
+        if (std::abs (marqueeOverflow - nameMarqueeOverflowPx) > 0.5f)
+        {
+            nameMarqueeOverflowPx = marqueeOverflow;
+            nameMarqueeElapsedSeconds = 0.0;
+        }
+
+        const bool nameOverflows = marqueeOverflow > 1.0f;
+        nameMarqueeActive = nameOverflows && ! suppressed;
+        g.setFont (nameFont);
+
+        const auto& animation =
+            ThemeEngine::getInstance().getAnimationConfig();
+        if (nameMarqueeActive && animation.enabled)
+        {
+            const double speedMultiplier =
+                juce::jmax (0.25, static_cast<double> (animation.animationSpeed));
+            const float travel = marqueeOverflow;
+            const double pauseSeconds = 0.8 / speedMultiplier;
+            const double scrollSeconds = static_cast<double> (travel)
+                                       / (28.0 * uiScale * speedMultiplier);
+            const double cycleSeconds = 2.0 * (pauseSeconds + scrollSeconds);
+            const double cyclePosition = std::fmod (
+                nameMarqueeElapsedSeconds, cycleSeconds);
+
+            float offset = 0.0f;
+            if (cyclePosition <= pauseSeconds)
+            {
+                offset = 0.0f;
+            }
+            else if (cyclePosition <= pauseSeconds + scrollSeconds)
+            {
+                offset = -travel * static_cast<float> (
+                    (cyclePosition - pauseSeconds) / scrollSeconds);
+            }
+            else if (cyclePosition <= 2.0 * pauseSeconds + scrollSeconds)
+            {
+                offset = -travel;
+            }
+            else
+            {
+                offset = -travel * (1.0f - static_cast<float> (
+                    (cyclePosition - 2.0 * pauseSeconds - scrollSeconds)
+                    / scrollSeconds));
+            }
+
+            juce::Graphics::ScopedSaveState marqueeClip (g);
+            g.reduceClipRegion (nameRow.getSmallestIntegerContainer());
+            g.drawText (displayName,
+                        nameRow.withX (nameRow.getX() + offset)
+                               .withWidth (nameWidth + 2.0f * uiScale),
+                        juce::Justification::centredLeft, false);
+        }
+        else
+        {
+            g.drawFittedText (displayName, nameRow.toNearestInt(),
+                              juce::Justification::centredLeft, 1,
+                              portraitLayout ? 0.55f : 0.7f);
+        }
 
         if (upcomingVariant.isNotEmpty())
         {
@@ -365,6 +442,7 @@ private:
         lastAnimationTickMs = nowMs;
 
         const auto& anim = ThemeEngine::getInstance().getAnimationConfig();
+        bool shouldRepaint = false;
         if (anim.enabled && upcomingDescriptor.has_value() && ! suppressed)
         {
             // One complete glyph phase per 4/4 bar. At 120 BPM this remains
@@ -373,8 +451,24 @@ private:
             glyphPhase += static_cast<float> ((tempoBpm / (60.0 * beatsPerCycle))
                                               * elapsedSeconds);
             if (glyphPhase > 1.0f) glyphPhase -= 1.0f;
-            repaint();
+            shouldRepaint = true;
         }
+
+        if (anim.enabled && nameMarqueeActive)
+        {
+            nameMarqueeElapsedSeconds += elapsedSeconds;
+            shouldRepaint = true;
+        }
+
+        if (shouldRepaint)
+            repaint();
+    }
+
+    void resetNameMarquee() noexcept
+    {
+        nameMarqueeElapsedSeconds = 0.0;
+        nameMarqueeOverflowPx = -1.0f;
+        nameMarqueeActive = false;
     }
 
     std::optional<ModifierDescriptor> upcomingDescriptor;
@@ -387,6 +481,9 @@ private:
     bool suppressed = false;
     bool portraitLayout = false;
     float glyphPhase = 0.0f;
+    double nameMarqueeElapsedSeconds = 0.0;
+    float nameMarqueeOverflowPx = -1.0f;
+    bool nameMarqueeActive = false;
     double tempoBpm = 120.0;
     double lastAnimationTickMs = 0.0;
     float uiScale = 1.0f;

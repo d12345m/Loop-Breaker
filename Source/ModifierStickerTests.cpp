@@ -96,10 +96,10 @@ public:
         expect (ModifierStickerOverlay::bitForType (ModifierType::MasterLowPassOn) == 0);
         expect (ModifierStickerOverlay::bitForType (ModifierType::Unknown) == 0);
 
-        beginTest ("Landscape sticker bounds are contained and non-overlapping");
+        beginTest ("Landscape stickers fill rightward from the bottom-left");
         verifyBounds ({ 13.0f, 17.0f, 620.0f, 248.0f });
 
-        beginTest ("Portrait sticker bounds are contained and non-overlapping");
+        beginTest ("Portrait stickers fill rightward from the bottom-left");
         verifyBounds ({ 7.0f, 11.0f, 178.0f, 420.0f });
     }
 
@@ -122,7 +122,9 @@ private:
                     "Sticker bounds must remain inside the supplied aperture");
 
             const int expectedColumn = slot % ModifierStickerOverlay::columns;
-            const int expectedRow = slot / ModifierStickerOverlay::columns;
+            const int expectedRowFromTop =
+                ModifierStickerOverlay::rows - 1
+                - slot / ModifierStickerOverlay::columns;
             const float cellWidth = aperture.getWidth()
                                   / static_cast<float> (ModifierStickerOverlay::columns);
             const float cellHeight = aperture.getHeight()
@@ -133,7 +135,7 @@ private:
                           expectedColumn);
             expectEquals (static_cast<int> ((first.getCentreY() - aperture.getY())
                                             / cellHeight),
-                          expectedRow);
+                          expectedRowFromTop);
         }
 
         for (int first = 0; first < ModifierStickerOverlay::stickerCount; ++first)

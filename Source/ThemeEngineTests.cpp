@@ -85,6 +85,27 @@ public:
             expectWithinAbsoluteError (marathon->borderRadius, 1.0f, 0.001f);
         }
 
+        beginTest ("Orange themes preserve the colour-field and white-control treatment");
+        const auto* deepOrange = engine.getBuiltInPalette ("Deep Orange");
+        expect (deepOrange != nullptr);
+        if (deepOrange != nullptr)
+        {
+            expect (deepOrange->bg == rgb (0xB52D00));
+            expect (deepOrange->accent1 == rgb (0xFFFFFF));
+            expect (deepOrange->waveformFill == rgb (0xFFFFFF));
+            expectWithinAbsoluteError (deepOrange->borderRadius, 0.0f, 0.001f);
+        }
+
+        const auto* lightOrange = engine.getBuiltInPalette ("Light Orange");
+        expect (lightOrange != nullptr);
+        if (lightOrange != nullptr)
+        {
+            expect (lightOrange->bg == rgb (0xF26A21));
+            expect (lightOrange->accent1 == rgb (0xFFFFFF));
+            expect (lightOrange->waveformFill == rgb (0xFFFFFF));
+            expectWithinAbsoluteError (lightOrange->borderRadius, 0.0f, 0.001f);
+        }
+
         beginTest ("Game Boy playhead matches its visible waveform colour");
         const auto* gameBoy = engine.getBuiltInPalette ("Game Boy (Light)");
         expect (gameBoy != nullptr);
@@ -122,6 +143,8 @@ public:
             { "Toxic Sorbet (Light)", 0x00D9C7 },
             { "Marathon Acid (Dark)", 0xFF2BD6 },
             { "IIgs Writer (Blue)",   0xFF72D2 },
+            { "Deep Orange",        0xFF72D2 },
+            { "Light Orange",       0xD95CFF },
             { "Game Boy (Light)",     0xE5F25A },
             { "Gruvbox (Dark)",       0x83D8C5 },
             { "Pixel Grid (Dark)",    0x5EEBFF }

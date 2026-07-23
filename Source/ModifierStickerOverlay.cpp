@@ -70,11 +70,11 @@ juce::Rectangle<float> ModifierStickerOverlay::getStickerBounds (
     const float cellWidth = aperture.getWidth() / static_cast<float> (columns);
     const float cellHeight = aperture.getHeight() / static_cast<float> (rows);
     const int column = slot % columns;
-    const int row = slot / columns;
+    const int rowFromTop = rows - 1 - slot / columns;
 
     const juce::Rectangle<float> cell {
         aperture.getX() + static_cast<float> (column) * cellWidth,
-        aperture.getY() + static_cast<float> (row) * cellHeight,
+        aperture.getY() + static_cast<float> (rowFromTop) * cellHeight,
         cellWidth,
         cellHeight
     };

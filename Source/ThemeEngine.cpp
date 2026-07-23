@@ -639,6 +639,94 @@ static ThemePalette makeIIgsWriter()
     return p;
 }
 
+static ThemePalette makeDeepOrange()
+{
+    ThemePalette p;
+    p.name          = "Deep Orange";
+
+    // A dense orange control field with white document-like controls.
+    p.bg            = hex (0xB52D00);
+    p.bgAlt         = hex (0x942500);
+    p.panel         = hex (0xB52D00);
+    p.panelAlt      = hex (0x831F00);
+
+    p.border        = hex (0xFFF3EB);
+    p.borderGlow    = hex (0xFFFFFF);
+
+    p.textPrimary   = hex (0xFFFFFF);
+    p.textSecondary = hex (0xFFD8C5);
+    p.textOnAccent  = hex (0x7A1D00);
+
+    p.accent1       = hex (0xFFFFFF);
+    p.accent2       = hex (0x73E6FF);
+    p.accent3       = hex (0xFFB7E8);
+
+    p.good          = hex (0x8CFFB0);
+    p.warn          = hex (0xFFF18A);
+    p.bad           = hex (0xFF9EAE);
+
+    p.knobFill      = hex (0xFFFFFF);
+    p.knobTrack     = hex (0x6B1900);
+    p.waveformFill  = hex (0xFFFFFF);
+    p.playhead      = hex (0xFFF18A);
+
+    p.padEmpty      = hex (0x942500);
+    p.padLoaded     = hex (0x5F1600);
+    p.padSelected   = hexA (0xFFFFFF, 0.28f);
+    p.padSelectedIndicator = p.accent1;
+    p.padFlash      = hex (0xFF72D2);
+    p.padPlaying    = hex (0x8CFFB0);
+
+    p.glowIntensity = 0.0f;
+    p.borderRadius  = 0.0f;
+
+    return p;
+}
+
+static ThemePalette makeLightOrange()
+{
+    ThemePalette p;
+    p.name          = "Light Orange";
+
+    // A sunlit orange version of the same white-on-colour visual system.
+    p.bg            = hex (0xF26A21);
+    p.bgAlt         = hex (0xD95312);
+    p.panel         = hex (0xF26A21);
+    p.panelAlt      = hex (0xC9470C);
+
+    p.border        = hex (0xFFF8F2);
+    p.borderGlow    = hex (0xFFFFFF);
+
+    p.textPrimary   = hex (0xFFFFFF);
+    p.textSecondary = hex (0xFFE2D0);
+    p.textOnAccent  = hex (0xA63200);
+
+    p.accent1       = hex (0xFFFFFF);
+    p.accent2       = hex (0x67D5FF);
+    p.accent3       = hex (0xE2ACFF);
+
+    p.good          = hex (0x7FFFD4);
+    p.warn          = hex (0xFFF08A);
+    p.bad           = hex (0xFF7C9C);
+
+    p.knobFill      = hex (0xFFFFFF);
+    p.knobTrack     = hex (0xA63200);
+    p.waveformFill  = hex (0xFFFFFF);
+    p.playhead      = hex (0xFFF08A);
+
+    p.padEmpty      = hex (0xD95312);
+    p.padLoaded     = hex (0x9F2C00);
+    p.padSelected   = hexA (0xFFFFFF, 0.30f);
+    p.padSelectedIndicator = p.accent1;
+    p.padFlash      = hex (0xD95CFF);
+    p.padPlaying    = hex (0x7FFFD4);
+
+    p.glowIntensity = 0.0f;
+    p.borderRadius  = 0.0f;
+
+    return p;
+}
+
 static ThemePalette makeGameBoy()
 {
     ThemePalette p;
@@ -697,6 +785,8 @@ ThemeEngine::ThemeEngine()
     builtInPalettes.push_back (makeToxicSorbet());
     builtInPalettes.push_back (makeMarathonAcid());
     builtInPalettes.push_back (makeIIgsWriter());
+    builtInPalettes.push_back (makeDeepOrange());
+    builtInPalettes.push_back (makeLightOrange());
     builtInPalettes.push_back (makeGameBoy());
     builtInPalettes.push_back (makeGruvbox());
     builtInPalettes.push_back (makePixelGrid());

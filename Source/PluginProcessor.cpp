@@ -991,6 +991,7 @@ void BufferTestAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     // Theme & animation settings
     obj->setProperty("motionConfigVersion", 1);
     obj->setProperty("themeName", app.settings.themeName);
+    obj->setProperty("windowLayoutMode", static_cast<int> (app.settings.windowLayoutMode));
     obj->setProperty("animationsEnabled", app.settings.animationsEnabled);
     obj->setProperty("bgCycleEnabled", app.settings.bgCycleEnabled);
     obj->setProperty("padPulseEnabled", app.settings.padPulseEnabled);
@@ -1174,6 +1175,9 @@ void BufferTestAudioProcessor::setStateInformation (const void* data, int sizeIn
     // Restore theme & animation settings
     if (obj->hasProperty("themeName"))
         app.settings.themeName = obj->getProperty("themeName").toString();
+    if (obj->hasProperty ("windowLayoutMode"))
+        app.settings.windowLayoutMode = static_cast<WindowLayoutMode> (
+            juce::jlimit (0, 1, static_cast<int> (obj->getProperty ("windowLayoutMode"))));
     if (app.settings.themeName == "Control Surface (Light)"
         || app.settings.themeName.startsWith ("Control Surface /"))
         app.settings.themeName = "Control Surface";

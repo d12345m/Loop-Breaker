@@ -83,27 +83,57 @@ public:
     void resized() override
     {
         auto area = getLocalBounds().reduced (14, 12);
+        const bool compact = area.getWidth() < 700;
 
         // Presets live in a compact instrument strip rather than a generic toolbar.
-        presetStripBounds = area.removeFromTop (52);
+        presetStripBounds = area.removeFromTop (compact ? 92 : 52);
         auto presetBarArea = presetStripBounds.reduced (12, 9);
-        presetBarArea.removeFromLeft (146);
-        presetCombo.setBounds (presetBarArea.removeFromLeft (juce::jmin (240, presetBarArea.getWidth() / 2)));
-        presetBarArea.removeFromLeft (6);
-        presetSaveBtn.setBounds (presetBarArea.removeFromLeft (64));
-        presetBarArea.removeFromLeft (6);
-        presetSaveAsBtn.setBounds (presetBarArea.removeFromLeft (78));
-        presetBarArea.removeFromLeft (6);
-        presetDeleteBtn.setBounds (presetBarArea.removeFromLeft (68));
+        if (compact)
+        {
+            presetBarArea.removeFromTop (32);
+            const int comboW = juce::jmax (104, juce::roundToInt (presetBarArea.getWidth() * 0.34f));
+            presetCombo.setBounds (presetBarArea.removeFromLeft (comboW));
+            presetBarArea.removeFromLeft (4);
+            const int buttonW = (presetBarArea.getWidth() - 8) / 3;
+            presetSaveBtn.setBounds (presetBarArea.removeFromLeft (buttonW));
+            presetBarArea.removeFromLeft (4);
+            presetSaveAsBtn.setBounds (presetBarArea.removeFromLeft (buttonW));
+            presetBarArea.removeFromLeft (4);
+            presetDeleteBtn.setBounds (presetBarArea);
+        }
+        else
+        {
+            presetBarArea.removeFromLeft (146);
+            presetCombo.setBounds (presetBarArea.removeFromLeft (juce::jmin (240, presetBarArea.getWidth() / 2)));
+            presetBarArea.removeFromLeft (6);
+            presetSaveBtn.setBounds (presetBarArea.removeFromLeft (64));
+            presetBarArea.removeFromLeft (6);
+            presetSaveAsBtn.setBounds (presetBarArea.removeFromLeft (78));
+            presetBarArea.removeFromLeft (6);
+            presetDeleteBtn.setBounds (presetBarArea.removeFromLeft (68));
+        }
 
         area.removeFromTop (10);
-        actionStripBounds = area.removeFromBottom (48);
+        actionStripBounds = area.removeFromBottom (compact ? 82 : 48);
         auto actions = actionStripBounds.reduced (12, 8);
-        resetButton.setBounds (actions.removeFromRight (118));
-        actions.removeFromRight (6);
-        randomizeButton.setBounds (actions.removeFromRight (112));
-        actions.removeFromRight (6);
-        zeroButton.setBounds (actions.removeFromRight (106));
+        if (compact)
+        {
+            actions.removeFromTop (28);
+            const int buttonW = (actions.getWidth() - 8) / 3;
+            zeroButton.setBounds (actions.removeFromLeft (buttonW));
+            actions.removeFromLeft (4);
+            randomizeButton.setBounds (actions.removeFromLeft (buttonW));
+            actions.removeFromLeft (4);
+            resetButton.setBounds (actions);
+        }
+        else
+        {
+            resetButton.setBounds (actions.removeFromRight (118));
+            actions.removeFromRight (6);
+            randomizeButton.setBounds (actions.removeFromRight (112));
+            actions.removeFromRight (6);
+            zeroButton.setBounds (actions.removeFromRight (106));
+        }
 
         area.removeFromBottom (10);
         viewportBounds = area;
@@ -130,13 +160,22 @@ public:
         g.setColour (palette.accent1);
         g.fillRect (presetStripBounds.getX(), presetStripBounds.getY(), 4, presetStripBounds.getHeight());
         g.setFont (ThemeFonts::getInstance().headingFont (14.0f));
+        const bool compact = presetStripBounds.getWidth() < 700;
+        auto presetHeading = presetStripBounds.reduced (14, 0);
+        if (compact)
+            presetHeading = presetHeading.removeFromTop (38);
+        else
+            presetHeading = presetHeading.removeFromLeft (132);
         g.drawText ("PROBABILITY BANK",
-                    presetStripBounds.reduced (14, 0).removeFromLeft (132),
+                    presetHeading,
                     juce::Justification::centredLeft);
 
         g.setColour (palette.textSecondary);
         g.setFont (ThemeFonts::getInstance().monoFont (11.0f));
-        g.drawText ("BULK VALUES", actionStripBounds.reduced (12, 0),
+        auto actionHeading = actionStripBounds.reduced (12, 0);
+        if (compact)
+            actionHeading = actionHeading.removeFromTop (34);
+        g.drawText ("BULK VALUES", actionHeading,
                     juce::Justification::centredLeft);
     }
 

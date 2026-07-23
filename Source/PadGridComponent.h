@@ -21,6 +21,16 @@ class PadGridComponent : public juce::Component,
                          private juce::ChangeListener
 {
 public:
+    void setPortraitLayout (bool shouldUsePortraitLayout)
+    {
+        if (portraitLayout == shouldUsePortraitLayout)
+            return;
+
+        portraitLayout = shouldUsePortraitLayout;
+        resized();
+        repaint();
+    }
+
     PadGridComponent()
     {
         // Ensure the local AudioFormatManager knows basic formats so thumbnails can read files
@@ -215,8 +225,8 @@ public:
     void resized() override
     {
         auto area = getLocalBounds().reduced(4);
-        const int rows = 2;
-        const int cols = 4;
+        const int rows = portraitLayout ? 4 : 2;
+        const int cols = portraitLayout ? 2 : 4;
         const int padW = area.getWidth() / cols;
         const int padH = area.getHeight() / rows;
         const int labelHeight = 22;
@@ -225,7 +235,8 @@ public:
         {
             for (int c = 0; c < cols; ++c)
             {
-                // Bottom row = pads 1-4 (idx 0-3), top row = pads 5-8 (idx 4-7)
+                // Keep the lowest-numbered pads at the bottom in either
+                // orientation (groups of four landscape, pairs portrait).
                 int idx = (rows - 1 - r) * cols + c;
                 if (idx < padButtons.size())
                 {
@@ -244,6 +255,7 @@ public:
 
 private:
     static constexpr int numPads = 8;
+    bool portraitLayout = false;
     // Look-and-feel that suppresses the default checkbox visuals of ToggleButton
     class InvisibleToggleLookAndFeel : public juce::LookAndFeel_V4 {
     public:

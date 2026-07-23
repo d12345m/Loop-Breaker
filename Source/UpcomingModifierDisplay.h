@@ -26,6 +26,15 @@ public:
         startTimerHz (15);  // shimmer animation (reduced from 30 Hz)
     }
 
+    void setPortraitLayout (bool shouldUsePortraitLayout)
+    {
+        if (portraitLayout == shouldUsePortraitLayout)
+            return;
+
+        portraitLayout = shouldUsePortraitLayout;
+        repaint();
+    }
+
     void setUpcoming(const std::optional<ModifierDescriptor>& desc)
     {
         upcomingDescriptor = desc;
@@ -89,7 +98,11 @@ public:
         juce::Rectangle<float> queueBounds;
         if (plannedQueue.size() > 1 && bounds.getWidth() >= 300.0f)
         {
-            const float queueWidth = juce::jlimit (130.0f, 260.0f, bounds.getWidth() * 0.44f);
+            // Portrait presents metadata, glyph, Queue 1 and Queue 2 as four
+            // equal modules. Landscape retains the wider glyph-led split.
+            const float queueWidth = portraitLayout
+                ? bounds.getWidth() * 0.5f
+                : juce::jlimit (130.0f, 260.0f, bounds.getWidth() * 0.44f);
             queueBounds = nextBounds.removeFromRight (queueWidth);
             g.setColour (glyphPalette.ink.withAlpha (0.72f));
             g.drawVerticalLine (juce::roundToInt (queueBounds.getX()),
@@ -97,9 +110,11 @@ public:
         }
 
         auto content = nextBounds.reduced (10.0f, 8.0f);
-        const float metaWidth = juce::jlimit (90.0f,
-                                              juce::jmax (90.0f, content.getWidth() * 0.48f),
-                                              content.getWidth() * 0.38f);
+        const float metaWidth = portraitLayout && ! queueBounds.isEmpty()
+            ? juce::jmax (1.0f, bounds.getWidth() * 0.25f - 13.0f)
+            : juce::jlimit (90.0f,
+                            juce::jmax (90.0f, content.getWidth() * 0.48f),
+                            content.getWidth() * 0.38f);
         auto meta = content.removeFromLeft (metaWidth);
 
         // The vertical rule makes the cell read as a modular control board.
@@ -119,8 +134,14 @@ public:
         g.setFont (fonts.monoBoldFont (12.0f));
         g.drawText (suppressed ? "PAUSED" : "NEXT", nextRow, juce::Justification::centredLeft);
         if (upcomingDescriptor.has_value())
-            drawCategoryPips (g, nextRow.withTrimmedLeft (44.0f), upcomingDescriptor->type,
+        {
+            // Queue-cell pips are centred in a 14 px label row inset 7 px
+            // from the tile top. Use that same vertical geometry here.
+            auto pipRow = nextRow.withY (bounds.getY() + 7.0f).withHeight (14.0f);
+            drawCategoryPips (g, pipRow.withTrimmedLeft (44.0f).withTrimmedRight (4.0f),
+                              upcomingDescriptor->type,
                               glyphPalette, true);
+        }
 
         meta.removeFromTop (2.0f);
         auto nameRow = meta.removeFromTop (juce::jmin (28.0f, meta.getHeight() * 0.42f));
@@ -314,6 +335,7 @@ private:
     double barsRemaining = 0.0;
     double progress = 0.0; // 0..1
     bool suppressed = false;
+    bool portraitLayout = false;
     float glyphPhase = 0.0f;
     double tempoBpm = 120.0;
     double lastAnimationTickMs = 0.0;

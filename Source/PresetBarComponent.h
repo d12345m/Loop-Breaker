@@ -29,6 +29,16 @@ public:
 
     enum class HighlightType { None, Save, Recall };
 
+    void setPortraitLayout (bool shouldUsePortraitLayout)
+    {
+        if (portraitLayout == shouldUsePortraitLayout)
+            return;
+
+        portraitLayout = shouldUsePortraitLayout;
+        resized();
+        repaint();
+    }
+
     PresetBarComponent()
     {
         for (int i = 0; i < kNumSlots; ++i)
@@ -74,24 +84,45 @@ public:
 
     void resized() override
     {
-        // Derive from the same 4-column grid as PadGridComponent,
-        // splitting each pad column into 2 preset buttons so edges align.
         auto area = getLocalBounds().reduced(4);
-        const int padCols = 4;
-        const int padColW = area.getWidth() / padCols;
-
-        for (int i = 0; i < kNumSlots; ++i)
+        if (portraitLayout)
         {
-            int padCol = i / 2;
-            int sub    = i % 2;
-            int colLeft = area.getX() + padCol * padColW;
-            int halfW   = padColW / 2;
-            // Give the second sub-button the remainder so both halves
-            // sum to the full padColW, avoiding accumulated rounding loss.
-            int x = colLeft + (sub == 0 ? 0 : halfW);
-            int w = (sub == 0) ? halfW : (padColW - halfW);
-            juce::Rectangle<int> btnRect (x, area.getY(), w, area.getHeight());
-            buttons[i]->setBounds (btnRect.reduced (4, 1));
+            // Four presets per row keeps targets usable while matching the
+            // narrower proportions of the two-column pad grid.
+            constexpr int rows = 2;
+            constexpr int cols = 4;
+            const int cellW = area.getWidth() / cols;
+            const int cellH = area.getHeight() / rows;
+
+            for (int i = 0; i < kNumSlots; ++i)
+            {
+                const int row = i / cols;
+                const int col = i % cols;
+                const int x = area.getX() + col * cellW;
+                const int y = area.getY() + row * cellH;
+                const int w = (col == cols - 1) ? area.getRight() - x : cellW;
+                const int h = (row == rows - 1) ? area.getBottom() - y : cellH;
+                buttons[i]->setBounds (juce::Rectangle<int> (x, y, w, h).reduced (3, 2));
+            }
+        }
+        else
+        {
+            // Derive from the same 4-column grid as PadGridComponent,
+            // splitting each pad column into 2 preset buttons so edges align.
+            const int padCols = 4;
+            const int padColW = area.getWidth() / padCols;
+
+            for (int i = 0; i < kNumSlots; ++i)
+            {
+                int padCol = i / 2;
+                int sub    = i % 2;
+                int colLeft = area.getX() + padCol * padColW;
+                int halfW   = padColW / 2;
+                int x = colLeft + (sub == 0 ? 0 : halfW);
+                int w = (sub == 0) ? halfW : (padColW - halfW);
+                juce::Rectangle<int> btnRect (x, area.getY(), w, area.getHeight());
+                buttons[i]->setBounds (btnRect.reduced (4, 1));
+            }
         }
     }
 
@@ -360,6 +391,7 @@ private:
     }
 
     static constexpr int kNumSlots = 8;
+    bool portraitLayout = false;
 
     std::unique_ptr<juce::Component> buttons[kNumSlots];
     std::array<bool, kNumSlots> slotOccupied { false, false, false, false, false, false, false, false };

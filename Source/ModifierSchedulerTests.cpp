@@ -453,13 +453,33 @@ public:
         else
             expect (false, "Master-volume parameter is missing");
 
-        beginTest ("New MIDI mappings persist in plugin state");
+        beginTest ("MIDI mappings and portrait layout persist in plugin state");
+        processor.getAppState().settings.windowLayoutMode = WindowLayoutMode::Portrait9x16;
         juce::MemoryBlock state;
         processor.getStateInformation (state);
         BufferTestAudioProcessor restored;
         restored.setStateInformation (state.getData(), static_cast<int> (state.getSize()));
         expectEquals (restored.getAppState().settings.midiProbabilityActionNoteMap[0], 70);
         expectEquals (restored.getAppState().settings.masterVolumeMidiCC, 71);
+        expectEquals (static_cast<int> (restored.getAppState().settings.windowLayoutMode),
+                      static_cast<int> (WindowLayoutMode::Portrait9x16));
+
+        std::unique_ptr<juce::AudioProcessorEditor> portraitEditor (restored.createEditor());
+        expectEquals (portraitEditor->getWidth(), 540);
+        expectEquals (portraitEditor->getHeight(), 960);
+        bool hasCornerResizer = false;
+        bool hasVisibleTabBar = false;
+        for (int i = 0; i < portraitEditor->getNumChildComponents(); ++i)
+        {
+            auto* child = portraitEditor->getChildComponent (i);
+            hasCornerResizer = hasCornerResizer
+                || dynamic_cast<juce::ResizableCornerComponent*> (child) != nullptr;
+            if (auto* tabs = dynamic_cast<juce::TabbedComponent*> (child))
+                hasVisibleTabBar = tabs->getTabbedButtonBar().isVisible()
+                                && tabs->getTabbedButtonBar().getHeight() > 0;
+        }
+        expect (! hasCornerResizer);
+        expect (hasVisibleTabBar);
 
         processor.releaseResources();
     }

@@ -23,6 +23,9 @@ public:
     void resized() override;
 
 private:
+    void applyWindowLayout (WindowLayoutMode mode, bool restorePreviousSize);
+    void refreshTabbedLayout();
+
     BufferTestAudioProcessor& processor;
 
     std::unique_ptr<BackgroundAnimator> backgroundAnimator;
@@ -37,6 +40,7 @@ private:
     std::unique_ptr<juce::TabbedComponent> tabComponent;
 
     ThemeLookAndFeel editorLnf;
+    juce::Rectangle<int> previousResizableBounds { 0, 0, 1200, 800 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BufferTestAudioProcessorEditor)
 };

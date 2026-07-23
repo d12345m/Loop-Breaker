@@ -50,6 +50,25 @@ public:
             ThemeEngine::getInstance().setTheme (name);
         };
 
+        // ── Window layout dropdown ─────────────────────────────────────
+        addAndMakeVisible (layoutLabel);
+        layoutLabel.setText ("LAYOUT", juce::dontSendNotification);
+        layoutLabel.setJustificationType (juce::Justification::centredRight);
+        layoutLabel.setFont (ThemeFonts::getInstance().controlLabelFont (14.0f));
+
+        addAndMakeVisible (layoutCombo);
+        layoutCombo.addItem ("Resizable (default)", 1);
+        layoutCombo.addItem ("Portrait 9:16", 2);
+        layoutCombo.setSelectedId (static_cast<int> (settings.windowLayoutMode) + 1,
+                                   juce::dontSendNotification);
+        layoutCombo.onChange = [this]
+        {
+            settings.windowLayoutMode = static_cast<WindowLayoutMode> (
+                juce::jlimit (1, 2, layoutCombo.getSelectedId()) - 1);
+            if (onLayoutChanged)
+                onLayoutChanged (settings.windowLayoutMode);
+        };
+
         // ── Parts dropdown ──────────────────────────────────────────────
         addAndMakeVisible (partsLabel);
         partsLabel.setText ("PARTS", juce::dontSendNotification);
@@ -289,8 +308,8 @@ public:
             g.fillRect (bounds.getX(), bounds.getY() + 54, bounds.getWidth(), 1);
         };
 
-        drawCard (appearanceCardBounds, "01", "APPEARANCE", "CONTROL-SURFACE PALETTE");
-        drawCard (sessionCardBounds, "02", "SESSION", "MODIFIER CADENCE ENGINE");
+        drawCard (appearanceCardBounds, "01", "DISPLAY", "CONTROL-SURFACE PALETTE");
+        drawCard (sessionCardBounds, "02", "TIMING", "MODIFIER CADENCE ENGINE");
         drawCard (motionCardBounds, "03", "MOTION", "SEMANTIC GLYPH DISPLAY");
     }
 
@@ -313,7 +332,7 @@ public:
         }
         else
         {
-            appearanceCardBounds = area.removeFromTop (132);
+            appearanceCardBounds = area.removeFromTop (164);
             area.removeFromTop (gap);
             sessionCardBounds = area.removeFromTop (232);
             area.removeFromTop (gap);
@@ -337,6 +356,7 @@ public:
         {
             auto card = controlArea (appearanceCardBounds);
             placePair (card.removeFromTop (rowH), themeLabel, themeCombo, 58);
+            placePair (card.removeFromTop (rowH), layoutLabel, layoutCombo, 58);
         }
 
         {
@@ -366,7 +386,7 @@ private:
     {
         const auto& palette = ThemeEngine::getInstance().getCurrentPalette();
 
-        for (auto* label : { &themeLabel, &partsLabel, &barsLabel, &cadenceModeLabel,
+        for (auto* label : { &themeLabel, &layoutLabel, &partsLabel, &barsLabel, &cadenceModeLabel,
                              &barsRangeMinLabel, &barsRangeMaxLabel, &timedMinLabel,
                              &timedMaxLabel, &bgModeLabel })
         {
@@ -374,7 +394,7 @@ private:
             label->setFont (ThemeFonts::getInstance().controlLabelFont (12.0f));
         }
 
-        for (auto* combo : { &themeCombo, &partsCombo, &cadenceModeCombo })
+        for (auto* combo : { &themeCombo, &layoutCombo, &partsCombo, &cadenceModeCombo })
         {
             combo->setColour (juce::ComboBox::backgroundColourId, palette.panel);
             combo->setColour (juce::ComboBox::outlineColourId, palette.border);
@@ -469,12 +489,15 @@ public:
     // Callbacks (set by parent to integrate with session logic)
     std::function<void(int)> onPartsChanged;
     std::function<void(int)> onBarsChanged;
+    std::function<void(WindowLayoutMode)> onLayoutChanged;
 
 private:
 
     // Theme
     juce::Label    themeLabel;
     juce::ComboBox themeCombo;
+    juce::Label    layoutLabel;
+    juce::ComboBox layoutCombo;
 
     // Parts
     juce::Label    partsLabel;

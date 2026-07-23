@@ -20,6 +20,13 @@ enum class CadenceMode
     Timed    = 2    // Random time interval within a user-defined range (not tied to bars)
 };
 
+// Determines the editor window geometry and Session-page arrangement.
+enum class WindowLayoutMode
+{
+    Resizable    = 0,
+    Portrait9x16 = 1
+};
+
 struct SessionSettings
 {
     // Modifier probability weights (per-type slider values)
@@ -65,6 +72,7 @@ struct SessionSettings
 
     // Visual / UX
     juce::String themeName { "Control Surface" };
+    WindowLayoutMode windowLayoutMode = WindowLayoutMode::Resizable;
     // Glyph motion is part of the primary modifier communication system.
     // Users can disable it through Settings for reduced motion.
     bool animationsEnabled = true;

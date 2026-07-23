@@ -242,6 +242,10 @@ private:
             s.heading = "Settings Tab";
             s.table = {
                 { "Theme dropdown",       "Choose a visual theme for the plugin interface" },
+                { "Layout dropdown",      "Choose the normal free-resizable window or a locked "
+                                          "9:16 portrait layout for social-media recording. "
+                                          "Portrait opens at 540 x 960 logical pixels, can scale "
+                                          "up to 1080 x 1920, and hides the master-volume knob." },
                 { "Parts selector",       "Split each buffer into 1-4 equal sections (A-D); "
                                           "change takes effect on the next modifier trigger "
                                           "when the transport is running" },

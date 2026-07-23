@@ -226,6 +226,21 @@ public:
         setLookAndFeel(nullptr);
     }
 
+    void setPortraitLayout (bool shouldUsePortraitLayout)
+    {
+        if (portraitLayout == shouldUsePortraitLayout)
+            return;
+
+        portraitLayout = shouldUsePortraitLayout;
+        masterVolumeLabel.setVisible (! portraitLayout);
+        masterVolumeSlider.setVisible (! portraitLayout);
+        modifierDisplay.setPortraitLayout (portraitLayout);
+        padGrid.setPortraitLayout (portraitLayout);
+        presetBar.setPortraitLayout (portraitLayout);
+        resized();
+        repaint();
+    }
+
     void themeChanged() override
     {
         applyThemeColors();
@@ -398,37 +413,51 @@ public:
     {
         auto area = getLocalBounds().reduced(8);
 
-        // ── Top bar: branding | centred modifier display | controls ──
-        auto topBar = area.removeFromTop(110);
-
-        const int sideW = 245; // symmetric width for branding & volume
-
-        // Left: branding area
-        brandingBounds = topBar.removeFromLeft(sideW).reduced(4, 8);
-
-        // Right: volume knob (+ debug toggle)
-        auto controlBar = topBar.removeFromRight(sideW);
-        auto volRegion = controlBar.reduced(2);
-        auto volLabelArea = volRegion.removeFromTop(16);
-        masterVolumeLabel.setBounds(volLabelArea);
-        auto knobSize = juce::jmin(volRegion.getWidth(), volRegion.getHeight());
-        masterVolumeSlider.setBounds(volRegion.withSizeKeepingCentre(knobSize, knobSize));
+        if (portraitLayout)
+        {
+            auto brandRow = area.removeFromTop (52);
+            brandingBounds = brandRow.reduced (4, 3);
 
 #if JUCE_DEBUG
-        // In debug builds, squeeze a toggle into the control bar
-        auto debugToggleBar = topBar.removeFromRight(100);
-        const int toggleW = 100;
-        auto toggleArea = debugToggleBar.withSizeKeepingCentre(toggleW, debugToggleBar.getHeight()).reduced(2);
-        modifiersToggle.setBounds(toggleArea);
+            auto debugArea = brandingBounds.removeFromRight (94);
+            modifiersToggle.setBounds (debugArea.reduced (2));
 #endif
 
-        // Centre: modifier display fills the remaining middle area
-        modifierDisplay.setBounds(topBar.reduced(4));
+            area.removeFromTop (4);
+            modifierDisplay.setBounds (area.removeFromTop (116).reduced (4));
+            masterVolumeLabel.setBounds ({});
+            masterVolumeSlider.setBounds ({});
 
-        // ── Preset bar (A–H) ──
-        area.removeFromTop(6);
-        auto presetRow = area.removeFromTop(38);
-        presetBar.setBounds(presetRow);
+            area.removeFromTop (6);
+            presetBar.setBounds (area.removeFromTop (82));
+        }
+        else
+        {
+            // ── Top bar: branding | centred modifier display | controls ──
+            auto topBar = area.removeFromTop(110);
+            const int sideW = 245;
+
+            brandingBounds = topBar.removeFromLeft(sideW).reduced(4, 8);
+
+            auto controlBar = topBar.removeFromRight(sideW);
+            auto volRegion = controlBar.reduced(2);
+            auto volLabelArea = volRegion.removeFromTop(16);
+            masterVolumeLabel.setBounds(volLabelArea);
+            auto knobSize = juce::jmin(volRegion.getWidth(), volRegion.getHeight());
+            masterVolumeSlider.setBounds(volRegion.withSizeKeepingCentre(knobSize, knobSize));
+
+#if JUCE_DEBUG
+            auto debugToggleBar = topBar.removeFromRight(100);
+            const int toggleW = 100;
+            auto toggleArea = debugToggleBar.withSizeKeepingCentre(toggleW, debugToggleBar.getHeight()).reduced(2);
+            modifiersToggle.setBounds(toggleArea);
+#endif
+
+            modifierDisplay.setBounds(topBar.reduced(4));
+
+            area.removeFromTop(6);
+            presetBar.setBounds(area.removeFromTop(38));
+        }
 
         area.removeFromTop(6);
         padGrid.setBounds(area);
@@ -579,6 +608,7 @@ private:
     std::unique_ptr<juce::FileChooser> fileChooser;
 
     bool padPathsSynced = false; // true once pad file paths have been synced to the UI after state restore
+    bool portraitLayout = false;
     std::array<double, 8> lastPlayheadSamples {{ 0, 0, 0, 0, 0, 0, 0, 0 }};
     std::array<bool, 8> lastLoopEnabled {{ false, false, false, false, false, false, false, false }};
 
@@ -1201,6 +1231,10 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
     {
         // Setting is already stored by SettingsPanelContent; nothing extra needed.
     };
+    settingsPanel->onLayoutChanged = [this](WindowLayoutMode mode)
+    {
+        applyWindowLayout (mode, true);
+    };
 
     setLookAndFeel(&editorLnf);
 
@@ -1219,6 +1253,7 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
 
     // Style the tab bar
     auto& tabBar = tabComponent->getTabbedButtonBar();
+    tabBar.setMinimumTabScaleFactor (0.55);
     tabBar.setColour(juce::TabbedButtonBar::tabOutlineColourId, Theme::border());
     tabBar.setColour(juce::TabbedButtonBar::frontOutlineColourId, Theme::accent());
 
@@ -1235,8 +1270,9 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
     ThemeEngine::getInstance().setTheme(processor.getAppState().settings.themeName);
 
     setSize (1200, 800);
-    setResizable(true, true);
+    setResizable(true, false);
     setResizeLimits(920, 600, 2400, 1600);
+    applyWindowLayout (processor.getAppState().settings.windowLayoutMode, false);
 }
 
 BufferTestAudioProcessorEditor::~BufferTestAudioProcessorEditor()
@@ -1270,4 +1306,72 @@ void BufferTestAudioProcessorEditor::resized()
 
     if (tabComponent)
         tabComponent->setBounds(bounds);
+}
+
+void BufferTestAudioProcessorEditor::applyWindowLayout (WindowLayoutMode mode,
+                                                        bool restorePreviousSize)
+{
+    auto* sessionContent = static_cast<PluginEditorContent*> (content.get());
+    const bool portrait = mode == WindowLayoutMode::Portrait9x16;
+
+    if (portrait)
+    {
+        if (getWidth() >= getHeight())
+            previousResizableBounds = getBounds();
+
+        if (auto* constrainer = getConstrainer())
+            constrainer->setFixedAspectRatio (9.0 / 16.0);
+        setResizeLimits (450, 800, 1080, 1920);
+        sessionContent->setPortraitLayout (true);
+        setSize (540, 960);
+    }
+    else
+    {
+        if (auto* constrainer = getConstrainer())
+            constrainer->setFixedAspectRatio (0.0);
+        setResizeLimits (920, 600, 2400, 1600);
+        sessionContent->setPortraitLayout (false);
+
+        if (restorePreviousSize)
+            setSize (juce::jlimit (920, 2400, previousResizableBounds.getWidth()),
+                     juce::jlimit (600, 1600, previousResizableBounds.getHeight()));
+    }
+
+    refreshTabbedLayout();
+
+    // Some plug-in hosts complete editor resizing after the ComboBox callback
+    // returns. Repeat the forced bounds invalidation after the host has settled;
+    // this mirrors the resize event that otherwise makes the tabs reappear.
+    juce::Component::SafePointer<BufferTestAudioProcessorEditor> safeThis (this);
+    juce::MessageManager::callAsync ([safeThis]
+    {
+        if (safeThis != nullptr)
+            safeThis->refreshTabbedLayout();
+    });
+    juce::Timer::callAfterDelay (150, [safeThis]
+    {
+        if (safeThis != nullptr)
+            safeThis->refreshTabbedLayout();
+    });
+}
+
+void BufferTestAudioProcessorEditor::refreshTabbedLayout()
+{
+    auto bounds = getLocalBounds();
+
+    if (backgroundAnimator)
+        backgroundAnimator->setBounds (bounds);
+
+    if (tabComponent)
+    {
+        // Setting identical bounds is intentionally a no-op in JUCE. A one-pixel
+        // nudge guarantees that the tab component and its bar both receive a
+        // real resized() callback before settling on the host's final bounds.
+        tabComponent->setBounds (bounds.withTrimmedBottom (1));
+        tabComponent->setBounds (bounds);
+        tabComponent->getTabbedButtonBar().resized();
+        tabComponent->repaint();
+    }
+
+    repaint();
 }

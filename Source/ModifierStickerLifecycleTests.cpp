@@ -115,7 +115,7 @@ private:
         app.modifierTriggered (
             descriptorFor (ModifierType::BufferTremolo), pad1);
 
-        auto volumeRamp = descriptorFor (ModifierType::BufferVolumeRampDown);
+        auto volumeRamp = descriptorFor (ModifierType::BufferShhhhhh);
         volumeRamp.plannedFxFadeBars = 0.05;
         volumeRamp.plannedVolumeHoldBars = 0.05;
         app.modifierTriggered (volumeRamp, pad0);
@@ -123,7 +123,7 @@ private:
         const auto before0 = app.getActiveModifierStickerMask (0);
         const auto before1 = app.getActiveModifierStickerMask (1);
         expect (maskContains (before0, ModifierType::BufferReverbOn));
-        expect (maskContains (before0, ModifierType::BufferVolumeRampDown));
+        expect (maskContains (before0, ModifierType::BufferShhhhhh));
         expect (maskContains (before1, ModifierType::BufferTremolo));
 
         app.modifierTriggered (
@@ -135,11 +135,11 @@ private:
         expect (maskContains (after0, ModifierType::BufferTremolo),
                 "Pad 0 should receive pad 1's Tremolo sticker");
         expect (! maskContains (after0, ModifierType::BufferReverbOn));
-        expect (! maskContains (after0, ModifierType::BufferVolumeRampDown));
+        expect (! maskContains (after0, ModifierType::BufferShhhhhh));
         expect (maskContains (after1, ModifierType::BufferReverbOn),
                 "Pad 1 should receive pad 0's Reverb sticker");
-        expect (maskContains (after1, ModifierType::BufferVolumeRampDown),
-                "The active Volume Ramp sticker should rotate with its stack");
+        expect (maskContains (after1, ModifierType::BufferShhhhhh),
+                "The active Shhhhhh sticker should rotate with its stack");
         expect (! maskContains (after1, ModifierType::BufferTremolo));
 
         advanceBars (app, 0.05);
@@ -150,8 +150,8 @@ private:
         const auto settled1 = app.getActiveModifierStickerMask (1);
         expect (maskContains (settled0, ModifierType::BufferTremolo));
         expect (maskContains (settled1, ModifierType::BufferReverbOn));
-        expect (! maskContains (settled1, ModifierType::BufferVolumeRampDown),
-                "The moved Volume Ramp controller should expire on pad 1");
+        expect (! maskContains (settled1, ModifierType::BufferShhhhhh),
+                "The moved Shhhhhh controller should expire on pad 1");
         expectWithinAbsoluteError (
             app.channelStrips[1]->getFxParams().volumeGain, 1.0f, 0.0001f);
     }
@@ -222,26 +222,26 @@ private:
 
     void testTemporaryVolumeRamp()
     {
-        beginTest ("Volume Ramp sticker appears and expires with its envelope");
+        beginTest ("Shhhhhh sticker appears and expires with its envelope");
 
         AppState app;
         loadSyntheticAudio (app, 0);
 
-        auto volumeRamp = descriptorFor (ModifierType::BufferVolumeRampDown);
+        auto volumeRamp = descriptorFor (ModifierType::BufferShhhhhh);
         volumeRamp.plannedFxFadeBars = 0.05;
         volumeRamp.plannedVolumeHoldBars = 0.05;
         app.modifierTriggered (volumeRamp, targetsFor ({ 0 }));
 
         expect (maskContains (app.getActiveModifierStickerMask (0),
-                              ModifierType::BufferVolumeRampDown));
+                              ModifierType::BufferShhhhhh));
 
         advanceBars (app, 0.05);
         advanceBars (app, 0.05);
         advanceBars (app, 0.05);
 
         expect (! maskContains (app.getActiveModifierStickerMask (0),
-                                ModifierType::BufferVolumeRampDown),
-                "Volume Ramp should remove its sticker after ramp-up");
+                                ModifierType::BufferShhhhhh),
+                "Shhhhhh should remove its sticker after ramp-up");
         expectWithinAbsoluteError (
             app.channelStrips[0]->getFxParams().volumeGain, 1.0f, 0.0001f);
     }

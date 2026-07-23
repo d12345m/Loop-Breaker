@@ -879,7 +879,7 @@ ModifierDescriptor ModifierScheduler::prepareVariantDescriptor(const ModifierDes
         juce::String mode = jump ? "Jump to target then decay" : "Ramp up then ramp down";
         modified.description = base.description + " -> " + juce::String((int)dur) + " bars | " + mode;
     }
-    else if (base.type == ModifierType::BufferVolumeRampDown)
+    else if (base.type == ModifierType::BufferShhhhhh)
     {
         static const double fades[] { 1.0, 2.0, 4.0 };
         static const double holds[] { 1.0, 2.0, 3.0, 4.0 };

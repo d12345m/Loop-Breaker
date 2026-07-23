@@ -445,12 +445,17 @@ private:
         bool shouldRepaint = false;
         if (anim.enabled && upcomingDescriptor.has_value() && ! suppressed)
         {
-            // One complete glyph phase per 4/4 bar. At 120 BPM this remains
-            // close to the former default speed while following host tempo.
-            constexpr double beatsPerCycle = 4.0;
-            glyphPhase += static_cast<float> ((tempoBpm / (60.0 * beatsPerCycle))
-                                              * elapsedSeconds);
-            if (glyphPhase > 1.0f) glyphPhase -= 1.0f;
+            double cyclesPerSecond = tempoBpm / (60.0 * 4.0);
+            if (upcomingDescriptor->type == ModifierType::BufferAutoPan)
+            {
+                // The scheduler stores the randomized, tempo-synced auto-pan
+                // rate in Hz. Let it change traversal speed, never position.
+                cyclesPerSecond = juce::jmax (
+                    0.01, upcomingDescriptor->plannedPanRateHz.value_or (cyclesPerSecond));
+            }
+
+            glyphPhase += static_cast<float> (cyclesPerSecond * elapsedSeconds);
+            glyphPhase = std::fmod (glyphPhase, 1.0f);
             shouldRepaint = true;
         }
 

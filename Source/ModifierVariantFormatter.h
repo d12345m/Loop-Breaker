@@ -114,7 +114,7 @@ inline juce::String full (const ModifierDescriptor& descriptor)
                        << (*descriptor.plannedImmediateJump ? "JUMP THEN DECAY" : "RAMP UP / DOWN");
             return result;
         }
-        case ModifierType::BufferVolumeRampDown:
+        case ModifierType::BufferShhhhhh:
         {
             juce::String result;
             if (descriptor.plannedFxFadeBars.has_value())
@@ -235,7 +235,7 @@ inline juce::String compact (const ModifierDescriptor& descriptor)
         case ModifierType::PingPong:
         case ModifierType::BufferLowPassOn:
         case ModifierType::BufferHighPassOn:
-        case ModifierType::BufferVolumeRampDown:
+        case ModifierType::BufferShhhhhh:
         case ModifierType::BufferTremolo:
         case ModifierType::BufferDuckingOn:
         case ModifierType::BufferSHLowPassOn:

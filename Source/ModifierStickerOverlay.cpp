@@ -24,7 +24,7 @@ constexpr std::array<ModifierType, ModifierStickerOverlay::stickerCount> canonic
     ModifierType::BufferReverbOn,
     ModifierType::BufferLowPassOn,
     ModifierType::BufferHighPassOn,
-    ModifierType::BufferVolumeRampDown,
+    ModifierType::BufferShhhhhh,
     ModifierType::BufferTremolo,
     ModifierType::BufferChorusOn,
     ModifierType::BufferAutoPan,

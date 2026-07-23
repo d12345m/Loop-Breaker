@@ -241,7 +241,7 @@ struct AppState : public ModifierSchedulerListener
         if (fx.highPassEnabled)
             add(ModifierType::BufferHighPassOn);
         if (fx.volumeRampEnabled)
-            add(ModifierType::BufferVolumeRampDown);
+            add(ModifierType::BufferShhhhhh);
         if (fx.tremoloEnabled)
             add(ModifierType::BufferTremolo);
         if (fx.chorusEnabled)
@@ -413,7 +413,7 @@ struct AppState : public ModifierSchedulerListener
             fx.tremoloEnabled    = snap.tremoloEnabled;
             fx.chorusEnabled     = snap.chorusEnabled;
             fx.autoPanEnabled    = snap.autoPanEnabled;
-            // Volume Ramp is momentary. A preset may have been captured while
+            // Shhhhhh is momentary. A preset may have been captured while
             // it was passing through, but recall must not create a permanent
             // sticker with no controller available to finish it.
             fx.volumeRampEnabled = false;
@@ -619,8 +619,8 @@ struct AppState : public ModifierSchedulerListener
             case ModifierType::BufferTremolo:
                 applyBufferTremoloOn(targets);
                 break;
-            case ModifierType::BufferVolumeRampDown:
-                applyBufferVolumeRampDown(desc, targets);
+            case ModifierType::BufferShhhhhh:
+                applyBufferShhhhhh(desc, targets);
                 break;
             case ModifierType::BufferChorusOn:
                 applyBufferChorusOn(desc, targets);
@@ -1176,14 +1176,14 @@ private:
         }
     }
 
-    void applyBufferVolumeRampDown(const ModifierDescriptor& desc, const juce::Array<int>& targets)
+    void applyBufferShhhhhh(const ModifierDescriptor& desc, const juce::Array<int>& targets)
     {
         if (targets.isEmpty()) return;
 
         const float rampBars = (float) desc.plannedFxFadeBars.value_or (2.0);
         const float holdBars = (float) desc.plannedVolumeHoldBars.value_or (2.0);
 
-        // Volume Ramp currently has one fixed destination: silence.
+        // Shhhhhh currently has one fixed destination: silence.
         const float targetGain = 0.0f; // Fade to silence
 
         // Ramp back up over the same number of bars as the ramp down

@@ -41,7 +41,7 @@ enum class ModifierType
     BufferReverbOn,
     BufferLowPassOn,
     BufferHighPassOn,
-    BufferVolumeRampDown,
+    BufferShhhhhh,
     BufferTremolo,
     BufferDelayDubBurst,
     BufferDuckingOn,

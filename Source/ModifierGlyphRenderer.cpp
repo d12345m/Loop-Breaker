@@ -693,20 +693,12 @@ void drawFilter (GlyphCanvas& c, float phase, bool highPass, bool sampleHold, bo
         c.colour (c.p.ink);
         c.machineStroke (holds, 2.2f);
 
-        if (! c.compact)
-        {
-            const int activeSample = heldFrame % numPosts;
-            for (int i = 0; i < numPosts; ++i)
-                c.filledRect (posts[i] - 1.6f, values[i] - 1.6f, 3.2f, 3.2f,
-                              i == activeSample ? c.p.vermilion : c.p.ink,
-                              i == activeSample ? 1.0f : 0.72f);
-        }
-
         // Match the standard filters: one centred cutoff line, mirrored for
         // low-pass and high-pass.
+        const float sweep = (triangle (phase) - 0.5f) * 5.0f;
         c.colour (c.p.vermilion);
-        c.line (23.0f, highPass ? 76.0f : 24.0f,
-                77.0f, highPass ? 24.0f : 76.0f, 2.5f);
+        c.line (23.0f, highPass ? 76.0f - sweep : 24.0f + sweep,
+                77.0f, highPass ? 24.0f + sweep : 76.0f - sweep, 2.5f);
         return;
     }
 
@@ -733,22 +725,17 @@ void drawFilter (GlyphCanvas& c, float phase, bool highPass, bool sampleHold, bo
     const float edgeRight = master ? 73.0f : 77.0f;
     const float edgeTop = 24.0f;
     const float edgeBottom = 76.0f;
-    if (! highPass && ! master)
-    {
-        c.colour (c.p.vermilion);
-        c.line (edgeLeft, edgeTop, edgeRight, edgeBottom, 2.5f);
-    }
-    else
-    {
-        c.colour (c.p.vermilion);
-        c.line (edgeLeft, highPass ? edgeBottom : edgeTop,
-                edgeRight, highPass ? edgeTop : edgeBottom, 2.5f);
+    const float sweep = (triangle (phase) - 0.5f) * 5.0f;
+    const float edgeStartY = highPass ? edgeBottom - sweep : edgeTop + sweep;
+    const float edgeEndY = highPass ? edgeTop + sweep : edgeBottom - sweep;
+    c.colour (c.p.vermilion);
+    c.line (edgeLeft, edgeStartY, edgeRight, edgeEndY, 2.5f);
 
+    if (master)
+    {
         const float beadTravel = 0.24f + triangle (phase) * 0.52f;
         const float beadX = edgeLeft + (edgeRight - edgeLeft) * beadTravel;
-        const float beadY = (highPass ? edgeBottom : edgeTop)
-                          + ((highPass ? edgeTop : edgeBottom)
-                             - (highPass ? edgeBottom : edgeTop)) * beadTravel;
+        const float beadY = edgeStartY + (edgeEndY - edgeStartY) * beadTravel;
         c.dot (beadX, beadY, c.compact ? 2.2f : 2.7f, c.p.vermilion);
     }
 
@@ -761,7 +748,7 @@ void drawFilter (GlyphCanvas& c, float phase, bool highPass, bool sampleHold, bo
     }
 }
 
-void drawVolumeRamp (GlyphCanvas& c, float phase)
+void drawShhhhhh (GlyphCanvas& c, float phase)
 {
     const float voiceLevel = 1.0f - wrapped (phase);
 
@@ -960,11 +947,10 @@ void drawAutoPan (GlyphCanvas& c, float phase, const ModifierDescriptor& descrip
     c.line (50.0f, 40.0f, 50.0f, 60.0f, 1.0f);
     const float depth = static_cast<float> (juce::jlimit (0.0, 1.0, descriptor.plannedPanDepth.value_or (1.0)));
     const float mix = static_cast<float> (juce::jlimit (0.0, 1.0, descriptor.plannedPanMix.value_or (0.75)));
-    const float rate = static_cast<float> (juce::jlimit (0.25, 2.0,
-                                         descriptor.plannedPanRateHz.value_or (0.5) / 0.5));
     const float travel = 64.0f * depth;
-    const float shapedTraversal = std::pow (triangle (phase), 1.0f / rate);
-    const float signalX = 50.0f - travel * 0.5f + shapedTraversal * travel;
+    // Rate controls phase advancement in the owning animation clock. Applying
+    // it as an exponent here made the marker dwell on one side of centre.
+    const float signalX = 50.0f - travel * 0.5f + triangle (phase) * travel;
     c.ring (signalX, 50.0f, c.compact ? 4.5f : 5.3f, c.p.ink, 1.2f, 0.75f);
     c.dot (signalX, 50.0f, c.compact ? 3.0f : 3.5f,
            c.p.vermilion, 0.58f + mix * 0.42f);
@@ -1265,7 +1251,7 @@ void ModifierGlyphRenderer::draw (juce::Graphics& g,
         case ModifierType::BufferReverbOn:              drawReverb (c, phase); break;
         case ModifierType::BufferLowPassOn:             drawFilter (c, phase, false, false, false); break;
         case ModifierType::BufferHighPassOn:            drawFilter (c, phase, true, false, false); break;
-        case ModifierType::BufferVolumeRampDown:        drawVolumeRamp (c, phase); break;
+        case ModifierType::BufferShhhhhh:               drawShhhhhh (c, phase); break;
         case ModifierType::BufferTremolo:               drawTremolo (c, phase); break;
         case ModifierType::BufferChorusOn:              drawChorus (c, phase, state.descriptor); break;
         case ModifierType::BufferAutoPan:               drawAutoPan (c, phase, state.descriptor); break;

@@ -256,7 +256,7 @@ The current `ModifierType` enum contains the following representations. The tabl
 | Buffer Reverb On | Central impulse surrounded by increasingly irregular contour rings | Rings expand, wobble, and dissolve | Three irregular nested contours | Wet and fade bars |
 | Buffer Low Pass On | High stepped terrain clipped by a descending cutoff line | Cutoff line sweeps downward/left; high steps disappear | Descending diagonal over steps | Fade bars / immediate-jump mode |
 | Buffer High Pass On | Low stepped terrain clipped by an ascending cutoff line | Cutoff line sweeps upward/right; low steps disappear | Ascending diagonal over steps | Fade bars / immediate-jump mode |
-| Buffer Volume Ramp Down | Bespectacled librarian with a bun shushing a talker | The talker's voice marks contract and disappear while the raised finger remains fixed | Librarian profile, raised finger, and diminishing voice marks | Fade and hold bars |
+| Shhhhhh | Bespectacled librarian with a bun shushing a talker | The talker's voice marks contract and disappear while the raised finger remains fixed | Librarian profile, raised finger, and diminishing voice marks | Fade and hold bars |
 | Buffer Tremolo | Stable center line wrapped by alternating amplitude lobes | Lobes pulse symmetrically around the center | Alternating high/low marks | Rate/depth if later planned |
 | Buffer Chorus On | One central trace with two slightly offset wavy companions | Companion traces drift in and out of phase | Three offset waves | Rate, depth, mix |
 | Buffer Auto Pan | Signal dot orbiting between L and R half-circles | Dot sweeps laterally; depth controls travel range | L/R arc with dot | Rate, depth, mix |

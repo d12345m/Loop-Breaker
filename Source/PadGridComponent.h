@@ -767,7 +767,7 @@ private:
                         ModifierStickerOverlay::bitForType (
                             ModifierType::BufferDelayDubBurst)
                       | ModifierStickerOverlay::bitForType (
-                            ModifierType::BufferVolumeRampDown)
+                            ModifierType::BufferShhhhhh)
                       | ModifierStickerOverlay::bitForType (
                             ModifierType::BufferGranularMomentary);
                     const auto transient = transientStickerMasks[(size_t)i]

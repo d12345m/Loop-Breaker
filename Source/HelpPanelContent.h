@@ -218,7 +218,7 @@ private:
             s.body =
                 "Modifier Presets let you snapshot the current state of all buffer transforms "
                 "(speed, stretch, pitch, slicing, ping-pong) and effects (reverb, delay, filter, "
-                "tremolo, chorus, auto-pan, volume ramp) across all 8 pads.\n\n"
+                "tremolo, chorus, auto-pan, Shhhhhh) across all 8 pads.\n\n"
                 "Four preset slots (A\u2013D) are available in the Session tab.  "
                 "Click an empty slot to save, click a filled slot to recall.  "
                 "Double-click any slot to force-overwrite it with the current state.\n\n"
@@ -336,7 +336,7 @@ private:
                 { "Reverb",           "Enable reverb wet signal on the buffer's FX chain" },
                 { "Low-Pass Filter",  "Enable low-pass filter on the buffer's FX chain" },
                 { "High-Pass Filter", "Enable high-pass filter on the buffer's FX chain" },
-                { "Volume Ramp",      "Fade the buffer volume down over n bars" },
+                { "Shhhhhh",          "Fade the buffer volume down over n bars" },
                 { "Tremolo",          "Apply volume modulation (LFO) to the buffer" },
                 { "Reset",            "Remove all active modifiers and return buffer to normal" },
             };

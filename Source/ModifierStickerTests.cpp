@@ -25,7 +25,7 @@ constexpr std::array<ModifierType, ModifierStickerOverlay::stickerCount> expecte
     ModifierType::BufferReverbOn,
     ModifierType::BufferLowPassOn,
     ModifierType::BufferHighPassOn,
-    ModifierType::BufferVolumeRampDown,
+    ModifierType::BufferShhhhhh,
     ModifierType::BufferTremolo,
     ModifierType::BufferChorusOn,
     ModifierType::BufferAutoPan,

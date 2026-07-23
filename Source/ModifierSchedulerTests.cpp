@@ -43,6 +43,13 @@ public:
         for (bool wasSeen : seen)
             expect (wasSeen, "Registry is missing a serialized modifier type");
 
+        beginTest ("Shhhhhh keeps the volume-ramp slot and public name");
+
+        const auto& shhhhhh = ModifierRegistry::get (ModifierType::BufferShhhhhh);
+        expectEquals (static_cast<int> (ModifierType::BufferShhhhhh), 13);
+        expectEquals (juce::String (shhhhhh.displayName), juce::String ("Shhhhhh"));
+        expectEquals (juce::String (shhhhhh.shortName), juce::String ("Shhhhhh"));
+
         beginTest ("Prototype factory and eligibility metadata agree");
 
         auto prototypes = ModifierFactory::createAllPrototypes();
@@ -118,7 +125,7 @@ public:
         sampleHold.plannedSHDivisionBars = 0.125;
         expectEquals (ModifierVariantFormatter::full (sampleHold), juce::String ("HOLD 1/8"));
 
-        auto volumeRamp = ModifierRegistry::makeDescriptor (ModifierType::BufferVolumeRampDown);
+        auto volumeRamp = ModifierRegistry::makeDescriptor (ModifierType::BufferShhhhhh);
         volumeRamp.plannedFxFadeBars = 2.0;
         volumeRamp.plannedVolumeHoldBars = 3.0;
         expectEquals (ModifierVariantFormatter::full (volumeRamp),
@@ -800,12 +807,12 @@ public:
             expect (slice->plannedSliceDivision.isNotEmpty());
         }
 
-        beginTest ("Queue planning freezes Volume Ramp timing");
-        const auto volumeRamp = planOnly (ModifierType::BufferVolumeRampDown, 45);
+        beginTest ("Queue planning freezes Shhhhhh timing");
+        const auto volumeRamp = planOnly (ModifierType::BufferShhhhhh, 45);
         expect (volumeRamp.has_value());
         if (volumeRamp.has_value())
         {
-            expectEquals ((int) volumeRamp->type, (int) ModifierType::BufferVolumeRampDown);
+            expectEquals ((int) volumeRamp->type, (int) ModifierType::BufferShhhhhh);
             expect (volumeRamp->plannedFxFadeBars.has_value());
             expect (volumeRamp->plannedVolumeHoldBars.has_value());
         }

@@ -58,7 +58,7 @@ ModifierDescriptor GlyphContactSheet::makeRepresentativeDescriptor (ModifierType
         case ModifierType::PitchDownOctave:
         case ModifierType::BufferLowPassOn:
         case ModifierType::BufferHighPassOn:
-        case ModifierType::BufferVolumeRampDown:
+        case ModifierType::BufferShhhhhh:
         case ModifierType::BufferTremolo:
         case ModifierType::BufferDuckingOn:
         case ModifierType::MasterHighPassOn:

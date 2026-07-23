@@ -133,7 +133,7 @@ int exportStickerStudy (const juce::String& requestedPath)
                         ModifierType::BufferReverbOn, ModifierType::BufferTremolo,
                         ModifierType::BufferSHLowPassOn }),
              maskFor ({ ModifierType::BufferDelayDubBurst,
-                        ModifierType::BufferVolumeRampDown,
+                        ModifierType::BufferShhhhhh,
                         ModifierType::SwitchPart }));
 
     const auto stressLabel = juce::Rectangle<int> (32, 840, width - 64, 24);
@@ -148,7 +148,7 @@ int exportStickerStudy (const juce::String& requestedPath)
     const auto allBits = (Stickers::Mask { 1 } << Stickers::stickerCount) - 1;
     Stickers::draw (g, stressAperture, allBits,
                     maskFor ({ ModifierType::BufferDelayDubBurst,
-                               ModifierType::BufferVolumeRampDown,
+                               ModifierType::BufferShhhhhh,
                                ModifierType::BufferGranularMomentary,
                                ModifierType::SwitchPart,
                                ModifierType::QuarterNoteBurst,

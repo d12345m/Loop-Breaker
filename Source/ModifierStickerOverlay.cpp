@@ -1,9 +1,11 @@
 #include "ModifierStickerOverlay.h"
 
+#include "ModifierCategoryVisuals.h"
 #include "ModifierGlyphRenderer.h"
 #include "ModifierRegistry.h"
 
 #include <array>
+#include <cmath>
 
 namespace
 {
@@ -111,17 +113,35 @@ void ModifierStickerOverlay::draw (juce::Graphics& graphics,
         const float cornerRadius = juce::jlimit (1.0f, 3.0f, shortSide * 0.18f);
         const float borderWidth = shortSide >= 14.0f ? 1.25f : 1.0f;
         const bool isTransient = (transientMask & bit) != 0;
+        const auto categoryStyle = ModifierCategoryVisuals::forType (type, palette);
+        const auto categoryColour = categoryStyle.colour;
+        constexpr float baseFaceAlpha = 0.22f;
+        const float transientPulse = isTransient && ! reducedMotion
+            ? 0.5f + 0.5f * std::sin (
+                juce::MathConstants<float>::twoPi * animationPhase01)
+            : 0.0f;
+        const float faceAlpha = baseFaceAlpha + transientPulse * 0.12f;
+        const auto litCategoryColour = categoryColour.interpolatedWith (
+            juce::Colours::white, transientPulse * 0.10f);
 
-        graphics.setColour (palette.ink.withAlpha (0.18f));
-        graphics.fillRoundedRectangle (chip, cornerRadius);
+        // Two restrained bloom passes keep the tiny chip luminous without
+        // washing a category tint across the rest of the pad.
+        graphics.setColour (
+            litCategoryColour.withAlpha (0.04f + transientPulse * 0.06f));
+        graphics.fillRoundedRectangle (chip.expanded (2.0f), cornerRadius + 2.0f);
+        graphics.setColour (
+            litCategoryColour.withAlpha (0.08f + transientPulse * 0.10f));
+        graphics.fillRoundedRectangle (chip.expanded (1.0f), cornerRadius + 1.0f);
 
         const auto face = chip.reduced (borderWidth);
-        graphics.setColour (palette.raisedTile.withAlpha (0.5f));
+        graphics.setColour (litCategoryColour.withAlpha (faceAlpha));
         graphics.fillRoundedRectangle (face, juce::jmax (0.5f, cornerRadius - borderWidth));
 
-        graphics.setColour (isTransient
-                                ? palette.vermilion
-                                : palette.mutedInk.withAlpha (0.58f));
+        const auto transientBorder = palette.safetyYellow
+            .interpolatedWith (juce::Colours::white, transientPulse * 0.16f)
+            .withAlpha (0.72f + transientPulse * 0.28f);
+        graphics.setColour (
+            isTransient ? transientBorder : categoryColour.withAlpha (0.58f));
         graphics.drawRoundedRectangle (chip.reduced (borderWidth * 0.5f),
                                        juce::jmax (0.5f, cornerRadius - borderWidth * 0.5f),
                                        borderWidth);
@@ -133,8 +153,25 @@ void ModifierStickerOverlay::draw (juce::Graphics& graphics,
         glyphState.compact = true;
         glyphState.reducedMotion = reducedMotion;
 
-        const float glyphInset = juce::jmax (1.0f, shortSide * 0.14f);
+        // Estimate the translucent face over the pad display so compact
+        // glyphs can choose a legible monochrome foreground.
+        auto stickerGlyphPalette = palette;
+        const auto blendedSurface =
+            palette.display.overlaidWith (litCategoryColour.withAlpha (faceAlpha));
+        const auto glyphColour = palette.display
+            .overlaidWith (categoryColour.withAlpha (baseFaceAlpha))
+            .contrasting (1.0f);
+        stickerGlyphPalette.raisedTile = blendedSurface;
+        stickerGlyphPalette.ink = glyphColour;
+        stickerGlyphPalette.mutedInk = glyphColour;
+        stickerGlyphPalette.vermilion = glyphColour;
+        stickerGlyphPalette.safetyYellow = glyphColour;
+        stickerGlyphPalette.signalGreen = glyphColour;
+        stickerGlyphPalette.ultramarine = glyphColour;
+        stickerGlyphPalette.violet = glyphColour;
+
+        const float glyphInset = juce::jmax (0.75f, shortSide * 0.06f);
         ModifierGlyphRenderer::draw (graphics, face.reduced (glyphInset),
-                                     glyphState, palette);
+                                     glyphState, stickerGlyphPalette);
     }
 }

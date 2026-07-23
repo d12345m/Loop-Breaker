@@ -35,7 +35,7 @@ public:
     static juce::Rectangle<float> getStickerBounds (juce::Rectangle<float> aperture,
                                                     ModifierType type) noexcept;
 
-    /** Draws all active sticker chips; transient stickers receive a vermilion border. */
+    /** Draws all active sticker chips; transient stickers receive a safety-yellow border. */
     static void draw (juce::Graphics& graphics,
                       juce::Rectangle<float> aperture,
                       Mask activeMask,

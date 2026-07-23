@@ -10,6 +10,7 @@
 
 #include <JuceHeader.h>
 #include "Modifier.h"
+#include "ModifierCategoryVisuals.h"
 #include "ThemeEngine.h"
 #include "ThemeFonts.h"
 #include "ModifierGlyphRenderer.h"
@@ -345,42 +346,22 @@ public:
     }
 
 private:
-    struct CategoryPipStyle
-    {
-        int count;
-        juce::Colour colour;
-    };
-
-    static CategoryPipStyle categoryPipStyle (ModifierType type,
-                                              const ControlSurfacePalette& palette)
-    {
-        // Use the registry's UI label rather than ModifierCategory: Special is
-        // deliberately a Probability-tab group containing multiple runtime categories.
-        const juce::String category = ModifierRegistry::get (type).categoryLabel;
-        if (category == "Buffer")
-            return { 1, palette.ultramarine };
-        if (category == "Channel Effect")
-            return { 2, palette.signalGreen };
-        if (category == "Special")
-            return { 3, palette.vermilion };
-        return { 0, palette.mutedInk };
-    }
-
     static void drawCategoryPips (juce::Graphics& g, juce::Rectangle<float> area,
                                   ModifierType type, const ControlSurfacePalette& palette,
                                   bool alignRight, float scale)
     {
-        const auto style = categoryPipStyle (type, palette);
-        if (style.count == 0)
+        const auto style = ModifierCategoryVisuals::forType (type, palette);
+        if (style.pipCount == 0)
             return;
 
         const float diameter = 5.0f * scale;
         const float gap = 3.0f * scale;
-        const float width = style.count * diameter + juce::jmax (0, style.count - 1) * gap;
+        const float width = style.pipCount * diameter
+                          + juce::jmax (0, style.pipCount - 1) * gap;
         float x = alignRight ? area.getRight() - width : area.getX();
         const float y = area.getCentreY() - diameter * 0.5f;
         g.setColour (style.colour);
-        for (int i = 0; i < style.count; ++i)
+        for (int i = 0; i < style.pipCount; ++i)
         {
             g.fillEllipse (x, y, diameter, diameter);
             x += diameter + gap;

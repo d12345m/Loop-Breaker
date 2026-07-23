@@ -2,6 +2,7 @@
 
 #include <JuceHeader.h>
 
+#include "ModifierCategoryVisuals.h"
 #include "ModifierRegistry.h"
 #include "ModifierStickerOverlay.h"
 
@@ -101,6 +102,29 @@ public:
 
         beginTest ("Portrait stickers fill rightward from the bottom-left");
         verifyBounds ({ 7.0f, 11.0f, 178.0f, 420.0f });
+
+        beginTest ("Sticker categories reuse the queue pip colours");
+        const auto palette = ControlSurfacePalette::fromTheme (
+            ThemeEngine::getInstance().getCurrentPalette());
+
+        const auto buffer = ModifierCategoryVisuals::forType (
+            ModifierType::Reverse, palette);
+        expectEquals (buffer.pipCount, 1);
+        expect (buffer.colour == palette.vermilion);
+
+        const auto effect = ModifierCategoryVisuals::forType (
+            ModifierType::BufferReverbOn, palette);
+        expectEquals (effect.pipCount, 2);
+        expect (effect.colour == palette.safetyYellow);
+
+        for (const auto type : { ModifierType::SwitchPart,
+                                 ModifierType::SwapModifierStack,
+                                 ModifierType::ResetAll })
+        {
+            const auto special = ModifierCategoryVisuals::forType (type, palette);
+            expectEquals (special.pipCount, 3);
+            expect (special.colour == palette.signalGreen);
+        }
     }
 
 private:

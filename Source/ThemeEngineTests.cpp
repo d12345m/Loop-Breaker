@@ -93,7 +93,7 @@ public:
             expect (orangeChaos->bg == rgb (0xFF4D00));
             expect (orangeChaos->accent1 == rgb (0xC6FF00));
             expect (orangeChaos->accent2 == rgb (0x2AEEFF));
-            expect (orangeChaos->accent3 == rgb (0xFF3CB8));
+            expect (orangeChaos->accent3 == rgb (0x4E7DFF));
             expectWithinAbsoluteError (orangeChaos->glowIntensity, 1.0f, 0.001f);
             expectWithinAbsoluteError (orangeChaos->borderRadius, 12.0f, 0.001f);
         }

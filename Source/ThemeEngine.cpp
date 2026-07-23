@@ -659,7 +659,7 @@ static ThemePalette makeOrangeChaos()
 
     p.accent1       = hex (0xC6FF00);
     p.accent2       = hex (0x2AEEFF);
-    p.accent3       = hex (0xFF3CB8);
+    p.accent3       = hex (0x4E7DFF);
 
     p.good          = hex (0x2AEEFF);
     p.warn          = hex (0xFFE600);

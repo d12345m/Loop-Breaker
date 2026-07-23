@@ -442,7 +442,8 @@ public:
             auto modifierPanel = modifierBlock.reduced (scaled (4.0f));
             modifierDisplay.setBounds (modifierPanel);
             modifierProgressBounds = {
-                0, modifierPanel.getBottom(), getWidth(), scaled (3.0f)
+                modifierPanel.getX(), modifierPanel.getBottom(),
+                modifierPanel.getWidth(), scaled (3.0f)
             };
             masterVolumeLabel.setBounds ({});
             masterVolumeSlider.setBounds ({});
@@ -479,7 +480,8 @@ public:
             auto modifierPanel = topBar.reduced(scaled (4.0f));
             modifierDisplay.setBounds(modifierPanel);
             modifierProgressBounds = {
-                0, modifierPanel.getBottom(), getWidth(), scaled (3.0f)
+                modifierPanel.getX(), modifierPanel.getBottom(),
+                modifierPanel.getWidth(), scaled (3.0f)
             };
 
             area.removeFromTop(scaled (6.0f));
@@ -1351,16 +1353,28 @@ void BufferTestAudioProcessorEditor::applyWindowLayout (WindowLayoutMode mode,
             previousResizableBounds = getBounds();
 
         if (auto* constrainer = getConstrainer())
+        {
+            // AudioProcessorEditor::setResizeLimits() immediately constrains
+            // the current bounds. Applying it while the editor is still
+            // landscape therefore produces an unwanted intermediate 450x800
+            // host resize before setSize() requests 540x960. Some hosts leave
+            // the tab bar laid out for that transient resize. Update the
+            // existing constrainer in place so there is only one size change.
+            constrainer->setSizeLimits (450, 800, 1080, 1920);
             constrainer->setFixedAspectRatio (9.0 / 16.0);
-        setResizeLimits (450, 800, 1080, 1920);
+        }
+
         sessionContent->setPortraitLayout (true);
         setSize (540, 960);
     }
     else
     {
         if (auto* constrainer = getConstrainer())
+        {
             constrainer->setFixedAspectRatio (0.0);
-        setResizeLimits (920, 600, 2400, 1600);
+            constrainer->setSizeLimits (920, 600, 2400, 1600);
+        }
+
         sessionContent->setPortraitLayout (false);
 
         if (restorePreviousSize)

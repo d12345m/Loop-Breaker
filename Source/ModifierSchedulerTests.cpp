@@ -134,6 +134,52 @@ public:
 
 static ModifierVariantFormatterTest modifierVariantFormatterTestInstance;
 
+class SessionUiGeometryTest : public juce::UnitTest
+{
+public:
+    SessionUiGeometryTest() : juce::UnitTest ("Session UI Geometry", "LoopBreaker") {}
+
+    void runTest() override
+    {
+        beginTest ("Progress bar has no inactive track");
+        UpcomingModifierDisplay display;
+        juce::Image image (juce::Image::ARGB, 120, 8, true);
+        juce::Graphics graphics (image);
+        const juce::Rectangle<float> progressBounds (10.0f, 2.0f, 100.0f, 3.0f);
+
+        display.setCountdown (1.0, 1.0, 0.0);
+        display.paintProgressBar (graphics, progressBounds);
+        expectEquals (static_cast<int> (image.getPixelAt (12, 2).getAlpha()), 0);
+        expectEquals (static_cast<int> (image.getPixelAt (108, 2).getAlpha()), 0);
+
+        display.setCountdown (1.0, 1.0, 0.5);
+        display.paintProgressBar (graphics, progressBounds);
+        expect (image.getPixelAt (12, 2).getAlpha() > 0);
+        expect (image.getPixelAt (12, 4).getAlpha() > 0);
+        expectEquals (static_cast<int> (image.getPixelAt (108, 2).getAlpha()), 0);
+
+        beginTest ("Four-column geometry is contiguous and evenly distributed");
+        const juce::Rectangle<int> area (7, 3, 517, 40);
+        int narrowest = area.getWidth();
+        int widest = 0;
+        int expectedLeft = area.getX();
+
+        for (int column = 0; column < 4; ++column)
+        {
+            const auto cell = UiGridLayout::equalColumn (area, column, 4);
+            expectEquals (cell.getX(), expectedLeft);
+            expectedLeft = cell.getRight();
+            narrowest = juce::jmin (narrowest, cell.getWidth());
+            widest = juce::jmax (widest, cell.getWidth());
+        }
+
+        expectEquals (expectedLeft, area.getRight());
+        expect (widest - narrowest <= 1);
+    }
+};
+
+static SessionUiGeometryTest sessionUiGeometryTestInstance;
+
 class ModifierSchedulerPlannedQueueTest : public juce::UnitTest
 {
 public:
@@ -400,6 +446,33 @@ class MidiAssignableControlTest : public juce::UnitTest
 public:
     MidiAssignableControlTest() : juce::UnitTest ("MIDI Assignable Controls", "LoopBreaker") {}
 
+    struct ResizeCounter : juce::ComponentListener
+    {
+        void componentMovedOrResized (juce::Component&, bool wasMoved,
+                                      bool wasResized) override
+        {
+            juce::ignoreUnused (wasMoved);
+            if (wasResized)
+                ++count;
+        }
+
+        int count = 0;
+    };
+
+    static juce::ComboBox* findLayoutCombo (juce::Component* parent)
+    {
+        if (auto* combo = dynamic_cast<juce::ComboBox*> (parent))
+            if (combo->getNumItems() == 2
+                && combo->getItemText (1) == "Portrait 9:16")
+                return combo;
+
+        for (int i = 0; i < parent->getNumChildComponents(); ++i)
+            if (auto* result = findLayoutCombo (parent->getChildComponent (i)))
+                return result;
+
+        return nullptr;
+    }
+
     static void processController (BufferTestAudioProcessor& processor, int cc, int value)
     {
         juce::AudioBuffer<float> audio (processor.getTotalNumOutputChannels(), 64);
@@ -453,6 +526,43 @@ public:
             expectWithinAbsoluteError (value->load(), 12.0f, 0.001f);
         else
             expect (false, "Master-volume parameter is missing");
+
+        beginTest ("Selecting portrait layout performs one resize and keeps tabs visible");
+        std::unique_ptr<juce::AudioProcessorEditor> layoutEditor (processor.createEditor());
+        for (int i = 0; i < layoutEditor->getNumChildComponents(); ++i)
+            if (auto* tabs = dynamic_cast<juce::TabbedComponent*> (
+                    layoutEditor->getChildComponent (i)))
+                tabs->setCurrentTabIndex (2);
+
+        auto* layoutCombo = findLayoutCombo (layoutEditor.get());
+        expect (layoutCombo != nullptr);
+
+        ResizeCounter resizeCounter;
+        layoutEditor->addComponentListener (&resizeCounter);
+        if (layoutCombo != nullptr)
+            layoutCombo->setSelectedId (2, juce::sendNotificationSync);
+        layoutEditor->removeComponentListener (&resizeCounter);
+
+        expectEquals (layoutEditor->getWidth(), 540);
+        expectEquals (layoutEditor->getHeight(), 960);
+        expectEquals (resizeCounter.count, 1);
+
+        bool dynamicTabBarVisible = false;
+        for (int i = 0; i < layoutEditor->getNumChildComponents(); ++i)
+            if (auto* tabs = dynamic_cast<juce::TabbedComponent*> (
+                    layoutEditor->getChildComponent (i)))
+            {
+                auto& tabBar = tabs->getTabbedButtonBar();
+                auto* currentButton = tabBar.getTabButton (
+                    tabBar.getCurrentTabIndex());
+                dynamicTabBarVisible = tabBar.isVisible()
+                                    && tabBar.getHeight() > 0
+                                    && currentButton != nullptr
+                                    && currentButton->isVisible()
+                                    && ! currentButton->getBounds().isEmpty();
+            }
+        expect (dynamicTabBarVisible);
+        layoutEditor.reset();
 
         beginTest ("MIDI mappings and portrait layout persist in plugin state");
         processor.getAppState().settings.windowLayoutMode = WindowLayoutMode::Portrait9x16;

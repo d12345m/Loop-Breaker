@@ -15,6 +15,7 @@
 #include "ThemeEngine.h"
 #include "ThemeFonts.h"
 #include "Animator.h"
+#include "UiGridLayout.h"
 
 class PresetBarComponent : public juce::Component,
                            private juce::Timer
@@ -91,18 +92,18 @@ public:
             // narrower proportions of the two-column pad grid.
             constexpr int rows = 2;
             constexpr int cols = 4;
-            const int cellW = area.getWidth() / cols;
             const int cellH = area.getHeight() / rows;
 
             for (int i = 0; i < kNumSlots; ++i)
             {
                 const int row = i / cols;
                 const int col = i % cols;
-                const int x = area.getX() + col * cellW;
                 const int y = area.getY() + row * cellH;
-                const int w = (col == cols - 1) ? area.getRight() - x : cellW;
                 const int h = (row == rows - 1) ? area.getBottom() - y : cellH;
-                buttons[i]->setBounds (juce::Rectangle<int> (x, y, w, h).reduced (3, 2));
+                auto cell = UiGridLayout::equalColumn (area, col, cols)
+                                .withY (y)
+                                .withHeight (h);
+                buttons[i]->setBounds (cell.reduced (3, 2));
             }
         }
         else

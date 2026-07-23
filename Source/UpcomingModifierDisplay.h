@@ -16,6 +16,7 @@
 #include "ModifierRegistry.h"
 #include "ModifierScheduler.h"
 #include "ModifierVariantFormatter.h"
+#include "UiGridLayout.h"
 
 class UpcomingModifierDisplay : public juce::Component,
                                 private juce::Timer
@@ -97,14 +98,12 @@ public:
 
         const auto glyphPalette = ControlSurfacePalette::fromTheme (
             ThemeEngine::getInstance().getCurrentPalette());
-        g.setColour (glyphPalette.ink.withAlpha (0.28f));
-        g.fillRect (bounds.withHeight (juce::jmax (1.0f, uiScale)));
         if (progress > 0.0)
         {
             g.setColour (suppressed ? glyphPalette.safetyYellow : glyphPalette.vermilion);
             g.fillRect (bounds.withWidth (bounds.getWidth()
-                                         * juce::jlimit (0.0f, 1.0f,
-                                                        static_cast<float> (progress))));
+                                          * juce::jlimit (0.0f, 1.0f,
+                                                         static_cast<float> (progress))));
         }
     }
 
@@ -122,37 +121,63 @@ public:
 
         auto nextBounds = bounds;
         juce::Rectangle<float> queueBounds;
-        if (plannedQueue.size() > 1 && bounds.getWidth() >= 300.0f)
+        std::array<juce::Rectangle<int>, 4> portraitCells;
+        const bool useFourModuleLayout = portraitLayout
+                                      && plannedQueue.size() > 1
+                                      && bounds.getWidth() >= 300.0f;
+        if (useFourModuleLayout)
         {
-            // Portrait presents metadata, glyph, Queue 1 and Queue 2 as four
-            // equal modules. Landscape retains the wider glyph-led split.
-            const float queueWidth = portraitLayout
-                ? bounds.getWidth() * 0.5f
-                : juce::jlimit (130.0f * uiScale, 260.0f * uiScale,
-                                bounds.getWidth() * 0.44f);
+            for (int i = 0; i < 4; ++i)
+                portraitCells[static_cast<size_t> (i)] =
+                    UiGridLayout::equalColumn (getLocalBounds(), i, 4);
+
+            nextBounds = portraitCells[0].getUnion (portraitCells[1]).toFloat();
+            queueBounds = portraitCells[2].getUnion (portraitCells[3]).toFloat();
+            g.setColour (glyphPalette.ink.withAlpha (0.72f));
+            g.drawVerticalLine (portraitCells[2].getX(),
+                                bounds.getY() + 1.0f, bounds.getBottom() - 1.0f);
+        }
+        else if (plannedQueue.size() > 1 && bounds.getWidth() >= 300.0f)
+        {
+            const float queueWidth = juce::jlimit (130.0f * uiScale,
+                                                   260.0f * uiScale,
+                                                   bounds.getWidth() * 0.44f);
             queueBounds = nextBounds.removeFromRight (queueWidth);
             g.setColour (glyphPalette.ink.withAlpha (0.72f));
             g.drawVerticalLine (juce::roundToInt (queueBounds.getX()),
                                 bounds.getY() + 1.0f, bounds.getBottom() - 1.0f);
         }
 
-        auto content = nextBounds.reduced (10.0f * uiScale, 8.0f * uiScale);
-        const float metaWidth = portraitLayout && ! queueBounds.isEmpty()
-            ? juce::jmax (1.0f, bounds.getWidth() * 0.25f - 13.0f * uiScale)
-            : juce::jlimit (90.0f * uiScale,
-                            juce::jmax (90.0f * uiScale, content.getWidth() * 0.48f),
-                            content.getWidth() * 0.38f);
-        auto meta = content.removeFromLeft (metaWidth);
+        juce::Rectangle<float> meta;
+        juce::Rectangle<float> glyphCell;
+        if (useFourModuleLayout)
+        {
+            meta = portraitCells[0].toFloat()
+                       .withTrimmedLeft (10.0f * uiScale)
+                       .withTrimmedRight (3.0f * uiScale)
+                       .reduced (0.0f, 8.0f * uiScale);
+            glyphCell = portraitCells[1].toFloat();
+            g.setColour (glyphPalette.ink.withAlpha (0.55f));
+            g.drawVerticalLine (portraitCells[1].getX(),
+                                bounds.getY() + 1.0f, bounds.getBottom() - 1.0f);
+        }
+        else
+        {
+            auto content = nextBounds.reduced (10.0f * uiScale, 8.0f * uiScale);
+            const float metaWidth = juce::jlimit (
+                90.0f * uiScale,
+                juce::jmax (90.0f * uiScale, content.getWidth() * 0.48f),
+                content.getWidth() * 0.38f);
+            meta = content.removeFromLeft (metaWidth);
 
-        // The vertical rule makes the cell read as a modular control board.
-        g.setColour (glyphPalette.ink.withAlpha (0.55f));
-        g.drawVerticalLine (juce::roundToInt (meta.getRight() + 3.0f * uiScale),
-                            bounds.getY() + 1.0f, bounds.getBottom() - 1.0f);
+            // The vertical rule makes the cell read as a modular control board.
+            g.setColour (glyphPalette.ink.withAlpha (0.55f));
+            g.drawVerticalLine (juce::roundToInt (meta.getRight() + 3.0f * uiScale),
+                                bounds.getY() + 1.0f, bounds.getBottom() - 1.0f);
 
-        // Centre the glyph in the area bounded by the rule and the NEXT-cell
-        // edge.  Deriving this from the rendered divider avoids the subtle
-        // left bias caused by the metadata content inset.
-        const auto glyphCell = nextBounds.withLeft (meta.getRight() + 3.0f * uiScale);
+            glyphCell = nextBounds.withLeft (meta.getRight() + 3.0f * uiScale);
+        }
+
         const auto glyph = glyphCell.reduced (6.0f * uiScale, 8.0f * uiScale);
 
         auto& fonts = ThemeFonts::getInstance();
@@ -222,8 +247,11 @@ public:
             const float cellWidth = queueBounds.getWidth() * 0.5f;
             for (int i = 0; i < 2; ++i)
             {
-                auto cell = queueBounds.withX (queueBounds.getX() + cellWidth * static_cast<float> (i))
-                                       .withWidth (cellWidth);
+                auto cell = useFourModuleLayout
+                    ? portraitCells[static_cast<size_t> (i + 2)].toFloat()
+                    : queueBounds.withX (queueBounds.getX()
+                                         + cellWidth * static_cast<float> (i))
+                                 .withWidth (cellWidth);
                 if (i > 0)
                 {
                     g.setColour (glyphPalette.ink.withAlpha (0.45f));

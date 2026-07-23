@@ -66,6 +66,8 @@
             resource="0" file="Source/ProbabilityPresetManager.h"/>
       <FILE id="presetBarH" name="PresetBarComponent.h" compile="0" resource="0"
             file="Source/PresetBarComponent.h"/>
+      <FILE id="uiGridLayoutH" name="UiGridLayout.h" compile="0" resource="0"
+            file="Source/UiGridLayout.h"/>
       <FILE id="appStateH" name="AppState.h" compile="0" resource="0" file="Source/AppState.h"/>
       <FILE id="padGridH" name="PadGridComponent.h" compile="0" resource="0"
             file="Source/PadGridComponent.h"/>

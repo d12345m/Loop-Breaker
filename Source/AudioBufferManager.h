@@ -145,8 +145,10 @@ private:
     juce::AudioBuffer<float> tempBuffer;
   double hostSampleRate = 44100.0;
   std::atomic<double> resampleTargetRate { 0.0 }; // §4.2 target SR for load-time resampling
-  int64_t globalStartOffsetSamples = 0; // applied at play() time
-  int64_t globalEndOffsetSamples = 0;   // enforced during processing; 0 = disabled
+  std::atomic<int64_t> globalStartOffsetSamples { 0 };
+  std::atomic<int64_t> globalEndOffsetSamples { 0 };
+  std::atomic<std::uint64_t> globalStartOffsetGeneration { 0 };
+  std::atomic<std::uint64_t> appliedStartOffsetGeneration { 0 };
 
     //==============================================================================
     // Background loading (no disk I/O on realtime thread)

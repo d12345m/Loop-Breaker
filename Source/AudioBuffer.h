@@ -21,6 +21,7 @@
 #include <memory>
 #include <functional>
 
+#include "LockFreeBoundedQueue.h"
 #include "TimeStretchSoundTouch.h"
 #include "StretchQueueController.h"
 
@@ -89,6 +90,29 @@ struct TimeStretchQueueTelemetry
     double estimatedOutputCreditFrames = 0.0;
     std::uint64_t totalInputFramesFed = 0;
     std::uint64_t totalOutputFramesReceived = 0;
+};
+
+enum class TransportTransitionReason : std::uint8_t
+{
+    UserSeek = 0,
+    UserRestart,
+    PartSwitch,
+    PartLoad,
+    PresetRecall,
+    Reset,
+    HostRestart,
+    StartOffset,
+    SliceTrigger,
+    LoopWindowOnly
+};
+
+struct TransportTransitionTelemetry
+{
+    std::uint64_t lastIssuedGeneration = 0;
+    std::uint64_t lastAcknowledgedGeneration = 0;
+    std::uint64_t lastAppliedGeneration = 0;
+    std::uint64_t droppedCommands = 0;
+    TransportTransitionReason lastAppliedReason = TransportTransitionReason::UserSeek;
 };
 
 //==============================================================================
@@ -225,7 +249,7 @@ public:
     void setTempoMultiplier(double multiplier) { tempoMultiplier.store(multiplier); }
     double getTempoMultiplier() const { return tempoMultiplier.load(); }
     void setLooping(bool shouldLoop);
-    void resetToBeginning();
+    void resetToBeginning(TransportTransitionReason reason = TransportTransitionReason::UserRestart);
     void resetToDefaults();
 
     // Time-stretch (tempo only, no pitch). 1.0 = normal.
@@ -275,6 +299,7 @@ public:
     void setTearingDebugEnabled(bool enabled) { tearingDebugEnabled.store(enabled); }
     bool isTearingDebugEnabled() const { return tearingDebugEnabled.load(); }
     TimeStretchQueueTelemetry getTimeStretchQueueTelemetry() const;
+    TransportTransitionTelemetry getTransportTransitionTelemetry() const;
     
     //==============================================================================
     // Timing and position
@@ -298,7 +323,14 @@ public:
     // Utility
     int getBufferIndex() const { return bufferIndex; }
     juce::String getLoadedFileName() const;
-    void setPlayheadSamples(int64_t samples) { playheadPosition.store((double) juce::jmax<int64_t>(0, samples)); }
+    std::uint64_t requestPlayheadTransition(
+        int64_t samples,
+        TransportTransitionReason reason = TransportTransitionReason::UserSeek);
+    std::uint64_t requestLoopAndPlayheadTransition(
+        int64_t loopStart,
+        int64_t loopEnd,
+        int64_t targetSample,
+        TransportTransitionReason reason);
 
     // §4.2  Musically-deferred start: when true, this buffer has freshly loaded
     // data but should not begin playing until the next bar boundary or modifier
@@ -330,6 +362,39 @@ private:
     LoadedAudioData::Ptr audioDataRetainer;            // keeps current data alive
     LoadedAudioData::Ptr previousAudioDataRetainer;    // keeps previous data alive until next swap
     std::atomic<double> playheadPosition { 0.0 };
+
+    enum TransportCommandFlags : std::uint8_t
+    {
+        updatePositionFlag = 1u << 0,
+        updateLoopWindowFlag = 1u << 1,
+        triggerSliceFlag = 1u << 2,
+        resetSlicingFlag = 1u << 3
+    };
+
+    struct TransportCommand
+    {
+        std::uint64_t generation = 0;
+        std::uint64_t audioEpoch = 0;
+        int64_t targetSample = 0;
+        int64_t loopStart = 0;
+        int64_t loopEnd = 0;
+        std::int32_t sliceIndex = 0;
+        TransportTransitionReason reason = TransportTransitionReason::UserSeek;
+        std::uint8_t flags = 0;
+        std::uint8_t loopEnabled = 0;
+    };
+
+    static constexpr std::size_t transportQueueCapacity = 128;
+    LockFreeBoundedQueue<TransportCommand, transportQueueCapacity> transportCommands;
+    std::atomic<std::uint64_t> nextTransportGeneration { 1 };
+    std::atomic<std::uint64_t> audioDataEpoch { 1 };
+    std::atomic<std::uint64_t> lastAcknowledgedTransportGeneration { 0 };
+    std::atomic<std::uint64_t> lastAppliedTransportGeneration { 0 };
+    std::atomic<std::uint64_t> droppedTransportCommands { 0 };
+    std::atomic<std::uint8_t> lastAppliedTransportReason {
+        static_cast<std::uint8_t> (TransportTransitionReason::UserSeek)
+    };
+
     juce::SmoothedValue<double> speedSmoother;
     juce::SmoothedValue<double> stretchSmoother;
 
@@ -521,6 +586,14 @@ private:
     juce::AudioBuffer<float> previousBlockBuffer;
     int previousBlockNumSamples = 0;
     bool previousBlockValid = false;
+    bool renderPositionHistoryValid = false;
+    float lastRenderedOutputSample[2] = { 0.0f, 0.0f };
+    float transportCorrectionAnchor[2] = { 0.0f, 0.0f };
+    float transportCorrectionOffset[2] = { 0.0f, 0.0f };
+    bool transportOutputCorrectionPending = false;
+    bool transportOutputCorrectionActive = false;
+    int transportOutputCorrectionPosition = 0;
+    int transportOutputCorrectionLength = 0;
     bool resetCrossfadePending = false;
     
     // Listeners
@@ -535,6 +608,11 @@ private:
     // Internal processing methods
     void processWithRepitching(juce::AudioBuffer<float>& outputBuffer);
     void processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer, const StretchSnapshot& snap);
+    std::uint64_t enqueueTransportCommand(TransportCommand command) noexcept;
+    void consumeTransportCommands(int fileLengthSamples);
+    void publishLoopWindowState(bool enabled, int64_t startSamples, int64_t endSamples) noexcept;
+    void resetRenderPositionStateDirect() noexcept;
+    void applyTransportOutputCorrection(juce::AudioBuffer<float>& outputBuffer);
     void handleSlicePlayback(double& currentPos, int fileLengthSamples);
     void applyCrossfadeToSliceTransition(const juce::AudioBuffer<float>& sourceBuffer,
                                          int fileLengthSamples,

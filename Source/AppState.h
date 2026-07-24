@@ -86,8 +86,9 @@ struct AppState : public ModifierSchedulerListener
                 const int64_t endS   = (int64_t) (((settings.parts.activePart + 1) * dur) / numParts);
                 const int64_t startClamped = juce::jlimit<int64_t>(0, dur - 1, startS);
                 const int64_t endClamped   = juce::jlimit<int64_t>(startClamped + 1, dur, endS);
-                b->setLoopWindow(startClamped, endClamped);
-                b->setPlayheadSamples(startClamped);
+                b->requestLoopAndPlayheadTransition(
+                    startClamped, endClamped, startClamped,
+                    TransportTransitionReason::PartSwitch);
                 // If slicing is active, immediately re-trigger a slice inside the new part
                 // to avoid a lull while waiting to hit the next slice boundary.
                 if (b->isInSlicingMode() || b->isInContinuousRandomMode())
@@ -148,8 +149,9 @@ struct AppState : public ModifierSchedulerListener
         const int64_t endS   = (int64_t) (((settings.parts.activePart + 1) * dur) / numParts);
         const int64_t startClamped = juce::jlimit<int64_t>(0, dur - 1, startS);
         const int64_t endClamped   = juce::jlimit<int64_t>(startClamped + 1, dur, endS);
-        b->setLoopWindow(startClamped, endClamped);
-        b->setPlayheadSamples(startClamped);
+        b->requestLoopAndPlayheadTransition(
+            startClamped, endClamped, startClamped,
+            TransportTransitionReason::PartLoad);
     }
 
     /** Returns the modifiers that are currently in force on one pad.
@@ -469,9 +471,12 @@ struct AppState : public ModifierSchedulerListener
             // if parts are active) so preset recall behaves like a fresh start,
             // matching the state at capture time (e.g. after a ResetAll modifier).
             if (buf->isLoopWindowEnabled())
-                buf->setPlayheadSamples(buf->getLoopStartSamples());
+                buf->requestPlayheadTransition(
+                    buf->getLoopStartSamples(),
+                    TransportTransitionReason::PresetRecall);
             else
-                buf->setPlayheadSamples(0);
+                buf->requestPlayheadTransition(
+                    0, TransportTransitionReason::PresetRecall);
 
             // Ensure playback continues if the buffer has audio loaded
             if (buf->hasAudioLoaded() && !buf->isPlaying())
@@ -753,7 +758,6 @@ private:
             }
             if (auto* b = bufferManager.getBuffer(idx))
             {
-                b->resetToBeginning();
                 if (wasPlaying && b->hasAudioLoaded()) b->play();
             }
         }

@@ -1,10 +1,13 @@
 #include <JuceHeader.h>
 
 #include "AudioBuffer.h"
+#include "LockFreeBoundedQueue.h"
 #include "StretchQueueController.h"
 
 #include <array>
+#include <atomic>
 #include <cmath>
+#include <thread>
 
 #if JUCE_UNIT_TESTS
 
@@ -70,6 +73,11 @@ public:
         testShortLoopBoundary();
         testSoundTouchQueueBoundedness();
         testStartupFadeProgress();
+        testBoundedMpscQueue();
+        testTransportPacketGenerationAndCoherence();
+        testConcurrentTransportGenerationOrdering();
+        testSeekBoundaryContinuity();
+        testFullResetBoundaryContinuity();
     }
 
 private:
@@ -249,6 +257,261 @@ private:
 
             previousBlockEnd = blockEnd;
         }
+    }
+
+    void testBoundedMpscQueue()
+    {
+        beginTest ("Bounded command queue delivers MPSC traffic exactly once");
+
+        struct QueueItem
+        {
+            int producer = 0;
+            int sequence = 0;
+        };
+
+        constexpr int producerCount = 4;
+        constexpr int itemsPerProducer = 200;
+        constexpr int totalItems = producerCount * itemsPerProducer;
+        LockFreeBoundedQueue<QueueItem, 1024> queue;
+        std::atomic<bool> begin { false };
+        std::array<std::thread, producerCount> producers;
+
+        for (int producer = 0; producer < producerCount; ++producer)
+        {
+            producers[(size_t) producer] = std::thread (
+                [producer, &queue, &begin]
+                {
+                    while (!begin.load (std::memory_order_acquire))
+                        std::this_thread::yield();
+
+                    for (int sequence = 0; sequence < itemsPerProducer; ++sequence)
+                    {
+                        const QueueItem item { producer, sequence };
+                        while (!queue.tryEnqueue (item))
+                            std::this_thread::yield();
+                    }
+                });
+        }
+
+        std::array<std::array<bool, itemsPerProducer>, producerCount> seen {};
+        begin.store (true, std::memory_order_release);
+        int received = 0;
+        while (received < totalItems)
+        {
+            QueueItem item;
+            if (!queue.tryDequeue (item))
+            {
+                std::this_thread::yield();
+                continue;
+            }
+
+            expect (juce::isPositiveAndBelow (item.producer, producerCount));
+            expect (juce::isPositiveAndBelow (item.sequence, itemsPerProducer));
+            if (juce::isPositiveAndBelow (item.producer, producerCount)
+                && juce::isPositiveAndBelow (item.sequence, itemsPerProducer))
+            {
+                expect (!seen[(size_t) item.producer][(size_t) item.sequence],
+                        "A command was delivered more than once");
+                seen[(size_t) item.producer][(size_t) item.sequence] = true;
+            }
+            ++received;
+        }
+
+        for (auto& producer : producers)
+            producer.join();
+
+        QueueItem extra;
+        expect (!queue.tryDequeue (extra), "Queue should be empty after exact delivery");
+    }
+
+    void testTransportPacketGenerationAndCoherence()
+    {
+        beginTest ("Loop and playhead packet applies coherently once");
+
+        constexpr double sampleRate = 48000.0;
+        constexpr int blockSize = 64;
+        AudioBuffer player;
+        player.prepare (sampleRate, blockSize);
+        player.setLoadedAudioData (makeSmoothAudio (48000, sampleRate));
+        player.setLooping (true);
+        player.play();
+
+        juce::AudioBuffer<float> output (2, blockSize);
+        player.processBlock (output);
+
+        const auto generation = player.requestLoopAndPlayheadTransition (
+            12000, 24000, 15000, TransportTransitionReason::PartSwitch);
+        expect (generation > 0);
+
+        player.processBlock (output);
+        const auto afterFirstRender = player.getTransportTransitionTelemetry();
+        expectEquals (afterFirstRender.lastAcknowledgedGeneration, generation);
+        expectEquals (afterFirstRender.lastAppliedGeneration, generation);
+        expectEquals (afterFirstRender.droppedCommands, std::uint64_t { 0 });
+        expect (afterFirstRender.lastAppliedReason
+                    == TransportTransitionReason::PartSwitch);
+        expect (player.isLoopWindowEnabled());
+        expectEquals (player.getLoopStartSamples(), int64_t { 12000 });
+        expectEquals (player.getLoopEndSamples(), int64_t { 24000 });
+        expectWithinAbsoluteError (
+            player.getPlayheadPositionInSamples(), 15000.0 + blockSize, 1.0e-9);
+
+        player.processBlock (output);
+        const auto afterSecondRender = player.getTransportTransitionTelemetry();
+        expectEquals (afterSecondRender.lastAppliedGeneration, generation,
+                      "A consumed transition must not be applied twice");
+        expectWithinAbsoluteError (
+            player.getPlayheadPositionInSamples(), 15000.0 + 2 * blockSize, 1.0e-9);
+    }
+
+    void testConcurrentTransportGenerationOrdering()
+    {
+        beginTest ("Newest transport generation wins across producers");
+
+        constexpr double sampleRate = 48000.0;
+        constexpr int blockSize = 64;
+        constexpr int producerCount = 4;
+        constexpr int commandsPerProducer = 16;
+
+        struct PublishedCommand
+        {
+            std::uint64_t generation = 0;
+            int64_t target = 0;
+        };
+
+        AudioBuffer player;
+        player.prepare (sampleRate, blockSize);
+        player.setLoadedAudioData (makeSmoothAudio (100000, sampleRate));
+        player.setLooping (false);
+        player.play();
+
+        juce::AudioBuffer<float> output (2, blockSize);
+        player.processBlock (output);
+
+        std::array<std::array<PublishedCommand, commandsPerProducer>,
+                   producerCount> published {};
+        std::atomic<bool> begin { false };
+        std::array<std::thread, producerCount> producers;
+        for (int producer = 0; producer < producerCount; ++producer)
+        {
+            producers[(size_t) producer] = std::thread (
+                [producer, &player, &published, &begin]
+                {
+                    while (!begin.load (std::memory_order_acquire))
+                        std::this_thread::yield();
+
+                    for (int command = 0; command < commandsPerProducer; ++command)
+                    {
+                        const int64_t target =
+                            1000 + producer * 1000 + command * 17;
+                        const auto generation = player.requestPlayheadTransition (
+                            target, TransportTransitionReason::UserSeek);
+                        published[(size_t) producer][(size_t) command] = {
+                            generation, target
+                        };
+                    }
+                });
+        }
+
+        begin.store (true, std::memory_order_release);
+        for (auto& producer : producers)
+            producer.join();
+
+        PublishedCommand newest;
+        for (const auto& producer : published)
+            for (const auto& command : producer)
+                if (command.generation > newest.generation)
+                    newest = command;
+
+        expect (newest.generation > 0);
+        player.processBlock (output);
+
+        const auto telemetry = player.getTransportTransitionTelemetry();
+        expectEquals (telemetry.lastAcknowledgedGeneration, newest.generation);
+        expectEquals (telemetry.lastAppliedGeneration, newest.generation);
+        expectEquals (telemetry.droppedCommands, std::uint64_t { 0 });
+        expectWithinAbsoluteError (
+            player.getPlayheadPositionInSamples(),
+            static_cast<double> (newest.target + blockSize), 1.0e-9,
+            "Enqueue scheduling must not let an older generation win");
+    }
+
+    void testSeekBoundaryContinuity()
+    {
+        beginTest ("Render-boundary seek crossfades from the actual old position");
+
+        constexpr double sampleRate = 48000.0;
+        constexpr int blockSize = 64;
+        auto source = makeSmoothAudio (48000, sampleRate);
+
+        AudioBuffer player;
+        player.prepare (sampleRate, blockSize);
+        player.setLoadedAudioData (source);
+        player.setLooping (false);
+        player.play();
+
+        juce::AudioBuffer<float> before (2, blockSize);
+        player.processBlock (before);
+        const float oldTail = before.getSample (0, blockSize - 1);
+
+        int target = 1000;
+        for (int sample = 1000; sample < source->buffer.getNumSamples(); ++sample)
+        {
+            if (std::abs (source->buffer.getSample (0, sample) - oldTail) > 0.25f)
+            {
+                target = sample;
+                break;
+            }
+        }
+        expect (std::abs (source->buffer.getSample (0, target) - oldTail) > 0.25f,
+                "Test source must expose a clearly discontinuous raw seek");
+
+        const auto generation = player.requestPlayheadTransition (
+            target, TransportTransitionReason::PresetRecall);
+        juce::AudioBuffer<float> after (2, blockSize);
+        player.processBlock (after);
+
+        const float boundaryDelta =
+            std::abs (after.getSample (0, 0) - oldTail);
+        expect (boundaryDelta < 0.05f,
+                "Seek packet should crossfade from the old render position");
+        expectEquals (
+            player.getTransportTransitionTelemetry().lastAppliedGeneration,
+            generation);
+    }
+
+    void testFullResetBoundaryContinuity()
+    {
+        beginTest ("Full Reset reconnects cleared SoundTouch output");
+
+        constexpr double sampleRate = 48000.0;
+        constexpr int blockSize = 64;
+        auto source = makeSmoothAudio (48000, sampleRate, true);
+
+        AudioBuffer player;
+        player.prepare (sampleRate, blockSize);
+        player.setLoadedAudioData (source);
+        player.setLooping (false);
+        player.setStretchRatio (0.8);
+        player.play();
+
+        juce::AudioBuffer<float> before (2, blockSize);
+        for (int callback = 0; callback < 40; ++callback)
+            player.processBlock (before);
+
+        const float oldTail = before.getSample (0, blockSize - 1);
+        expect (std::abs (source->buffer.getSample (0, 0) - oldTail) > 0.2f,
+                "Reset fixture must expose a discontinuous raw restart");
+
+        player.resetToDefaults();
+        player.play();
+        juce::AudioBuffer<float> after (2, blockSize);
+        player.processBlock (after);
+
+        expect (std::abs (after.getSample (0, 0) - oldTail) < 0.01f,
+                "Reset output correction must meet the prior audible endpoint");
+        expect (player.getTransportTransitionTelemetry().lastAppliedReason
+                    == TransportTransitionReason::Reset);
     }
 };
 

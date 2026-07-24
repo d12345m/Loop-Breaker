@@ -408,25 +408,48 @@ void AudioBufferManager::clearAllBuffers()
 
 void AudioBufferManager::playAll()
 {
+    const auto startOffsetGeneration =
+        globalStartOffsetGeneration.load(std::memory_order_acquire);
+    const bool applyStartOffset =
+        startOffsetGeneration
+            > appliedStartOffsetGeneration.load(std::memory_order_relaxed);
+    const auto startOffset =
+        globalStartOffsetSamples.load(std::memory_order_relaxed);
+    bool appliedToLoadedBuffer = false;
+    bool queuedForEveryLoadedBuffer = true;
+
     for (auto& buffer : buffers)
     {
         if (buffer->hasAudioLoaded())
         {
-            // §4.2  Skip buffers awaiting a musical cue to start.
+            // Reposition only for a new start-offset intent. playAll() runs on
+            // every host callback, so applying this unconditionally pins the
+            // render owner to the same sample and creates a discontinuity.
+            if (applyStartOffset)
+            {
+                auto duration = (int64_t) buffer->getDurationInSamples();
+                auto start = juce::jmin(startOffset,
+                    duration > 0 ? (duration - 1) : (int64_t) 0);
+                const auto generation = buffer->requestPlayheadTransition(
+                    start, TransportTransitionReason::StartOffset);
+                appliedToLoadedBuffer = true;
+                queuedForEveryLoadedBuffer =
+                    queuedForEveryLoadedBuffer && generation != 0;
+            }
+
+            // §4.2  Skip buffers awaiting a musical cue to start. Their
+            // start-offset packet is still queued above, so it is ready when
+            // the musical start arrives.
             if (buffer->isAwaitingMusicalStart())
                 continue;
 
-            // Apply global start offset (if any) before starting playback
-            if (globalStartOffsetSamples > 0)
-            {
-                // Clamp within buffer duration
-                auto duration = (int64_t) buffer->getDurationInSamples();
-                auto start = juce::jmin(globalStartOffsetSamples, duration > 0 ? (duration - 1) : (int64_t)0);
-                buffer->setPlayheadSamples(start);
-            }
             buffer->play();
         }
     }
+
+    if (applyStartOffset && appliedToLoadedBuffer && queuedForEveryLoadedBuffer)
+        appliedStartOffsetGeneration.store(
+            startOffsetGeneration, std::memory_order_release);
 }
 
 void AudioBufferManager::stopAll()
@@ -477,7 +500,7 @@ void AudioBufferManager::restartAllLoadedBuffersToBeginning()
     for (auto& buffer : buffers)
     {
         if (buffer->hasAudioLoaded())
-            buffer->resetToBeginning();
+            buffer->resetToBeginning(TransportTransitionReason::HostRestart);
     }
 }
 
@@ -494,12 +517,17 @@ void AudioBufferManager::setTempoMultiplier(double multiplier)
 
 void AudioBufferManager::setStartOffsetSamples(int64_t startOffsetSamples)
 {
-    globalStartOffsetSamples = juce::jmax<int64_t>(0, startOffsetSamples);
+    globalStartOffsetSamples.store(
+        juce::jmax<int64_t>(0, startOffsetSamples),
+        std::memory_order_relaxed);
+    globalStartOffsetGeneration.fetch_add(1, std::memory_order_release);
 }
 
 void AudioBufferManager::setEndOffsetSamples(int64_t endOffsetSamples)
 {
-    globalEndOffsetSamples = juce::jmax<int64_t>(0, endOffsetSamples);
+    globalEndOffsetSamples.store(
+        juce::jmax<int64_t>(0, endOffsetSamples),
+        std::memory_order_relaxed);
 }
 
 //==============================================================================

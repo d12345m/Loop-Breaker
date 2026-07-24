@@ -183,6 +183,391 @@ TimeStretchQueueTelemetry AudioBuffer::getTimeStretchQueueTelemetry() const
     return telemetry;
 }
 
+TransportTransitionTelemetry AudioBuffer::getTransportTransitionTelemetry() const
+{
+    TransportTransitionTelemetry telemetry;
+    telemetry.lastIssuedGeneration =
+        nextTransportGeneration.load(std::memory_order_acquire) - 1;
+    telemetry.lastAcknowledgedGeneration =
+        lastAcknowledgedTransportGeneration.load(std::memory_order_acquire);
+    telemetry.lastAppliedGeneration =
+        lastAppliedTransportGeneration.load(std::memory_order_acquire);
+    telemetry.droppedCommands =
+        droppedTransportCommands.load(std::memory_order_relaxed);
+    telemetry.lastAppliedReason = static_cast<TransportTransitionReason>(
+        lastAppliedTransportReason.load(std::memory_order_relaxed));
+    return telemetry;
+}
+
+std::uint64_t AudioBuffer::enqueueTransportCommand(TransportCommand command) noexcept
+{
+    command.audioEpoch = audioDataEpoch.load(std::memory_order_acquire);
+    command.generation =
+        nextTransportGeneration.fetch_add(1, std::memory_order_relaxed);
+
+    if (transportCommands.tryEnqueue(command))
+        return command.generation;
+
+    droppedTransportCommands.fetch_add(1, std::memory_order_relaxed);
+    return 0;
+}
+
+std::uint64_t AudioBuffer::requestPlayheadTransition(
+    int64_t samples,
+    TransportTransitionReason reason)
+{
+    TransportCommand command;
+    command.targetSample = juce::jmax<int64_t>(0, samples);
+    command.reason = reason;
+    command.flags = updatePositionFlag;
+    return enqueueTransportCommand(command);
+}
+
+std::uint64_t AudioBuffer::requestLoopAndPlayheadTransition(
+    int64_t requestedLoopStart,
+    int64_t requestedLoopEnd,
+    int64_t targetSample,
+    TransportTransitionReason reason)
+{
+    TransportCommand command;
+    command.targetSample = juce::jmax<int64_t>(0, targetSample);
+    command.loopStart = juce::jmax<int64_t>(0, requestedLoopStart);
+    command.loopEnd = juce::jmax<int64_t>(0, requestedLoopEnd);
+    command.reason = reason;
+    command.flags = updatePositionFlag | updateLoopWindowFlag;
+    command.loopEnabled = requestedLoopEnd > requestedLoopStart ? 1 : 0;
+    return enqueueTransportCommand(command);
+}
+
+void AudioBuffer::publishLoopWindowState(bool enabled,
+                                         int64_t startSamples,
+                                         int64_t endSamples) noexcept
+{
+    if (!enabled || endSamples <= startSamples)
+    {
+        // Disable first so readers never interpret the clearing endpoints as an
+        // enabled window.
+        loopWindowEnabled.store(false, std::memory_order_release);
+        loopStartSamples.store(0, std::memory_order_relaxed);
+        loopEndSamples.store(0, std::memory_order_relaxed);
+        return;
+    }
+
+    // Publish the endpoints before enabling the window. An acquire read of
+    // loopWindowEnabled therefore observes one coherent packet.
+    loopStartSamples.store(startSamples, std::memory_order_relaxed);
+    loopEndSamples.store(endSamples, std::memory_order_relaxed);
+    loopWindowEnabled.store(true, std::memory_order_release);
+}
+
+void AudioBuffer::resetRenderPositionStateDirect() noexcept
+{
+    playheadPosition.store(0.0, std::memory_order_relaxed);
+    publishLoopWindowState(false, 0, 0);
+    slicingModeActive.store(false, std::memory_order_relaxed);
+    sliceTriggered.store(false, std::memory_order_relaxed);
+    currentActiveSlice.store(0, std::memory_order_relaxed);
+    targetSlice.store(0, std::memory_order_relaxed);
+    renderPositionHistoryValid = false;
+    lastRenderedOutputSample[0] = 0.0f;
+    lastRenderedOutputSample[1] = 0.0f;
+    transportOutputCorrectionPending = false;
+    transportOutputCorrectionActive = false;
+    transportOutputCorrectionPosition = 0;
+    transportOutputCorrectionLength = 0;
+}
+
+void AudioBuffer::consumeTransportCommands(int fileLengthSamples)
+{
+    const auto currentEpoch = audioDataEpoch.load(std::memory_order_acquire);
+    const auto previouslyApplied =
+        lastAppliedTransportGeneration.load(std::memory_order_acquire);
+
+    std::uint64_t highestAcknowledged =
+        lastAcknowledgedTransportGeneration.load(std::memory_order_relaxed);
+    std::uint64_t highestApplied = previouslyApplied;
+    TransportTransitionReason highestReason =
+        static_cast<TransportTransitionReason>(
+            lastAppliedTransportReason.load(std::memory_order_relaxed));
+
+    bool loopEnabled = loopWindowEnabled.load(std::memory_order_acquire);
+    int64_t loopStart = loopEnabled
+        ? loopStartSamples.load(std::memory_order_relaxed) : 0;
+    int64_t loopEnd = loopEnabled
+        ? loopEndSamples.load(std::memory_order_relaxed) : 0;
+    std::uint64_t loopGeneration = previouslyApplied;
+    bool loopChanged = false;
+
+    enum class PositionKind : std::uint8_t { None, Direct, Slice };
+    PositionKind positionKind = PositionKind::None;
+    std::uint64_t positionGeneration = previouslyApplied;
+    int64_t requestedPosition = 0;
+    int requestedSlice = 0;
+    TransportTransitionReason positionReason =
+        TransportTransitionReason::UserSeek;
+
+    std::uint64_t slicingGeneration = previouslyApplied;
+    bool slicingShouldBeActive = slicingModeActive.load(std::memory_order_relaxed);
+    bool resetContinuousSlicing = false;
+
+    TransportCommand command;
+    for (std::size_t count = 0;
+         count < transportQueueCapacity && transportCommands.tryDequeue(command);
+         ++count)
+    {
+        highestAcknowledged = juce::jmax(highestAcknowledged, command.generation);
+
+        // A command for replaced/cleared audio, or a producer delayed behind a
+        // newer applied generation, must never move the new render state.
+        if (command.audioEpoch != currentEpoch
+            || command.generation <= previouslyApplied)
+        {
+            continue;
+        }
+
+        if (command.generation > highestApplied)
+        {
+            highestApplied = command.generation;
+            highestReason = command.reason;
+        }
+
+        if ((command.flags & updateLoopWindowFlag) != 0
+            && command.generation > loopGeneration)
+        {
+            loopGeneration = command.generation;
+            loopEnabled = command.loopEnabled != 0;
+            loopStart = command.loopStart;
+            loopEnd = command.loopEnd;
+            loopChanged = true;
+        }
+
+        if ((command.flags & updatePositionFlag) != 0
+            && command.generation > positionGeneration)
+        {
+            positionGeneration = command.generation;
+            positionKind = PositionKind::Direct;
+            requestedPosition = command.targetSample;
+            positionReason = command.reason;
+        }
+
+        if ((command.flags & triggerSliceFlag) != 0
+            && command.generation > positionGeneration)
+        {
+            positionGeneration = command.generation;
+            positionKind = PositionKind::Slice;
+            requestedSlice = command.sliceIndex;
+            positionReason = command.reason;
+        }
+
+        if ((command.flags & triggerSliceFlag) != 0
+            && command.generation > slicingGeneration)
+        {
+            slicingGeneration = command.generation;
+            slicingShouldBeActive = true;
+            resetContinuousSlicing = false;
+        }
+        else if ((command.flags & resetSlicingFlag) != 0
+                 && command.generation > slicingGeneration)
+        {
+            slicingGeneration = command.generation;
+            slicingShouldBeActive = false;
+            resetContinuousSlicing = true;
+        }
+    }
+
+    lastAcknowledgedTransportGeneration.store(
+        highestAcknowledged, std::memory_order_release);
+
+    if (highestApplied == previouslyApplied)
+        return;
+
+    if (loopChanged)
+    {
+        if (fileLengthSamples <= 0)
+        {
+            loopEnabled = false;
+            loopStart = 0;
+            loopEnd = 0;
+        }
+        else if (loopEnabled)
+        {
+            loopStart = juce::jlimit<int64_t>(0, fileLengthSamples - 1, loopStart);
+            loopEnd = juce::jlimit<int64_t>(loopStart + 1,
+                                            fileLengthSamples,
+                                            loopEnd);
+        }
+
+        publishLoopWindowState(loopEnabled, loopStart, loopEnd);
+    }
+
+    if (slicingGeneration > previouslyApplied)
+    {
+        slicingModeActive.store(slicingShouldBeActive, std::memory_order_relaxed);
+        if (!slicingShouldBeActive)
+        {
+            currentActiveSlice.store(0, std::memory_order_relaxed);
+            targetSlice.store(0, std::memory_order_relaxed);
+            sliceTriggered.store(false, std::memory_order_relaxed);
+            if (resetContinuousSlicing)
+                params.continuousRandomSlicing = false;
+        }
+    }
+
+    if (positionKind != PositionKind::None)
+    {
+        double targetPosition = static_cast<double>(requestedPosition);
+        int newSliceIndex = -1;
+        const int oldSliceIndex =
+            currentActiveSlice.load(std::memory_order_relaxed);
+
+        if (positionKind == PositionKind::Slice)
+        {
+            const int sliceCount = juce::jmax(1, params.numSlices);
+            newSliceIndex = juce::jlimit(0, sliceCount - 1, requestedSlice);
+
+            const double regionStart = loopEnabled
+                ? static_cast<double>(loopStart) : 0.0;
+            const double regionEnd = loopEnabled
+                ? static_cast<double>(loopEnd)
+                : static_cast<double>(fileLengthSamples);
+            const double sliceLength =
+                juce::jmax(0.0, regionEnd - regionStart)
+                / static_cast<double>(sliceCount);
+            const bool forwards = getEffectiveSpeed() >= 0.0;
+            targetPosition = forwards
+                ? regionStart + sliceLength * newSliceIndex
+                : regionStart + sliceLength * (newSliceIndex + 1) - 1.0;
+        }
+
+        if (fileLengthSamples <= 0)
+        {
+            targetPosition = 0.0;
+        }
+        else
+        {
+            const double minimum = loopEnabled
+                ? static_cast<double>(loopStart) : 0.0;
+            const double maximum = loopEnabled
+                ? static_cast<double>(loopEnd - 1)
+                : static_cast<double>(fileLengthSamples - 1);
+            targetPosition = juce::jlimit(minimum, maximum, targetPosition);
+        }
+
+        // Capture the actual render-owner position before changing it. This is
+        // the old source used by both repitch and SoundTouch input crossfades.
+        const double oldPosition =
+            playheadPosition.load(std::memory_order_relaxed);
+        if (positionReason != TransportTransitionReason::Reset)
+        {
+            transportOutputCorrectionPending = false;
+            transportOutputCorrectionActive = false;
+        }
+
+        if (positionReason == TransportTransitionReason::Reset
+            && params.isPlaying && renderPositionHistoryValid)
+        {
+            transportCorrectionAnchor[0] = lastRenderedOutputSample[0];
+            transportCorrectionAnchor[1] = lastRenderedOutputSample[1];
+            transportOutputCorrectionPending = true;
+            transportOutputCorrectionActive = false;
+            transportOutputCorrectionPosition = 0;
+            transportOutputCorrectionLength = juce::jmax(1, crossfadeLengthSamples);
+        }
+
+        const bool shouldCrossfade = params.isPlaying
+                                  && renderPositionHistoryValid
+                                  && fileLengthSamples > 1
+                                  && std::abs(oldPosition - targetPosition) > 1.0e-9;
+
+        if (shouldCrossfade)
+        {
+            previousSlicePlayheadPos = oldPosition;
+            previousSliceIndex = newSliceIndex >= 0 ? oldSliceIndex : -1;
+            isInCrossfade = true;
+            crossfadePosition = 0;
+            activeCrossfadeLen = crossfadeLengthSamples;
+            crossfadeIsLookaheadContinuation = false;
+        }
+        else
+        {
+            isInCrossfade = false;
+            crossfadePosition = 0;
+            previousSliceIndex = -1;
+        }
+
+        if (newSliceIndex >= 0)
+        {
+            targetSlice.store(newSliceIndex, std::memory_order_relaxed);
+            currentActiveSlice.store(newSliceIndex, std::memory_order_relaxed);
+            sliceTriggered.store(false, std::memory_order_relaxed);
+        }
+
+        playheadPosition.store(targetPosition, std::memory_order_relaxed);
+        resetLookaheadState();
+        for (auto& resampler : blockResamplers)
+            resampler.reset();
+        blockResamplersValid = false;
+        blockResamplerExpectedPos = targetPosition;
+        rmsBlankingBlocksLeft = juce::jmax(rmsBlankingBlocksLeft, 2);
+    }
+
+    lastAppliedTransportReason.store(
+        static_cast<std::uint8_t>(highestReason), std::memory_order_relaxed);
+    lastAppliedTransportGeneration.store(
+        highestApplied, std::memory_order_release);
+}
+
+void AudioBuffer::applyTransportOutputCorrection(
+    juce::AudioBuffer<float>& outputBuffer)
+{
+    const int numSamples = outputBuffer.getNumSamples();
+    const int numChannels = juce::jmin(2, outputBuffer.getNumChannels());
+    if (numSamples <= 0 || numChannels <= 0)
+        return;
+
+    if (transportOutputCorrectionPending)
+    {
+        for (int channel = 0; channel < numChannels; ++channel)
+        {
+            transportCorrectionOffset[channel] =
+                transportCorrectionAnchor[channel]
+                - outputBuffer.getSample(channel, 0);
+        }
+
+        transportOutputCorrectionPending = false;
+        transportOutputCorrectionActive = true;
+        transportOutputCorrectionPosition = 0;
+    }
+
+    if (!transportOutputCorrectionActive)
+        return;
+
+    const int fadeLength = juce::jmax(1, transportOutputCorrectionLength);
+    const int samplesToProcess = juce::jmin(
+        numSamples, fadeLength - transportOutputCorrectionPosition);
+
+    for (int channel = 0; channel < numChannels; ++channel)
+    {
+        auto* output = outputBuffer.getWritePointer(channel);
+        const float offset = transportCorrectionOffset[channel];
+        for (int sample = 0; sample < samplesToProcess; ++sample)
+        {
+            const float correctionGain = 1.0f
+                - static_cast<float>(transportOutputCorrectionPosition + sample)
+                    / static_cast<float>(fadeLength);
+            output[sample] += offset * correctionGain;
+        }
+    }
+
+    transportOutputCorrectionPosition += samplesToProcess;
+    if (transportOutputCorrectionPosition >= fadeLength)
+    {
+        transportOutputCorrectionActive = false;
+        transportOutputCorrectionPosition = 0;
+        transportOutputCorrectionLength = 0;
+    }
+}
+
 void AudioBuffer::prepare(double sampleRate, int samplesPerBlockExpected)
 {
     juce::FloatVectorOperations::disableDenormalisedNumberSupport();
@@ -246,16 +631,28 @@ void AudioBuffer::prepare(double sampleRate, int samplesPerBlockExpected)
     blockResamplersValid = false;
     stretchFadeInRemaining = 0;
     stretchFadeInTotal = 0;
+    renderPositionHistoryValid = false;
+    transportOutputCorrectionPending = false;
+    transportOutputCorrectionActive = false;
+    transportOutputCorrectionPosition = 0;
+    transportOutputCorrectionLength = 0;
     resetStretchQueueState();
 }
 
 void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
 {
-    if (!hasAudioLoaded() || !params.isPlaying)
+    auto transportData = getAudioDataSnapshot();
+    consumeTransportCommands(transportData != nullptr
+        ? transportData->buffer.getNumSamples() : 0);
+
+    if (transportData == nullptr || !params.isPlaying)
     {
         outputBuffer.clear();
         lastBlockUsedStretch = false;
         previousBlockValid = false;
+        renderPositionHistoryValid = false;
+        transportOutputCorrectionPending = false;
+        transportOutputCorrectionActive = false;
         // BUG 7: cancel any in-flight transition fade and invalidate the output
         // ring — after silence there is nothing meaningful to fade from.
         transitionFadeActive = false;
@@ -349,6 +746,11 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
     if (transitionFadeActive)
         applyTransitionFade(outputBuffer);
 
+    // Full Reset clears the SoundTouch pipeline and its old-output history.
+    // Connect the last audible endpoint to the new signal with a decaying
+    // correction rather than replaying already-emitted historical audio.
+    applyTransportOutputCorrection(outputBuffer);
+
     // Feed the output ring so future transitions have pre-transition audio to
     // fade from.  Written in BOTH playback modes (repitch used to skip this).
     writeToStretchOutputRing(outputBuffer, outputBuffer.getNumSamples());
@@ -369,6 +771,19 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
         previousBlockBuffer.copyFrom(ch, 0, outputBuffer, ch, 0, outputBuffer.getNumSamples());
     previousBlockNumSamples = outputBuffer.getNumSamples();
     previousBlockValid = true;
+    renderPositionHistoryValid = true;
+    if (outputBuffer.getNumSamples() > 0)
+    {
+        const int lastSample = outputBuffer.getNumSamples() - 1;
+        for (int channel = 0; channel < 2; ++channel)
+        {
+            const int sourceChannel =
+                juce::jmin(channel, outputBuffer.getNumChannels() - 1);
+            lastRenderedOutputSample[channel] =
+                sourceChannel >= 0
+                    ? outputBuffer.getSample(sourceChannel, lastSample) : 0.0f;
+        }
+    }
     
     //==============================================================================
     // TEARING DEBUG: Validate output buffer for potential audio issues
@@ -979,21 +1394,22 @@ void AudioBuffer::processWithRepitching(juce::AudioBuffer<float>& outputBuffer)
 //==============================================================================
 void AudioBuffer::setLoopWindow(int64_t startSamples, int64_t endSamples)
 {
-    if (endSamples <= startSamples)
-    {
-        loopWindowEnabled.store(false);
-        loopStartSamples.store(0);
-        loopEndSamples.store(0);
-        return;
-    }
-    loopWindowEnabled.store(true);
-    loopStartSamples.store(juce::jmax<int64_t>(0, startSamples));
-    loopEndSamples.store(juce::jmax<int64_t>(0, endSamples));
+    TransportCommand command;
+    command.loopStart = juce::jmax<int64_t>(0, startSamples);
+    command.loopEnd = juce::jmax<int64_t>(0, endSamples);
+    command.reason = TransportTransitionReason::LoopWindowOnly;
+    command.flags = updateLoopWindowFlag;
+    command.loopEnabled = endSamples > startSamples ? 1 : 0;
+    enqueueTransportCommand(command);
 }
 
 void AudioBuffer::clearLoopWindow()
 {
-    loopWindowEnabled.store(false);
+    TransportCommand command;
+    command.reason = TransportTransitionReason::LoopWindowOnly;
+    command.flags = updateLoopWindowFlag;
+    command.loopEnabled = 0;
+    enqueueTransportCommand(command);
 }
 
 bool AudioBuffer::loadAudioFile(const juce::File& file, juce::AudioFormatManager& formatManager)
@@ -1059,6 +1475,11 @@ bool AudioBuffer::loadAudioFile(const juce::File& file, juce::AudioFormatManager
 
 void AudioBuffer::setLoadedAudioData(LoadedAudioData::Ptr newData)
 {
+    // Invalidate commands targeting the previous source. Any producer that
+    // races this swap either publishes against the old epoch (and is ignored)
+    // or against the new epoch (and is applied on the next render boundary).
+    audioDataEpoch.fetch_add(1, std::memory_order_acq_rel);
+
     // Rotate retainers so the previous data stays alive long enough for any
     // concurrent reader that loaded the raw pointer but hasn't yet bumped
     // its ref count.
@@ -1067,12 +1488,7 @@ void AudioBuffer::setLoadedAudioData(LoadedAudioData::Ptr newData)
     atomicAudioData.store (newData.get(), std::memory_order_release);
 
     // Reset playback position and transient state for a clean start.
-    playheadPosition.store(0.0);
-    clearLoopWindow();
-    slicingModeActive.store(false);
-    sliceTriggered.store(false);
-    currentActiveSlice.store(0);
-    targetSlice.store(0);
+    resetRenderPositionStateDirect();
     params.continuousRandomSlicing = false;
 
     isInCrossfade = false;
@@ -1099,16 +1515,17 @@ void AudioBuffer::setLoadedAudioData(LoadedAudioData::Ptr newData)
     speedMagSmoother.setCurrentAndTargetValue(1.0);
     lastStretchDirection = 1.0;
     previousBlockValid = false;
+    renderPositionHistoryValid = false;
     resetCrossfadePending = false;
 }
 
 void AudioBuffer::clearAudioData()
 {
+    audioDataEpoch.fetch_add(1, std::memory_order_acq_rel);
     previousAudioDataRetainer = audioDataRetainer;
     audioDataRetainer = nullptr;
     atomicAudioData.store (nullptr, std::memory_order_release);
-    playheadPosition.store(0.0);
-    clearLoopWindow();
+    resetRenderPositionStateDirect();
     resetToDefaults();
 }
 
@@ -1220,18 +1637,17 @@ void AudioBuffer::setLooping(bool shouldLoop)
     params.isLooping = shouldLoop;
 }
 
-void AudioBuffer::resetToBeginning()
+void AudioBuffer::resetToBeginning(TransportTransitionReason reason)
 {
-    playheadPosition.store(0.0);
-    currentActiveSlice.store(0);
-    slicingModeActive.store(false);
-    sliceTriggered.store(false);
-    params.continuousRandomSlicing = false;
+    TransportCommand command;
+    command.targetSample = 0;
+    command.reason = reason;
+    command.flags = updatePositionFlag | resetSlicingFlag;
+    enqueueTransportCommand(command);
 }
 
 void AudioBuffer::resetToDefaults()
 {
-    resetToBeginning();
     params.reset();
     atomicSpeed.store(params.speed, std::memory_order_relaxed);
 
@@ -1284,6 +1700,11 @@ void AudioBuffer::resetToDefaults()
     pingPongPeriodSamples.store(0.0);
     pingPongPhasePosition.store(0.0);
     pingPongGoingForward.store(true);
+
+    // Publish the restart only after the control-side defaults are complete.
+    // The render owner can then apply the final position without a later reset
+    // step cancelling its newly armed continuity correction.
+    resetToBeginning(TransportTransitionReason::Reset);
 }
 
 void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer, const StretchSnapshot& snap)
@@ -2449,10 +2870,11 @@ void AudioBuffer::triggerSlice(int sliceIndex)
 {
     if (sliceIndex >= 0 && sliceIndex < params.numSlices)
     {
-        targetSlice.store(sliceIndex);
-        currentActiveSlice.store(sliceIndex);
-        sliceTriggered.store(true);
-        slicingModeActive.store(true);
+        TransportCommand command;
+        command.sliceIndex = sliceIndex;
+        command.reason = TransportTransitionReason::SliceTrigger;
+        command.flags = triggerSliceFlag;
+        enqueueTransportCommand(command);
     }
 }
 
@@ -2521,8 +2943,6 @@ void AudioBuffer::startArpSlicing(int totalSlices, int sequenceLength, int repea
     // Trigger the first slice in the sequence
     if (!params.arpSequence.empty())
         triggerSlice(params.arpSequence[0]);
-
-    slicingModeActive.store(true);
 }
 
 void AudioBuffer::stopArpSlicing()
@@ -2559,30 +2979,21 @@ void AudioBuffer::startSliceRepeater(int totalSlices, int repetitions)
 
     // Trigger the first slice
     triggerSlice(chosenSlice);
-    slicingModeActive.store(true);
 }
 
 void AudioBuffer::exitSlicingMode()
 {
-    slicingModeActive.store(false);
     params.continuousRandomSlicing = false;
     params.arpSliceActive = false;
     params.arpSliceRepeaterMode = false;
     params.arpSequence.clear();
     params.arpSequencePos = 0;
     params.arpCycleCount = 0;
-    sliceTriggered.store(false);
-    currentActiveSlice.store(0);
-    
-    // Reset crossfade state
-    isInCrossfade = false;
-    crossfadePosition = 0;
-    activeCrossfadeLen = crossfadeLengthSamples;
-    crossfadeIsLookaheadContinuation = false;
-    previousSliceIndex = -1;
 
-    // §12: Reset lookahead state.
-    resetLookaheadState();
+    TransportCommand command;
+    command.reason = TransportTransitionReason::UserSeek;
+    command.flags = resetSlicingFlag;
+    enqueueTransportCommand(command);
 }
 
 int AudioBuffer::getCurrentSlice() const
@@ -3316,6 +3727,9 @@ void AudioBuffer::releaseResources()
     crossfadeBuffer.setSize(0, 0);
     previousBlockBuffer.setSize(0, 0);
     previousBlockValid = false;
+    renderPositionHistoryValid = false;
+    transportOutputCorrectionPending = false;
+    transportOutputCorrectionActive = false;
     resetCrossfadePending = false;
     stretcher.reset();
     stretcherPrepared = false;

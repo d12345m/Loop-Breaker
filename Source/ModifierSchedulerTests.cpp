@@ -372,7 +372,7 @@ public:
         for (size_t i = 0; i < juce::jmin (queueA.size(), queueB.size()); ++i)
             expect (samePlan (queueA[i], queueB[i]));
 
-        beginTest ("Probability changes rebuild every queue position");
+        beginTest ("Explicit probability refresh rebuilds every queue position");
         for (auto type : ModifierProbabilityManager::allModifierTypes())
             settingsA.modifierProbabilities.setWeight (type, 0.0f);
         settingsA.modifierProbabilities.setWeight (ModifierType::Reverse, 1.0f);
@@ -412,7 +412,7 @@ public:
         expect (mutedScheduler.getPlannedQueueSnapshot().empty());
         mutedScheduler.removeListener (&mutedCapture);
 
-        beginTest ("Live probability changes clear and fully repopulate the queue");
+        beginTest ("Explicit probability refresh clears and fully repopulates the queue");
         SessionSettings liveProbabilitySettings;
         ModifierScheduler liveProbabilityScheduler (liveProbabilitySettings);
         liveProbabilityScheduler.setRandomSeed (9753);
@@ -488,6 +488,26 @@ public:
         processor.processBlock (audio, midi);
     }
 
+    static void processEmptyBlock (BufferTestAudioProcessor& processor)
+    {
+        juce::AudioBuffer<float> audio (processor.getTotalNumOutputChannels(), 64);
+        juce::MidiBuffer midi;
+        processor.processBlock (audio, midi);
+    }
+
+    static bool queuesMatch (const std::vector<PlannedModifier>& a,
+                             const std::vector<PlannedModifier>& b)
+    {
+        if (a.size() != b.size())
+            return false;
+
+        for (size_t i = 0; i < a.size(); ++i)
+            if (! ModifierSchedulerPlannedQueueTest::samePlan (a[i], b[i]))
+                return false;
+
+        return true;
+    }
+
     static void processNoteOn (BufferTestAudioProcessor& processor, int note, float velocity = 1.0f)
     {
         juce::AudioBuffer<float> audio (processor.getTotalNumOutputChannels(), 64);
@@ -523,6 +543,69 @@ public:
         processNoteOn (processor, 70, 0.25f);
         if (firstProbability != nullptr)
             expectWithinAbsoluteError (firstProbability->getValue(), 0.0f, 0.001f);
+
+        beginTest ("Continuous probability changes preserve the frozen queue");
+        BufferTestAudioProcessor probabilityProcessor;
+        probabilityProcessor.prepareToPlay (48000.0, 64);
+        processEmptyBlock (probabilityProcessor);
+        const auto frozenQueue =
+            probabilityProcessor.getAppState().scheduler.getPlannedQueueSnapshot();
+        expectEquals (static_cast<int> (frozenQueue.size()),
+                      ModifierScheduler::kPlannedQueueDepth);
+
+        const auto firstContinuousType =
+            ModifierProbabilityManager::allModifierTypes().front();
+        if (auto* parameter = probabilityProcessor.getAPVTS().getParameter (
+                "prob_" + juce::String (static_cast<int> (firstContinuousType))))
+            parameter->setValueNotifyingHost (0.0f);
+        processEmptyBlock (probabilityProcessor);
+        expect (queuesMatch (
+            frozenQueue,
+            probabilityProcessor.getAppState().scheduler.getPlannedQueueSnapshot()));
+
+        beginTest ("All-zero probabilities clear the queue once");
+        for (auto type : ModifierProbabilityManager::allModifierTypes())
+        {
+            const auto id = "prob_" + juce::String (static_cast<int> (type));
+            if (auto* parameter = probabilityProcessor.getAPVTS().getParameter (id))
+                parameter->setValueNotifyingHost (0.0f);
+        }
+        processEmptyBlock (probabilityProcessor);
+        expect (probabilityProcessor.getAppState().scheduler
+                    .getPlannedQueueSnapshot().empty());
+
+        beginTest ("Re-enabling probabilities repopulates an empty queue");
+        if (auto* parameter = probabilityProcessor.getAPVTS().getParameter (
+                "prob_" + juce::String (static_cast<int> (ModifierType::Reverse))))
+            parameter->setValueNotifyingHost (1.0f);
+        processEmptyBlock (probabilityProcessor);
+        const auto reenabledQueue =
+            probabilityProcessor.getAppState().scheduler.getPlannedQueueSnapshot();
+        expectEquals (static_cast<int> (reenabledQueue.size()),
+                      ModifierScheduler::kPlannedQueueDepth);
+        for (const auto& planned : reenabledQueue)
+            expect (planned.descriptor.type == ModifierType::Reverse);
+
+        beginTest ("MIDI Randomize explicitly refreshes the queue");
+        for (auto type : ModifierProbabilityManager::allModifierTypes())
+        {
+            const auto id = "prob_" + juce::String (static_cast<int> (type));
+            if (auto* parameter = probabilityProcessor.getAPVTS().getParameter (id))
+                parameter->setValueNotifyingHost (0.0f);
+        }
+        processEmptyBlock (probabilityProcessor);
+        expect (probabilityProcessor.getAppState().scheduler
+                    .getPlannedQueueSnapshot().empty());
+
+        probabilityProcessor.getAppState().settings
+            .midiProbabilityActionNoteMap[
+                BufferTestAudioProcessor::kProbabilityActionRandomize] = 72;
+        processNoteOn (probabilityProcessor, 72);
+        expectEquals (
+            static_cast<int> (probabilityProcessor.getAppState().scheduler
+                                  .getPlannedQueueSnapshot().size()),
+            ModifierScheduler::kPlannedQueueDepth);
+        probabilityProcessor.releaseResources();
 
         beginTest ("Master volume learns a CC and follows its continuous value");
         processor.setMidiControlCCLearnTarget (BufferTestAudioProcessor::kMasterVolumeCCLearnTarget);

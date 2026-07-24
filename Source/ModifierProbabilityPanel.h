@@ -955,6 +955,8 @@ private:
             if (auto* param = apvts.getParameter (id))
                 param->setValueNotifyingHost (probabilityRandom.nextFloat());
         }
+
+        processor.requestProbabilityQueueRefresh();
     }
 
     void applyTheme()

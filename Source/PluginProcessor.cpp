@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "ModifierRegistry.h"
 #include "ThemeEngine.h"
 
 // ---------------------------------------------------------------------------
@@ -440,28 +441,31 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     }
 
     // Sync APVTS parameter values → probManager (trivial: 22 atomic float reads per block).
-    // Queue entries freeze their descriptor when planned, so rebuild the entire queue
-    // once after any batch of probability changes. With no eligible non-zero weights,
-    // rebuilding deliberately leaves the queue empty.
+    // Continuous slider, MIDI CC, and automation changes leave the frozen queue intact
+    // and affect entries as they are appended. Crossing the all-zero boundary requests
+    // one refresh so the queue clears immediately (and can refill when re-enabled).
+    // Randomize also explicitly requests one refresh after its parameter batch.
     {
-        bool probabilitiesChanged = false;
+        bool hasEligibleModifierProbability = false;
         const auto& types = ModifierProbabilityManager::allModifierTypes();
         for (auto type : types)
         {
             const juce::String id = "prob_" + juce::String (static_cast<int> (type));
             if (auto* rawVal = apvts.getRawParameterValue (id))
             {
-                const float newWeight = rawVal->load();
-                probabilitiesChanged = probabilitiesChanged
-                                    || ! juce::approximatelyEqual (
-                                           app.settings.modifierProbabilities.getWeight (type),
-                                           newWeight);
-                app.settings.modifierProbabilities.setWeight (type, newWeight);
+                const float weight = rawVal->load();
+                app.settings.modifierProbabilities.setWeight (type, weight);
+                hasEligibleModifierProbability =
+                    hasEligibleModifierProbability
+                    || (ModifierRegistry::get (type).schedulerEligible && weight > 0.0f);
             }
         }
 
-        if (probabilitiesChanged)
-            app.scheduler.refreshPlannedQueueForProbabilityChange();
+        if (hasEligibleModifierProbability != hadEligibleModifierProbability)
+        {
+            hadEligibleModifierProbability = hasEligibleModifierProbability;
+            requestProbabilityQueueRefresh();
+        }
     }
 
     // Sync APVTS pad target probability values → settings
@@ -471,6 +475,11 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
         if (auto* rawVal = apvts.getRawParameterValue (id))
             app.settings.padTargetProbabilities[static_cast<size_t>(i)] = rawVal->load();
     }
+
+    // Refresh only after modifier and pad probabilities have both reached the
+    // live settings used to select modifier types and pad targets.
+    if (probabilityQueueRefreshRequested.exchange (false, std::memory_order_acq_rel))
+        app.scheduler.refreshPlannedQueueForProbabilityChange();
 
     // Transport-tied playback: stop output when the host is stopped.
     struct HostTransportResult
@@ -1258,6 +1267,9 @@ void BufferTestAudioProcessor::applyMidiProbabilityAction (int actionIndex)
         const float value = randomize ? midiProbabilityActionRandom.nextFloat() : fixedValue;
         setParameter ("padProb_" + juce::String (i), value);
     }
+
+    if (randomize)
+        requestProbabilityQueueRefresh();
 }
 
 void BufferTestAudioProcessor::restoreBuffersFromSessionState()

@@ -90,6 +90,7 @@ struct TimeStretchQueueTelemetry
     double estimatedOutputCreditFrames = 0.0;
     std::uint64_t totalInputFramesFed = 0;
     std::uint64_t totalOutputFramesReceived = 0;
+    std::uint64_t totalUnderfills = 0;
 };
 
 enum class TransportTransitionReason : std::uint8_t
@@ -291,6 +292,20 @@ public:
     int getNumSlices() const { return params.numSlices; }
     bool isInContinuousRandomMode() const { return params.continuousRandomSlicing; }
     bool isInSlicingMode() const { return slicingModeActive.load(); }
+#if JUCE_UNIT_TESTS
+    void setRandomSeedForTesting(juce::int64 seed) noexcept
+    {
+        random.setSeed(seed);
+    }
+    bool isLookaheadTransitionActiveForTesting() const noexcept
+    {
+        return isInLookaheadCrossfade;
+    }
+    bool isLookaheadCancellationActiveForTesting() const noexcept
+    {
+        return lookaheadCrossfadeCancelling;
+    }
+#endif
     
     //==============================================================================
     // Debug statistics (only meaningful in debug builds)
@@ -494,34 +509,9 @@ private:
     void publishStretchQueueTelemetry (int targetOutputReserve,
                                        int highOutputWatermark);
 
-    // §10.3  Output-side crossfade for slice/boundary transitions in SoundTouch
-    // mode.  Instead of applying crossfade on SoundTouch's INPUT (where the OLA
-    // algorithm smears it unpredictably), we maintain a ring buffer of recent
-    // SoundTouch output and crossfade on the OUTPUT side for clean transitions.
-    juce::AudioBuffer<float> stretchOutputRing;           // circular buffer of recent output
-    int stretchOutputRingSize = 0;                         // allocated ring capacity
-    int stretchOutputRingWritePos = 0;                     // next write position
-    int stretchOutputRingValidSamples = 0;                 // valid samples currently stored
-    bool stretchOutputCrossfadePending = false;            // transition detected, snapshot needed
-    bool stretchOutputCrossfadeActive = false;             // output crossfade in progress
-    int stretchOutputCrossfadePos = 0;                     // current position within crossfade
-    int stretchOutputCrossfadeLen = 0;                     // total crossfade length in samples
-    juce::AudioBuffer<float> stretchCrossfadeSnapshot;     // captured old output at transition
-    int stretchCrossfadeSnapshotLen = 0;                   // valid length in snapshot
-
-    // BUG 7 fix: multi-block transition crossfade.  The old mode-transition and
-    // T8 reset crossfades were clamped to a single host block, so at small buffer
-    // sizes (64/128) the intended 20–80ms fade couldn't fit and a residual click
-    // remained.  This state lets the fade span as many blocks as needed, replaying
-    // the tail of pre-transition output (captured from stretchOutputRing, which is
-    // now fed in BOTH playback modes) while the new signal fades in.
-    juce::AudioBuffer<float> transitionOldBuffer;          // captured pre-transition output tail
-    int  transitionFadePos = 0;
-    int  transitionFadeLen = 0;
-    bool transitionFadeActive = false;
-    bool stretcherResetThisBlock = false;                  // set by processWithTimeStretch on reset
-    void beginTransitionFade(int desiredFadeSamples);
-    void applyTransitionFade(juce::AudioBuffer<float>& buffer);
+    // Set by processWithTimeStretch when a live pipeline reset occurred. The
+    // enclosing processBlock reconnects the new output to the exact last sample.
+    bool stretcherResetThisBlock = false;
 
 private:
     // §4.2  Deferred musical start flag.
@@ -559,12 +549,16 @@ private:
     double previousSlicePlayheadPos = 0.0;
     int previousSliceIndex = -1;
     juce::AudioBuffer<float> crossfadeBuffer;
-    // BUGFIX (BUG 5): when a §12 lookahead pre-crossfade correctly predicted the
-    // slice jump, the input signal at the boundary is already a 50/50 blend.
-    // The post-jump crossfade must CONTINUE from that blend (linear 0.5→1.0)
-    // instead of restarting at 0% (which caused an instantaneous jump back to
-    // 100% old-slice audio at the boundary sample).
+    // Direction of the old branch. Direction pivots use ±1 so both branches
+    // move away from the pivot; source boundaries use 0 to hold the last sample
+    // that was actually rendered.
+    double crossfadeOldDirection = 1.0;
+    // When a §12 lookahead pre-crossfade correctly predicts the slice jump, the
+    // input signal at the boundary already contains some new-slice audio. The
+    // post-jump crossfade must continue from the actual terminal mix rather than
+    // restarting at 0% old-slice audio.
     bool crossfadeIsLookaheadContinuation = false;
+    float crossfadeInitialNewMix = 0.0f;
 
     // §12 Lookahead pre-priming: gradually blend next-slice audio into
     // SoundTouch's input *before* the slice boundary, so the OLA algorithm
@@ -574,6 +568,9 @@ private:
     int   lookaheadCrossfadePosition = 0;        // progress within lookahead crossfade
     int   lookaheadCrossfadeSamples = 0;         // total length of lookahead crossfade
     double lookaheadNextSliceReadPos = 0.0;       // read position in the next slice (advances with step)
+    float lookaheadTerminalBlend = 0.0f;          // actual new-branch mix at the boundary
+    bool  lookaheadCrossfadeCancelling = false;   // unwind after slicing is disabled
+    float lookaheadCancellationInitialBlend = 0.0f;
     int   precomputedNextRandomSlice = -1;       // pre-rolled RNG for continuous random mode
     
     // DSP parameters
@@ -582,19 +579,17 @@ private:
     // Processing buffers
     juce::AudioBuffer<float> repitchBuffer;
     juce::AudioBuffer<float> tempProcessingBuffer;
-    // Previous block cache for mode-transition crossfades
-    juce::AudioBuffer<float> previousBlockBuffer;
-    int previousBlockNumSamples = 0;
     bool previousBlockValid = false;
     bool renderPositionHistoryValid = false;
     float lastRenderedOutputSample[2] = { 0.0f, 0.0f };
-    float transportCorrectionAnchor[2] = { 0.0f, 0.0f };
-    float transportCorrectionOffset[2] = { 0.0f, 0.0f };
-    bool transportOutputCorrectionPending = false;
-    bool transportOutputCorrectionActive = false;
-    int transportOutputCorrectionPosition = 0;
-    int transportOutputCorrectionLength = 0;
-    bool resetCrossfadePending = false;
+    float outputCorrectionAnchor[2] = { 0.0f, 0.0f };
+    float outputCorrectionOffset[2] = { 0.0f, 0.0f };
+    bool outputCorrectionPending = false;
+    bool outputCorrectionActive = false;
+    int outputCorrectionPosition = 0;
+    int outputCorrectionLength = 0;
+    bool underfillRecoveryPending = false;
+    bool stretcherUnderfilledThisBlock = false;
     
     // Listeners
     juce::Array<AudioBufferListener*> listeners;
@@ -612,7 +607,8 @@ private:
     void consumeTransportCommands(int fileLengthSamples);
     void publishLoopWindowState(bool enabled, int64_t startSamples, int64_t endSamples) noexcept;
     void resetRenderPositionStateDirect() noexcept;
-    void applyTransportOutputCorrection(juce::AudioBuffer<float>& outputBuffer);
+    void armOutputEndpointCorrection(int fadeLength) noexcept;
+    void applyOutputEndpointCorrection(juce::AudioBuffer<float>& outputBuffer);
     void handleSlicePlayback(double& currentPos, int fileLengthSamples);
     void applyCrossfadeToSliceTransition(const juce::AudioBuffer<float>& sourceBuffer,
                                          int fileLengthSamples,
@@ -622,9 +618,6 @@ private:
                                          int numSamples);
     void startSliceCrossfade(int newSliceIndex, double newPlayheadPos);
     void startBoundaryCrossfade(double newPlayheadPos);
-    void writeToStretchOutputRing(const juce::AudioBuffer<float>& src, int numSamples);
-    void snapshotStretchOutputRing();
-    void applyStretchOutputCrossfade(juce::AudioBuffer<float>& outputBuffer, int numSamples);
     double getSliceStartPosition(int sliceIndex, int fileLengthSamples) const;
     double getSliceEndPosition(int sliceIndex, int fileLengthSamples) const;
 

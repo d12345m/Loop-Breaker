@@ -68,6 +68,12 @@ if(NOT OPENMP)
     set(CMAKE_DISABLE_FIND_PACKAGE_OpenMP TRUE)
 endif()
 add_subdirectory(ThirdParty/soundtouch EXCLUDE_FROM_ALL)
+# Keep SoundTouch's processing topology stable as rate automation crosses 1x.
+# Without this, SoundTouch moves queued samples between RateTransposer and
+# TDStretch at the crossover, which can expose a discontinuity in real-time use.
+target_compile_definitions(SoundTouch PRIVATE
+    SOUNDTOUCH_PREVENT_CLICK_AT_RATE_CROSSOVER=1
+)
 if(_LOOP_BREAKER_SUPPRESS_OPENMP_PROBE)
     if(_LOOP_BREAKER_OPENMP_DISABLE_WAS_DEFINED)
         set(CMAKE_DISABLE_FIND_PACKAGE_OpenMP "${_LOOP_BREAKER_OPENMP_DISABLE_VALUE}")

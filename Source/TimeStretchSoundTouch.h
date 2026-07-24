@@ -24,13 +24,13 @@ public:
         st.setPitch (1.0f);
         st.setRate (1.0f);
 
-        // Balance between latency and quality.
-        // Too-small windows (e.g. 40/20/10) produce metallic artifacts.
-        // Too-large windows (e.g. 80/30/12) add latency and CPU.
-        // These values are a good middle ground for real-time playback.
+        // Use one reverse-safe window configuration for the lifetime of the
+        // prepared engine. TDStretch can reallocate its overlap buffer when
+        // SETTING_OVERLAP_MS changes, so direction changes must not retune these
+        // values from the audio callback.
         st.setSetting (SETTING_SEQUENCE_MS, 60);
-        st.setSetting (SETTING_SEEKWINDOW_MS, 25);
-        st.setSetting (SETTING_OVERLAP_MS, 12);
+        st.setSetting (SETTING_SEEKWINDOW_MS, 35);
+        st.setSetting (SETTING_OVERLAP_MS, 18);
         // Quickseek trades quality for speed.  With the feed-loop optimizations
         // we have enough CPU headroom to keep it off for better audio quality.
         st.setSetting (SETTING_USE_QUICKSEEK, 0);
@@ -39,22 +39,6 @@ public:
     void reset()
     {
         st.clear();
-    }
-
-    // T9: Widen seek/overlap windows for reversed audio (worse auto-correlation).
-    // Call after prepare() or after a direction change.  Forward = default params.
-    void setWindowsForReverse (bool isReversed)
-    {
-        if (isReversed)
-        {
-            st.setSetting (SETTING_SEEKWINDOW_MS, 35);
-            st.setSetting (SETTING_OVERLAP_MS, 18);
-        }
-        else
-        {
-            st.setSetting (SETTING_SEEKWINDOW_MS, 25);
-            st.setSetting (SETTING_OVERLAP_MS, 12);
-        }
     }
 
     // ratio: 1.0 = original length, 0.5 = 2x longer, 2.0 = 2x shorter

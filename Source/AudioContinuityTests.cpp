@@ -58,6 +58,25 @@ AudioBuffer::LoadedAudioData::Ptr makeConstantAudio (int numSamples,
     return data;
 }
 
+float accumulateMaximumDelta(const juce::AudioBuffer<float>& buffer,
+                             float& previousSample,
+                             bool& hasPreviousSample)
+{
+    float maximumDelta = 0.0f;
+    const auto* samples = buffer.getReadPointer(0);
+    for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+    {
+        if (hasPreviousSample)
+            maximumDelta = juce::jmax(
+                maximumDelta, std::abs(samples[sample] - previousSample));
+
+        previousSample = samples[sample];
+        hasPreviousSample = true;
+    }
+
+    return maximumDelta;
+}
+
 class AudioContinuityTests final : public juce::UnitTest
 {
 public:
@@ -78,6 +97,14 @@ public:
         testConcurrentTransportGenerationOrdering();
         testSeekBoundaryContinuity();
         testFullResetBoundaryContinuity();
+        testModeTransitionEndpointContinuity();
+        testSoundTouchRateCrossoverContinuity();
+        testRepitchDirectionZeroCrossing();
+        testSoundTouchDirectionPivotContinuity();
+        testSoundTouchPingPongPivots();
+        testSoundTouchHighStepSliceLookahead();
+        testExitSlicingUnwindsLookahead();
+        testSoundTouchUnderfillRecoveryContinuity();
     }
 
 private:
@@ -227,6 +254,8 @@ private:
             expect (telemetry.estimatedOutputCreditFrames
                         <= telemetry.highOutputWatermark + testCase.blockSize,
                     "Output-equivalent pipeline credit exceeded its documented bound");
+            expectEquals (telemetry.totalUnderfills, std::uint64_t { 0 },
+                          "Steady-state queue control should not underfill");
         }
     }
 
@@ -512,6 +541,367 @@ private:
                 "Reset output correction must meet the prior audible endpoint");
         expect (player.getTransportTransitionTelemetry().lastAppliedReason
                     == TransportTransitionReason::Reset);
+    }
+
+    void testModeTransitionEndpointContinuity()
+    {
+        beginTest ("Mode transitions meet the exact prior audible endpoint");
+
+        constexpr double sampleRate = 48000.0;
+        constexpr int blockSize = 64;
+        AudioBuffer player;
+        player.prepare (sampleRate, blockSize);
+        player.setLoadedAudioData (makeSmoothAudio (240000, sampleRate));
+        player.setLooping (false);
+        player.play();
+
+        juce::AudioBuffer<float> block (2, blockSize);
+        for (int callback = 0; callback < 40; ++callback)
+            player.processBlock (block);
+
+        float oldTail = block.getSample (0, blockSize - 1);
+        player.setStretchRatio (0.8);
+        player.processBlock (block);
+        expect (std::abs (block.getSample (0, 0) - oldTail) < 0.001f,
+                "Repitch-to-stretch must not replay an older output-tail sample");
+
+        for (int callback = 0; callback < 80; ++callback)
+            player.processBlock (block);
+
+        oldTail = block.getSample (0, blockSize - 1);
+        player.setStretchRatio (1.0);
+        player.processBlock (block);
+        expect (std::abs (block.getSample (0, 0) - oldTail) < 0.001f,
+                "Stretch-to-repitch must meet the last SoundTouch output sample");
+    }
+
+    void testSoundTouchRateCrossoverContinuity()
+    {
+        beginTest ("SoundTouch rate automation crosses 1x without a click");
+
+        constexpr double sampleRate = 48000.0;
+        constexpr int blockSize = 64;
+        AudioBuffer player;
+        player.prepare (sampleRate, blockSize);
+        player.setLoadedAudioData (
+            makeConstantAudio (480000, sampleRate, 0.25f));
+        player.setLooping (false);
+        player.setStretchRatio (0.8);
+        player.play();
+
+        juce::AudioBuffer<float> block (2, blockSize);
+        for (int callback = 0; callback < 80; ++callback)
+            player.processBlock (block);
+
+        float previousSample = block.getSample (0, blockSize - 1);
+        bool hasPreviousSample = true;
+        float maximumDelta = 0.0f;
+        for (const double speed : { 0.5, 2.0, 0.5, 2.0 })
+        {
+            player.setSpeed (speed);
+            for (int callback = 0; callback < 80; ++callback)
+            {
+                player.processBlock (block);
+                maximumDelta = juce::jmax(
+                    maximumDelta,
+                    accumulateMaximumDelta(
+                        block, previousSample, hasPreviousSample));
+            }
+        }
+
+        expect (maximumDelta < 0.08f,
+                "Crossing SoundTouch's 1x rate boundary exposed a discontinuity");
+    }
+
+    void testSoundTouchDirectionPivotContinuity()
+    {
+        beginTest ("SoundTouch reverse uses a pivot-centred source crossfade");
+
+        constexpr double sampleRate = 48000.0;
+        constexpr int blockSize = 64;
+        AudioBuffer player;
+        player.prepare (sampleRate, blockSize);
+        player.setLoadedAudioData (makeSmoothAudio (480000, sampleRate));
+        player.setLooping (false);
+        player.setStretchRatio (0.8);
+        player.play();
+
+        juce::AudioBuffer<float> block (2, blockSize);
+        for (int callback = 0; callback < 100; ++callback)
+            player.processBlock (block);
+
+        const double forwardPosition = player.getPlayheadPositionInSamples();
+        float previousSample = block.getSample (0, blockSize - 1);
+        bool hasPreviousSample = true;
+        float maximumDelta = 0.0f;
+
+        player.setSpeed (-1.0);
+        for (int callback = 0; callback < 100; ++callback)
+        {
+            player.processBlock (block);
+            maximumDelta = juce::jmax(
+                maximumDelta,
+                accumulateMaximumDelta(
+                    block, previousSample, hasPreviousSample));
+        }
+
+        expect (player.getPlayheadPositionInSamples() < forwardPosition,
+                "Reverse must advance the render-owned playhead backwards");
+        expect (maximumDelta < 0.15f,
+                "Direction pivot exposed an audible-scale sample discontinuity");
+    }
+
+    void testRepitchDirectionZeroCrossing()
+    {
+        beginTest ("Repitch direction smoothing renders through exact zero");
+
+        constexpr double sampleRate = 48000.0;
+        constexpr int blockSize = 64;
+        AudioBuffer player;
+        player.prepare (sampleRate, blockSize);
+        player.setLoadedAudioData (
+            makeConstantAudio (480000, sampleRate, 0.25f));
+        player.setLooping (true);
+        player.play();
+
+        juce::AudioBuffer<float> block (2, blockSize);
+        for (int callback = 0; callback < 20; ++callback)
+            player.processBlock (block);
+
+        float previousSample = block.getSample (0, blockSize - 1);
+        bool hasPreviousSample = true;
+        float maximumDelta = 0.0f;
+
+        player.setSpeed (-1.0);
+        for (int callback = 0; callback < 60; ++callback)
+        {
+            player.processBlock (block);
+            maximumDelta = juce::jmax(
+                maximumDelta,
+                accumulateMaximumDelta(
+                    block, previousSample, hasPreviousSample));
+        }
+
+        expect (maximumDelta < 0.01f,
+                "The zero point in a signed speed ramp must not clear the block tail");
+    }
+
+    void testSoundTouchPingPongPivots()
+    {
+        beginTest ("SoundTouch ping-pong pivots inside the active input chunk");
+
+        constexpr double sampleRate = 48000.0;
+        constexpr int blockSize = 64;
+        AudioBuffer player;
+        player.prepare (sampleRate, blockSize);
+        player.setLoadedAudioData (makeSmoothAudio (480000, sampleRate));
+        player.setLooping (false);
+        player.setStretchRatio (0.8);
+        // 1/16 bar at 60 BPM is 12000 source samples per direction. This is
+        // longer than one feed chunk, so the reversed state remains observable
+        // at a callback boundary.
+        player.setPingPongMode (true, 0.0625, 60.0, sampleRate);
+        player.play();
+
+        juce::AudioBuffer<float> block (2, blockSize);
+        bool sawForward = false;
+        bool sawReverse = false;
+        bool hasPreviousSample = false;
+        float previousSample = 0.0f;
+        float maximumDelta = 0.0f;
+
+        for (int callback = 0; callback < 240; ++callback)
+        {
+            player.processBlock (block);
+            sawForward = sawForward || player.getSpeed() > 0.0;
+            sawReverse = sawReverse || player.getSpeed() < 0.0;
+            if (callback >= 40)
+            {
+                maximumDelta = juce::jmax(
+                    maximumDelta,
+                    accumulateMaximumDelta(
+                        block, previousSample, hasPreviousSample));
+            }
+        }
+
+        expect (sawForward && sawReverse,
+                "Ping-pong must not be bypassed by SoundTouch's bulk-copy path");
+        expect (maximumDelta < 0.15f,
+                "Ping-pong pivot exposed an audible-scale sample discontinuity");
+    }
+
+    void testSoundTouchUnderfillRecoveryContinuity()
+    {
+        beginTest ("A recovered SoundTouch block reconnects after underfill");
+
+        constexpr double sampleRate = 48000.0;
+        constexpr int blockSize = 64;
+        AudioBuffer player;
+        player.prepare (sampleRate, blockSize);
+        player.setLoadedAudioData (
+            makeConstantAudio (1000, sampleRate, 0.25f));
+        player.setLooping (false);
+        player.setStretchRatio (0.8);
+        player.play();
+
+        juce::AudioBuffer<float> block (2, blockSize);
+        player.processBlock (block);
+        auto telemetry = player.getTimeStretchQueueTelemetry();
+        expect (telemetry.totalUnderfills > 0,
+                "The deliberately sub-latency source must force an underfill");
+
+        player.setLooping (true);
+        player.requestPlayheadTransition (
+            0, TransportTransitionReason::UserRestart);
+        player.play();
+
+        bool recovered = false;
+        for (int callback = 0; callback < 40 && !recovered; ++callback)
+        {
+            const float priorTail = block.getSample (0, blockSize - 1);
+            const auto underfillsBefore =
+                player.getTimeStretchQueueTelemetry().totalUnderfills;
+            player.processBlock (block);
+            const auto underfillsAfter =
+                player.getTimeStretchQueueTelemetry().totalUnderfills;
+
+            if (underfillsAfter == underfillsBefore)
+            {
+                recovered = true;
+                expect (std::abs(block.getSample (0, 0) - priorTail) < 0.001f,
+                        "First recovered sample must meet the underfill tail");
+            }
+        }
+
+        expect (recovered,
+                "Looping restart should recover from the forced underfill");
+    }
+
+    void testSoundTouchHighStepSliceLookahead()
+    {
+        beginTest ("SoundTouch lookahead remains continuous above 1x source step");
+
+        constexpr double sampleRate = 48000.0;
+        constexpr int blockSize = 64;
+        for (juce::int64 seed = 1; seed <= 12; ++seed)
+        {
+            AudioBuffer player;
+            player.prepare (sampleRate, blockSize);
+            player.setLoadedAudioData (
+                makeSmoothAudio (96000, sampleRate, true));
+            player.setRandomSeedForTesting(seed);
+            player.setLooping (true);
+            player.setStretchRatio (0.8);
+            player.setTempoMultiplier (4.0);
+            player.startSliceRepeater (8, 8);
+            player.play();
+
+            juce::AudioBuffer<float> block (2, blockSize);
+            bool hasPreviousSample = false;
+            float previousSample = 0.0f;
+            float maximumDelta = 0.0f;
+            int maximumDeltaCallback = -1;
+            double maximumDeltaPosition = 0.0;
+            int maximumDeltaSlice = -1;
+
+            for (int callback = 0; callback < 480; ++callback)
+            {
+                player.processBlock (block);
+                if (callback >= 80)
+                {
+                    const float blockDelta = accumulateMaximumDelta(
+                        block, previousSample, hasPreviousSample);
+                    if (blockDelta > maximumDelta)
+                    {
+                        maximumDelta = blockDelta;
+                        maximumDeltaCallback = callback;
+                        maximumDeltaPosition =
+                            player.getPlayheadPositionInSamples();
+                        maximumDeltaSlice = player.getCurrentSlice();
+                    }
+                }
+
+                for (int sample = 0; sample < blockSize; ++sample)
+                    expect (std::isfinite(block.getSample(0, sample)),
+                            "High-step lookahead produced NaN/Inf");
+            }
+
+            expect (maximumDelta < 0.15f,
+                    "High-step slice handoff exposed an audible-scale discontinuity; seed="
+                        + juce::String(seed)
+                        + " max delta="
+                        + juce::String(maximumDelta, 4)
+                        + " callback="
+                        + juce::String(maximumDeltaCallback)
+                        + " playhead="
+                        + juce::String(maximumDeltaPosition, 1)
+                        + " slice="
+                        + juce::String(maximumDeltaSlice));
+            expectEquals (
+                player.getTimeStretchQueueTelemetry().totalUnderfills,
+                std::uint64_t { 0 },
+                "High-step slicing should not starve the SoundTouch output queue");
+        }
+    }
+
+    void testExitSlicingUnwindsLookahead()
+    {
+        beginTest ("Exiting slicing unwinds an active lookahead blend");
+
+        constexpr double sampleRate = 48000.0;
+        constexpr int blockSize = 64;
+        AudioBuffer player;
+        player.prepare (sampleRate, blockSize);
+        player.setLoadedAudioData (
+            makeSmoothAudio (96000, sampleRate));
+        player.setRandomSeedForTesting(42);
+        player.setLooping (true);
+        player.setStretchRatio (0.8);
+        player.setTempoMultiplier (4.0);
+        player.startSliceRepeater (64, 8);
+        player.play();
+
+        juce::AudioBuffer<float> block (2, blockSize);
+        bool lookaheadStarted = false;
+        for (int callback = 0; callback < 80 && !lookaheadStarted; ++callback)
+        {
+            player.processBlock (block);
+            lookaheadStarted =
+                player.isLookaheadTransitionActiveForTesting();
+        }
+        expect (lookaheadStarted,
+                "Fixture must enter a pre-boundary lookahead transition");
+
+        float previousSample = block.getSample (0, blockSize - 1);
+        bool hasPreviousSample = true;
+        float maximumDelta = 0.0f;
+
+        player.exitSlicingMode();
+        player.processBlock (block);
+        maximumDelta = juce::jmax(
+            maximumDelta,
+            accumulateMaximumDelta(
+                block, previousSample, hasPreviousSample));
+        expect (player.isLookaheadCancellationActiveForTesting(),
+                "Slice exit must convert lookahead into a cancellation ramp");
+
+        for (int callback = 0;
+             callback < 500
+                && player.isLookaheadTransitionActiveForTesting();
+             ++callback)
+        {
+            player.processBlock (block);
+            maximumDelta = juce::jmax(
+                maximumDelta,
+                accumulateMaximumDelta(
+                    block, previousSample, hasPreviousSample));
+        }
+
+        expect (!player.isLookaheadTransitionActiveForTesting(),
+                "Lookahead cancellation must complete instead of holding a stale mix");
+        expect (maximumDelta < 0.15f,
+                "Exiting slice mode exposed an audible-scale discontinuity; max delta="
+                    + juce::String(maximumDelta, 4));
     }
 };
 

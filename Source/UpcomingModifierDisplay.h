@@ -18,6 +18,7 @@
 #include "ModifierScheduler.h"
 #include "ModifierVariantFormatter.h"
 #include "UiGridLayout.h"
+#include "PlatformConfig.h"
 
 #include <cmath>
 
@@ -27,7 +28,7 @@ class UpcomingModifierDisplay : public juce::Component,
 public:
     UpcomingModifierDisplay()
     {
-        startTimerHz (15);  // shimmer animation (reduced from 30 Hz)
+        startTimerHz (LoopBreakerConfig::uiRefreshRateHz);
     }
 
     void setPortraitLayout (bool shouldUsePortraitLayout)
@@ -138,20 +139,16 @@ public:
 
         auto nextBounds = bounds;
         juce::Rectangle<float> queueBounds;
-        std::array<juce::Rectangle<int>, 4> portraitCells;
-        const bool useFourModuleLayout = portraitLayout
-                                      && plannedQueue.size() > 1
-                                      && bounds.getWidth() >= 300.0f;
-        if (useFourModuleLayout)
+        const bool usePortraitQueueLayout = portraitLayout
+                                         && plannedQueue.size() > 1
+                                         && bounds.getWidth() >= 300.0f;
+        if (usePortraitQueueLayout)
         {
-            for (int i = 0; i < 4; ++i)
-                portraitCells[static_cast<size_t> (i)] =
-                    UiGridLayout::equalColumn (getLocalBounds(), i, 4);
-
-            nextBounds = portraitCells[0].getUnion (portraitCells[1]).toFloat();
-            queueBounds = portraitCells[2].getUnion (portraitCells[3]).toFloat();
+            // The imminent modifier owns most of the phone-width panel.
+            // Later queue entries share a narrow, stacked preview rail.
+            queueBounds = nextBounds.removeFromRight (bounds.getWidth() * 0.28f);
             g.setColour (glyphPalette.ink.withAlpha (0.72f));
-            g.drawVerticalLine (portraitCells[2].getX(),
+            g.drawVerticalLine (juce::roundToInt (queueBounds.getX()),
                                 bounds.getY() + 1.0f, bounds.getBottom() - 1.0f);
         }
         else if (plannedQueue.size() > 1 && bounds.getWidth() >= 300.0f)
@@ -167,33 +164,19 @@ public:
 
         juce::Rectangle<float> meta;
         juce::Rectangle<float> glyphCell;
-        if (useFourModuleLayout)
-        {
-            meta = portraitCells[0].toFloat()
-                       .withTrimmedLeft (10.0f * uiScale)
-                       .withTrimmedRight (3.0f * uiScale)
-                       .reduced (0.0f, 8.0f * uiScale);
-            glyphCell = portraitCells[1].toFloat();
-            g.setColour (glyphPalette.ink.withAlpha (0.55f));
-            g.drawVerticalLine (portraitCells[1].getX(),
-                                bounds.getY() + 1.0f, bounds.getBottom() - 1.0f);
-        }
-        else
-        {
-            auto content = nextBounds.reduced (10.0f * uiScale, 8.0f * uiScale);
-            const float metaWidth = juce::jlimit (
-                90.0f * uiScale,
-                juce::jmax (90.0f * uiScale, content.getWidth() * 0.48f),
-                content.getWidth() * 0.38f);
-            meta = content.removeFromLeft (metaWidth);
+        auto content = nextBounds.reduced (10.0f * uiScale, 8.0f * uiScale);
+        const float metaWidth = juce::jlimit (
+            90.0f * uiScale,
+            juce::jmax (90.0f * uiScale, content.getWidth() * 0.48f),
+            content.getWidth() * 0.38f);
+        meta = content.removeFromLeft (metaWidth);
 
-            // The vertical rule makes the cell read as a modular control board.
-            g.setColour (glyphPalette.ink.withAlpha (0.55f));
-            g.drawVerticalLine (juce::roundToInt (meta.getRight() + 3.0f * uiScale),
-                                bounds.getY() + 1.0f, bounds.getBottom() - 1.0f);
+        // The vertical rule makes the cell read as a modular control board.
+        g.setColour (glyphPalette.ink.withAlpha (0.55f));
+        g.drawVerticalLine (juce::roundToInt (meta.getRight() + 3.0f * uiScale),
+                            bounds.getY() + 1.0f, bounds.getBottom() - 1.0f);
 
-            glyphCell = nextBounds.withLeft (meta.getRight() + 3.0f * uiScale);
-        }
+        glyphCell = nextBounds.withLeft (meta.getRight() + 3.0f * uiScale);
 
         const auto glyph = glyphCell.reduced (6.0f * uiScale, 8.0f * uiScale);
 
@@ -324,18 +307,25 @@ public:
         if (! queueBounds.isEmpty())
         {
             const float cellWidth = queueBounds.getWidth() * 0.5f;
+            const float cellHeight = queueBounds.getHeight() * 0.5f;
             for (int i = 0; i < 2; ++i)
             {
-                auto cell = useFourModuleLayout
-                    ? portraitCells[static_cast<size_t> (i + 2)].toFloat()
+                auto cell = usePortraitQueueLayout
+                    ? queueBounds.withY (queueBounds.getY()
+                                         + cellHeight * static_cast<float> (i))
+                                 .withHeight (cellHeight)
                     : queueBounds.withX (queueBounds.getX()
                                          + cellWidth * static_cast<float> (i))
                                  .withWidth (cellWidth);
                 if (i > 0)
                 {
                     g.setColour (glyphPalette.ink.withAlpha (0.45f));
-                    g.drawVerticalLine (juce::roundToInt (cell.getX()),
-                                        cell.getY() + 1.0f, cell.getBottom() - 1.0f);
+                    if (usePortraitQueueLayout)
+                        g.drawHorizontalLine (juce::roundToInt (cell.getY()),
+                                              cell.getX() + 1.0f, cell.getRight() - 1.0f);
+                    else
+                        g.drawVerticalLine (juce::roundToInt (cell.getX()),
+                                            cell.getY() + 1.0f, cell.getBottom() - 1.0f);
                 }
 
                 const size_t queueIndex = static_cast<size_t> (i + 1);
@@ -390,6 +380,19 @@ private:
         drawCategoryPips (g, labelRow.withTrimmedLeft (42.0f * scale),
                           planned->descriptor.type, palette, true, scale);
 
+        // The portrait rail is intentionally a low-detail preview. Keeping
+        // only the queue position and modifier name makes the hierarchy clear
+        // and avoids unreadably tiny glyphs.
+        if (bounds.getHeight() < 72.0f * scale)
+        {
+            g.setColour (palette.ink.withAlpha (0.78f));
+            g.setFont (fonts.modifierNameFont (10.0f * scale));
+            g.drawFittedText (planned->descriptor.shortName.toUpperCase(),
+                              content.toNearestInt(),
+                              juce::Justification::centred, 2, 0.62f);
+            return;
+        }
+
         const auto compactVariant = ModifierVariantFormatter::compact (planned->descriptor);
         if (compactVariant.isNotEmpty())
         {
@@ -420,7 +423,7 @@ private:
         const double nowMs = juce::Time::getMillisecondCounterHiRes();
         const double elapsedSeconds = lastAnimationTickMs > 0.0
             ? juce::jlimit (0.0, 0.25, (nowMs - lastAnimationTickMs) / 1000.0)
-            : (1.0 / 15.0);
+            : LoopBreakerConfig::uiRefreshIntervalSeconds;
         lastAnimationTickMs = nowMs;
 
         const auto& anim = ThemeEngine::getInstance().getAnimationConfig();

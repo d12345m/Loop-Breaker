@@ -11,7 +11,6 @@
               pluginFormats="buildAU,buildVST3" pluginCharacteristicsValue="pluginIsSynth,pluginWantsMidiIn">
   <MAINGROUP id="b0GUwa" name="Loop Breaker">
     <GROUP id="{7BFC662E-934B-675C-15EB-563C5EAA4BD7}" name="Source">
-      <FILE id="DUFUk8" name="Main.cpp" compile="0" resource="0" file="Source/Main.cpp"/>
       <FILE id="pluginProcH" name="PluginProcessor.h" compile="0" resource="0"
             file="Source/PluginProcessor.h"/>
       <FILE id="rtThreadPool" name="RealtimeThreadPool.h" compile="0" resource="0"
@@ -22,11 +21,6 @@
             file="Source/PluginEditor.h"/>
       <FILE id="pluginEditCpp" name="PluginEditor.cpp" compile="1" resource="0"
             file="Source/PluginEditor.cpp"/>
-      <FILE id="xFmXoI" name="MainComponent.h" compile="0" resource="0" file="Source/MainComponent.h"/>
-      <FILE id="cxAeBh" name="MainComponent.cpp" compile="0" resource="0"
-            file="Source/MainComponent.cpp"/>
-      <FILE id="intExa" name="LoopBreakerIntegration.h" compile="0" resource="0"
-            file="Source/LoopBreakerIntegration.h"/>
       <FILE id="audioBuffer1" name="AudioBuffer.h" compile="0" resource="0"
             file="Source/AudioBuffer.h"/>
       <FILE id="audioBuffer2" name="AudioBuffer.cpp" compile="1" resource="0"
@@ -37,6 +31,8 @@
             resource="0" file="Source/AudioBufferManager.cpp"/>
       <FILE id="sessionSettingsH" name="SessionSettings.h" compile="0" resource="0"
             file="Source/SessionSettings.h"/>
+      <FILE id="platformConfigH" name="PlatformConfig.h" compile="0" resource="0"
+            file="Source/PlatformConfig.h"/>
       <FILE id="modifierH" name="Modifier.h" compile="0" resource="0" file="Source/Modifier.h"/>
       <FILE id="modifierRegistryH" name="ModifierRegistry.h" compile="0" resource="0"
             file="Source/ModifierRegistry.h"/>
@@ -85,10 +81,6 @@
             file="Source/PadGridComponent.h"/>
       <FILE id="upcomingModDispH" name="UpcomingModifierDisplay.h" compile="0"
             resource="0" file="Source/UpcomingModifierDisplay.h"/>
-      <FILE id="mainAppCompH" name="MainAppComponent.h" compile="0" resource="0"
-            file="Source/MainAppComponent.h"/>
-      <FILE id="mainAppCompCpp" name="MainAppComponent.cpp" compile="0" resource="0"
-            file="Source/MainAppComponent.cpp"/>
       <FILE id="modifierSchedulerTests" name="ModifierSchedulerTests.cpp"
             compile="1" resource="0" file="Source/ModifierSchedulerTests.cpp"/>
       <FILE id="themeEngineH" name="ThemeEngine.h" compile="0" resource="0"

@@ -57,9 +57,12 @@ bool ProjectManager::loadProject(const juce::File& file)
             settings.padFilePaths.clearQuick();
             for (int i = 0; i < arr->size(); ++i)
                 settings.padFilePaths.add(arr->getReference(i).toString());
-            // Ensure 8 entries
-            while (settings.padFilePaths.size() < 8) settings.padFilePaths.add(juce::String());
-            if (settings.padFilePaths.size() > 8) settings.padFilePaths.removeRange(8, settings.padFilePaths.size() - 8);
+            while (settings.padFilePaths.size() < SessionSettings::kNumPads)
+                settings.padFilePaths.add({});
+            if (settings.padFilePaths.size() > SessionSettings::kNumPads)
+                settings.padFilePaths.removeRange(
+                    SessionSettings::kNumPads,
+                    settings.padFilePaths.size() - SessionSettings::kNumPads);
         }
     }
     return true;

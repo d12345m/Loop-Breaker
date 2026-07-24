@@ -124,7 +124,8 @@ Underfill path fades tail to zero (2ms), but the NEXT block starts at full ampli
 - TODO next: test harness
   (ClickDetectionTests.cpp + add to .jucer <FILE> like modifierSchedulerTests + regenerate Xcode?
   NOTE: .jucer needs Projucer resave OR add file to Builds/MacOSX project — check how tests are built);
-  then build via task "Build All (Debug)" and run Main.cpp --run-tests.
+  then add it to the CMake `LoopBreakerTests` target, build that target, and run
+  `build/LoopBreakerTests_artefacts/Release/LoopBreakerTests`.
 
 ## Verification
 1. Build: task "Build All (Debug)"; run harness (5.1) — record baseline counts before Phase 1.

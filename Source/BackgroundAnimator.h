@@ -24,6 +24,7 @@
 #include <JuceHeader.h>
 #include "ThemeEngine.h"
 #include "Animator.h"
+#include "PlatformConfig.h"
 
 class BackgroundAnimator : public juce::Component,
                            private juce::Timer,
@@ -35,7 +36,7 @@ public:
         setInterceptsMouseClicks (false, false);  // click-through
         ThemeEngine::getInstance().addListener (this);
         generateNoiseTexture (256, 256);  // pre-generate a tileable noise image
-        startTimerHz (15);   // 15 FPS background refresh — decoupled from 20 Hz UI
+        startTimerHz (LoopBreakerConfig::uiRefreshRateHz);
     }
 
     ~BackgroundAnimator() override
@@ -259,7 +260,7 @@ private:
         if (mode != BackgroundMode::Static)
         {
             // Advance hue offset
-            const double dt = 1.0 / 15.0;   // ~66.7 ms per tick
+            constexpr double dt = LoopBreakerConfig::uiRefreshIntervalSeconds;
             hueOffset += (float) (anim.backgroundCycleRate * anim.animationSpeed * dt);
             if (hueOffset >= 1.0f)
                 hueOffset -= 1.0f;
@@ -276,7 +277,9 @@ private:
         // Advance scanline sweep for Pixel Grid theme
         if (isPixelGrid && anim.enabled)
         {
-            scanlineSweepPhase += (1.0f / 15.0f) * anim.animationSpeed * 0.15f; // ~1 sweep per 6-7 seconds
+            scanlineSweepPhase += static_cast<float> (
+                LoopBreakerConfig::uiRefreshIntervalSeconds)
+                * anim.animationSpeed * 0.15f; // ~1 sweep per 6-7 seconds
             if (scanlineSweepPhase >= 1.0f)
                 scanlineSweepPhase -= 1.0f;
             needsRepaint = true;

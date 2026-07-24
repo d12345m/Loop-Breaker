@@ -12,6 +12,7 @@
 #include "ThemeEngine.h"
 #include "ThemeFonts.h"
 #include "BuildInfo.h"
+#include "PlatformConfig.h"
 
 class HelpPanelContent : public juce::Component
 {
@@ -218,8 +219,10 @@ private:
             s.body =
                 "Modifier Presets let you snapshot the current state of all buffer transforms "
                 "(speed, stretch, pitch, slicing, ping-pong) and effects (reverb, delay, filter, "
-                "tremolo, chorus, auto-pan, Shhhhhh) across all 8 pads.\n\n"
-                "Four preset slots (A-D) are available in the Session tab.  "
+                "tremolo, chorus, auto-pan, Shhhhhh) across all "
+                + juce::String (LoopBreakerConfig::numPads) + " pads.\n\n"
+                + juce::String (LoopBreakerConfig::numModifierPresets)
+                + " preset slots are available on the Session page.  "
                 "Click an empty slot to save, click a filled slot to recall.  "
                 "Double-click any slot to force-overwrite it with the current state.\n\n"
                 "Presets do NOT save or restore Parts settings, pad file assignments, "

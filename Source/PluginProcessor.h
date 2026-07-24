@@ -56,8 +56,8 @@ public:
     // Check and clear any pending MIDI toggle requests for a pad (call from UI thread)
     bool checkAndClearMidiToggle(int padIndex)
     {
-        if (padIndex < 0 || padIndex >= 8) return false;
-        return midiPadToggleRequests[padIndex].exchange(false);
+        if (padIndex < 0 || padIndex >= SessionSettings::kNumPads) return false;
+        return midiPadToggleRequests[static_cast<size_t> (padIndex)].exchange(false);
     }
 
     // Check and clear a pending MIDI modifier-toggle request (call from UI thread)
@@ -76,8 +76,8 @@ public:
     // Check and clear a pending MIDI preset-recall request (call from UI thread)
     bool checkAndClearPresetRecall(int slotIndex)
     {
-        if (slotIndex < 0 || slotIndex >= 8) return false;
-        return midiPresetRecallRequests[slotIndex].exchange(false);
+        if (slotIndex < 0 || slotIndex >= SessionSettings::kNumPresets) return false;
+        return midiPresetRecallRequests[static_cast<size_t> (slotIndex)].exchange(false);
     }
 
     // MIDI learn mode (pad notes)
@@ -122,7 +122,7 @@ public:
     }
 
     // MIDI CC learn for pad target probability sliders
-    // padIndex = pad index (0-7), -1 = cancel
+    // padIndex = platform pad index, -1 = cancel
     void setMidiPadProbCCLearnMode(int padIndex)
     {
         midiPadProbCCLearnIndex.store(padIndex);
@@ -234,7 +234,7 @@ private:
     void applyMidiProbabilityAction (int actionIndex);
 
     // MIDI pad control: atomic flags for toggle requests (written on audio thread, read/cleared on UI thread)
-    std::atomic<bool> midiPadToggleRequests[8] { {false}, {false}, {false}, {false}, {false}, {false}, {false}, {false} };
+    std::array<std::atomic<bool>, SessionSettings::kNumPads> midiPadToggleRequests {};
 
     // MIDI modifier toggle request (written on audio thread, read/cleared on UI thread)
     std::atomic<bool> midiModifierToggleRequest { false };
@@ -257,7 +257,7 @@ private:
     juce::Random midiProbabilityActionRandom;
 
     // MIDI preset recall requests (written on audio thread, polled from UI thread)
-    std::atomic<bool> midiPresetRecallRequests[8] { {false}, {false}, {false}, {false}, {false}, {false}, {false}, {false} };
+    std::array<std::atomic<bool>, SessionSettings::kNumPresets> midiPresetRecallRequests {};
 
     static juce::AudioProcessorValueTreeState::ParameterLayout createParamLayout();
 

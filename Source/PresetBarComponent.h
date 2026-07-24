@@ -2,7 +2,7 @@
  ==============================================================================
    PresetBarComponent.h
    --------------------------------------------------------------------------
-   Horizontal bar of 8 preset buttons (A–H) for the Session tab.
+   Platform-sized preset bar for the Session page.
    Supports click-to-recall, right-click context menu, MIDI learn, and
    visual indicators for occupied / empty / learn states.
  ==============================================================================
@@ -16,6 +16,7 @@
 #include "ThemeFonts.h"
 #include "Animator.h"
 #include "UiGridLayout.h"
+#include "PlatformConfig.h"
 
 class PresetBarComponent : public juce::Component,
                            private juce::Timer
@@ -48,7 +49,7 @@ public:
             buttons[i]->setInterceptsMouseClicks(false, false);
             addAndMakeVisible(buttons[i].get());
         }
-        startTimerHz(15); // drive highlight animations (reduced from 30 Hz)
+        startTimerHz (LoopBreakerConfig::uiRefreshRateHz);
     }
 
     ~PresetBarComponent() override
@@ -88,9 +89,9 @@ public:
         auto area = getLocalBounds().reduced(4);
         if (portraitLayout)
         {
-            // Four presets per row keeps targets usable while matching the
-            // narrower proportions of the two-column pad grid.
-            constexpr int rows = 2;
+            // iOS has one row of four presets. Desktop portrait keeps its
+            // two-row A-H bank.
+            constexpr int rows = (kNumSlots + 3) / 4;
             constexpr int cols = 4;
             const int cellH = area.getHeight() / rows;
 
@@ -383,7 +384,7 @@ public:
 private:
     void timerCallback() override
     {
-        const double dt = 1.0 / 15.0;
+        constexpr double dt = LoopBreakerConfig::uiRefreshIntervalSeconds;
         for (int i = 0; i < kNumSlots; ++i)
         {
             highlightAnimators[static_cast<size_t>(i)].tick(dt);
@@ -391,18 +392,22 @@ private:
         }
     }
 
-    static constexpr int kNumSlots = 8;
+    static constexpr int kNumSlots = LoopBreakerConfig::numModifierPresets;
     bool portraitLayout = false;
 
     std::unique_ptr<juce::Component> buttons[kNumSlots];
-    std::array<bool, kNumSlots> slotOccupied { false, false, false, false, false, false, false, false };
-    std::array<int, kNumSlots>  midiNotes { -1, -1, -1, -1, -1, -1, -1, -1 };
-    std::array<bool, kNumSlots> midiLearnActive { false, false, false, false, false, false, false, false };
+    std::array<bool, kNumSlots> slotOccupied {};
+    std::array<int, kNumSlots> midiNotes = [] {
+        std::array<int, kNumSlots> notes {};
+        notes.fill(-1);
+        return notes;
+    }();
+    std::array<bool, kNumSlots> midiLearnActive {};
 
     // Highlight state
     int highlightedSlot = -1;
     HighlightType highlightType = HighlightType::None;
-    std::array<float, kNumSlots> highlightGlowAlpha { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+    std::array<float, kNumSlots> highlightGlowAlpha {};
     std::array<Animator, kNumSlots> highlightAnimators;
 
     // Pending recall glow state (looping pulse until applied)

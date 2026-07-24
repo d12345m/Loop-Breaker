@@ -31,11 +31,15 @@ cmake --build build --config Release --target validate
 
 ### iOS device build
 
-The iOS configuration builds a standalone iPhone app using the production
-processor and portrait session UI. It has no audio input or microphone
-permission and exposes only the stereo mix output. Tapping an empty pad (or
-using a pad's **Load sample** menu action) opens the native iOS Files picker;
-the selected audio file is copied into the app container before it is decoded.
+The iOS configuration builds the JUCE `LoopBreaker_Standalone` wrapper around
+the production `PluginProcessor` and `PluginEditor`; there is no separate iOS
+application component or parallel UI implementation. The iOS editor uses six
+pads, four modifier presets, portrait popup navigation, and a single stereo
+mix output. Its primary visual update loop runs at 30 FPS, while desktop
+plug-in editors retain the lower 15 FPS cadence. It has no audio input or
+microphone permission. Tapping an empty pad (or using a pad's **Load sample**
+menu action) opens the native iOS Files picker; the selected audio file is
+copied into the app container before it is decoded.
 
 Generate the Xcode project with an iPhoneOS toolchain:
 
@@ -60,7 +64,7 @@ In Xcode, select the `LoopBreaker_Standalone` scheme, choose an Apple
 Development team for signing, connect the iPhone, and press Run. The generated
 iOS scheme launches the optimized Release configuration by default; switch its
 Run action to Debug only when diagnosing an assertion. Project save/load and
-recording are intentionally outside this device-performance prototype.
+recording are intentionally outside the current device-performance scope.
 
 ### macOS: signing and installation
 

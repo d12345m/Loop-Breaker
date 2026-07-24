@@ -11,6 +11,7 @@
 
 #include <JuceHeader.h>
 #include "ModifierProbabilityManager.h"
+#include "PlatformConfig.h"
 #include <vector>
 #include <algorithm>
 
@@ -20,8 +21,11 @@ struct ProbabilityPreset
 {
     juce::String name;
     std::map<ModifierType, float> modifierWeights;
-    std::array<float, 8> padProbabilities = { 1.0f, 1.0f, 1.0f, 1.0f,
-                                               1.0f, 1.0f, 1.0f, 1.0f };
+    std::array<float, LoopBreakerConfig::numPads> padProbabilities = [] {
+        std::array<float, LoopBreakerConfig::numPads> probabilities {};
+        probabilities.fill(1.0f);
+        return probabilities;
+    }();
 
     juce::var toVar() const
     {
@@ -71,7 +75,9 @@ struct ProbabilityPreset
         // Pad probabilities
         if (auto* padArr = obj->getProperty ("padProbabilities").getArray())
         {
-            for (int i = 0; i < juce::jmin (8, padArr->size()); ++i)
+            for (int i = 0;
+                 i < juce::jmin (LoopBreakerConfig::numPads, padArr->size());
+                 ++i)
                 preset.padProbabilities[static_cast<size_t> (i)] =
                     juce::jlimit (0.0f, 1.0f,
                                   static_cast<float> (static_cast<double> ((*padArr)[i])));

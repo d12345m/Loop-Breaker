@@ -1,5 +1,6 @@
 #include "ModifierGlyphRenderer.h"
 #include "ModifierRegistry.h"
+#include "PlatformConfig.h"
 
 #include <cmath>
 
@@ -742,9 +743,15 @@ void drawFilter (GlyphCanvas& c, float phase, bool highPass, bool sampleHold, bo
     if (master)
     {
         c.colour (c.p.mutedInk);
-        for (int i = 0; i < 8; ++i)
-            c.line (18.5f + i * 9.0f, 87.0f, 18.5f + i * 9.0f, 92.0f,
-                    i == 0 || i == 7 ? 2.0f : 1.25f);
+        for (int i = 0; i < LoopBreakerConfig::numPads; ++i)
+        {
+            const float t = LoopBreakerConfig::numPads > 1
+                ? static_cast<float> (i) / (LoopBreakerConfig::numPads - 1)
+                : 0.5f;
+            c.line (18.5f + t * 63.0f, 87.0f, 18.5f + t * 63.0f, 92.0f,
+                    i == 0 || i == LoopBreakerConfig::numPads - 1
+                        ? 2.0f : 1.25f);
+        }
     }
 }
 

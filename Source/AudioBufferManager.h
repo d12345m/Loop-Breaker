@@ -18,6 +18,7 @@
 
 #include <JuceHeader.h>
 #include "AudioBuffer.h"
+#include "PlatformConfig.h"
 #include <array>
 #include <memory>
 
@@ -40,7 +41,9 @@ public:
         MissingDataRecovery
     };
 
-    static constexpr int MAX_BUFFERS = 8; // Match the MPC-style interface from DesignDoc
+    // iOS deliberately runs a smaller engine, rather than merely hiding two
+    // desktop pads, so it also avoids their buffers and per-pad DSP chains.
+    static constexpr int MAX_BUFFERS = LoopBreakerConfig::numPads;
     
     AudioBufferManager();
     ~AudioBufferManager() override = default;

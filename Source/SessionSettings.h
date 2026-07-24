@@ -11,6 +11,7 @@
 
 #include <JuceHeader.h>
 #include "ModifierProbabilityManager.h"
+#include "PlatformConfig.h"
 
 // Determines how the modifier scheduler decides when to fire the next modifier.
 enum class CadenceMode
@@ -57,7 +58,7 @@ struct SessionSettings
 
     // Project / playback configuration
     bool multiChannelRecording = false; // If true, render each buffer to its own output bus (future)
-    int numBuffers = 8;                 // Always 8 for MPC-style grid (matches AudioBufferManager::MAX_BUFFERS)
+    int numBuffers = LoopBreakerConfig::numPads;
   int maxPartsPerBuffer = 4;          // A-D parts
   // Parts (Musical Sections A–D): equal-length boundaries
   struct PartsConfig {
@@ -84,18 +85,33 @@ struct SessionSettings
     int backgroundMode = 0; // 0=Static, 1=SlowCycle, 2=Reactive
 
   // Pad file paths (absolute). Index corresponds to pad/buffer index. Empty means no file.
-  juce::StringArray padFilePaths { "", "", "", "", "", "", "", "" };
+  juce::StringArray padFilePaths = [] {
+      juce::StringArray paths;
+      for (int i = 0; i < LoopBreakerConfig::numPads; ++i)
+          paths.add({});
+      return paths;
+  }();
 
     // MIDI note mappings (per pad). -1 means unassigned.
-    // Layout: bottom row left->right = 36-39 (pads 1-4), top row left->right = 40-43 (pads 5-8)
-    std::array<int, 8> midiNoteMap { 36, 37, 38, 39, 40, 41, 42, 43 };
+    // Notes ascend left-to-right, bottom-to-top in the platform pad grid.
+    static constexpr int kNumPads = LoopBreakerConfig::numPads;
+    std::array<int, kNumPads> midiNoteMap = [] {
+        std::array<int, kNumPads> notes {};
+        for (int i = 0; i < kNumPads; ++i)
+            notes[static_cast<size_t> (i)] = 36 + i;
+        return notes;
+    }();
 
     // MIDI note for toggling modifiers on/off. -1 means unassigned.
     int modifierToggleMidiNote = -1;
 
     // MIDI note mappings for modifier preset recall (A-D). -1 means unassigned.
-    static constexpr int kNumPresets = 8;
-    std::array<int, kNumPresets> presetMidiNoteMap = { -1, -1, -1, -1, -1, -1, -1, -1 };
+    static constexpr int kNumPresets = LoopBreakerConfig::numModifierPresets;
+    std::array<int, kNumPresets> presetMidiNoteMap = [] {
+        std::array<int, kNumPresets> notes {};
+        notes.fill(-1);
+        return notes;
+    }();
 
     // MIDI CC mappings for modifier probability sliders.
     // Index i corresponds to ModifierProbabilityManager::allModifierTypes()[i].
@@ -112,12 +128,14 @@ struct SessionSettings
 
     // Per-pad target probability: controls the likelihood of each pad being
     // auto-selected as a modifier target. 1.0 = always eligible, 0.0 = never.
-    static constexpr int kNumPads = 8;
-    std::array<float, kNumPads> padTargetProbabilities = { 1.0f, 1.0f, 1.0f, 1.0f,
-                                                           1.0f, 1.0f, 1.0f, 1.0f };
+    std::array<float, kNumPads> padTargetProbabilities = [] {
+        std::array<float, kNumPads> probabilities {};
+        probabilities.fill(1.0f);
+        return probabilities;
+    }();
 
     // MIDI CC mappings for pad target probability sliders.
-    // Index is pad index (0-7). Value is CC number (0-127), or -1 if unassigned.
+    // Index is the platform pad index. Value is CC number (0-127), or -1 if unassigned.
     std::array<int, kNumPads> midiPadProbCCMap = []() {
         std::array<int, kNumPads> a;
         a.fill(-1);

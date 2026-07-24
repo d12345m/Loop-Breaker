@@ -18,6 +18,7 @@
 #include "SettingsPanelContent.h"
 #include "BackgroundAnimator.h"
 #include "PresetBarComponent.h"
+#include "PlatformConfig.h"
 
 #if JUCE_MAC
 #include <CoreGraphics/CoreGraphics.h>
@@ -154,7 +155,9 @@ public:
             if (processor.isMidiLearnEnabled())
             {
                 const int previousLearnPad = processor.getMidiLearnPadIndex();
-                if (previousLearnPad >= 0 && previousLearnPad < 8 && previousLearnPad != padIndex)
+                if (previousLearnPad >= 0
+                    && previousLearnPad < SessionSettings::kNumPads
+                    && previousLearnPad != padIndex)
                 {
                     padGrid.setMidiLearnForPad(previousLearnPad, false);
                 }
@@ -210,12 +213,12 @@ public:
         };
 
         // Initialize pad MIDI notes from settings
-        for (int i = 0; i < 8; ++i)
+        for (int i = 0; i < SessionSettings::kNumPads; ++i)
             padGrid.setMidiNoteForPad (i, app.settings.midiNoteMap[static_cast<size_t> (i)]);
 
-        // ── Preset bar (A–H) ──
+        // ── Platform preset bank ──
         addAndMakeVisible(presetBar);
-        for (int i = 0; i < 8; ++i)
+        for (int i = 0; i < SessionSettings::kNumPresets; ++i)
         {
             presetBar.setSlotOccupied(i, app.presetBank.isSlotOccupied(i));
             presetBar.setMidiNote(i, app.settings.presetMidiNoteMap[static_cast<size_t>(i)]);
@@ -269,7 +272,7 @@ public:
 
         refreshStatus();
         applyThemeColors();
-        startTimerHz(15); // 66ms UI refresh - reduced from 20 Hz
+        startTimerHz (LoopBreakerConfig::uiRefreshRateHz);
     }
 
     ~PluginEditorContent() override
@@ -315,15 +318,25 @@ public:
             auto brandArea = brandingBounds.toFloat();
             auto wordmarkArea = brandArea;
             auto& fonts = ThemeFonts::getInstance();
+           #if JUCE_IOS
+            const auto font = fonts.displayFont(24.0f * uiScale);
+           #else
             const auto font = fonts.displayFont(30.0f * uiScale);
+           #endif
             g.setFont(font);
 
             const juce::String logoText("LOOP BREAKER");
 
             // Build glyph arrangement for precise clipping
             juce::GlyphArrangement glyphs;
+           #if JUCE_IOS
+            // Keep the compact wordmark inside the left side of a notched
+            // device's sensor housing instead of centring it behind the notch.
+            const float textX = wordmarkArea.getX();
+           #else
             const float textW = juce::GlyphArrangement::getStringWidth(font, logoText);
             const float textX = wordmarkArea.getX() + (wordmarkArea.getWidth() - textW) * 0.5f;
+           #endif
             glyphs.addLineOfText(font, logoText, textX,
                                  wordmarkArea.getY() + font.getAscent()
                                  + (wordmarkArea.getHeight() - font.getHeight()) * 0.5f);
@@ -491,6 +504,12 @@ public:
             auto brandRow = area.removeFromTop (scaled (52.0f));
             brandingBounds = brandRow.reduced (scaled (4.0f), scaled (3.0f));
 
+#if JUCE_IOS
+            // The page popup floats in this row so navigation does not consume
+            // a dedicated strip of precious phone height.
+            brandingBounds.removeFromRight (scaled (116.0f));
+#endif
+
 #if JUCE_DEBUG
             auto debugArea = brandingBounds.removeFromRight (scaled (94.0f));
             modifiersToggle.setBounds (debugArea.reduced (scaled (2.0f)));
@@ -508,7 +527,11 @@ public:
             masterVolumeSlider.setBounds ({});
 
             area.removeFromTop (scaled (6.0f));
+           #if JUCE_IOS
+            presetBar.setBounds (area.removeFromTop (scaled (44.0f)));
+           #else
             presetBar.setBounds (area.removeFromTop (scaled (82.0f)));
+           #endif
         }
         else
         {
@@ -748,8 +771,8 @@ private:
 
     bool padPathsSynced = false; // true once pad file paths have been synced to the UI after state restore
     bool portraitLayout = false;
-    std::array<double, 8> lastPlayheadSamples {{ 0, 0, 0, 0, 0, 0, 0, 0 }};
-    std::array<bool, 8> lastLoopEnabled {{ false, false, false, false, false, false, false, false }};
+    std::array<double, AudioBufferManager::MAX_BUFFERS> lastPlayheadSamples {};
+    std::array<bool, AudioBufferManager::MAX_BUFFERS> lastLoopEnabled {};
 
     // Queue a preset recall to replace the next scheduled modifier trigger.
     // Updates the upcoming modifier display to show the preset name.
@@ -933,7 +956,7 @@ private:
         syncModifierStickers();
 
         // Poll for MIDI pad toggle requests (from audio thread)
-        for (int i = 0; i < 8; ++i)
+        for (int i = 0; i < SessionSettings::kNumPads; ++i)
         {
             if (processor.checkAndClearMidiToggle(i))
             {
@@ -960,7 +983,7 @@ private:
         }
 
         // Poll for MIDI preset-recall requests (from audio thread)
-        for (int pi = 0; pi < 8; ++pi)
+        for (int pi = 0; pi < SessionSettings::kNumPresets; ++pi)
         {
             if (processor.checkAndClearPresetRecall(pi))
             {
@@ -1006,7 +1029,8 @@ private:
                 repaint();
             }
             else if (padIndex >= BufferTestAudioProcessor::kPresetLearnIndexBase
-                     && padIndex <= BufferTestAudioProcessor::kPresetLearnIndexBase + 7)
+                     && padIndex < BufferTestAudioProcessor::kPresetLearnIndexBase
+                                     + SessionSettings::kNumPresets)
             {
                 // Learned note for a preset slot
                 const int slot = padIndex - BufferTestAudioProcessor::kPresetLearnIndexBase;
@@ -1026,9 +1050,10 @@ private:
                 app.settings.midiProbabilityActionNoteMap[static_cast<size_t> (actionIndex)] = learnedNote;
 
                 // Clear any stale learn badges from another note-mappable control.
-                for (int i = 0; i < 8; ++i)
+                for (int i = 0; i < SessionSettings::kNumPads; ++i)
                     padGrid.setMidiLearnForPad (i, false);
-                if (presetLearnSlot >= 0 && presetLearnSlot < 8)
+                if (presetLearnSlot >= 0
+                    && presetLearnSlot < SessionSettings::kNumPresets)
                     presetBar.setMidiLearnActive (presetLearnSlot, false);
                 presetLearnSlot = -1;
 #if JUCE_DEBUG
@@ -1036,7 +1061,7 @@ private:
 #endif
                 processor.setMidiLearnMode (false, -1);
             }
-            else if (padIndex >= 0 && padIndex < 8)
+            else if (padIndex >= 0 && padIndex < SessionSettings::kNumPads)
             {
                 DBG("Assigning note " + juce::String(learnedNote) + " to pad " + juce::String(padIndex));
                 app.settings.midiNoteMap[static_cast<size_t> (padIndex)] = learnedNote;
@@ -1075,7 +1100,7 @@ private:
             if (anyPathSet && anyBufferLoaded)
             {
                 padGrid.setPadFilePaths(app.settings.padFilePaths);
-                for (int i = 0; i < 8; ++i)
+                for (int i = 0; i < SessionSettings::kNumPads; ++i)
                     padGrid.setMidiNoteForPad (
                         i, app.settings.midiNoteMap[static_cast<size_t> (i)]);
                 // Sync UI controls to restored settings
@@ -1089,7 +1114,7 @@ private:
                 barsBetweenModifiersSlider.setValue(app.settings.barsBetweenModifiers, juce::dontSendNotification);
 
                 // Sync preset bar state from restored settings
-                for (int i = 0; i < 4; ++i)
+                for (int i = 0; i < SessionSettings::kNumPresets; ++i)
                 {
                     presetBar.setSlotOccupied(i, app.presetBank.isSlotOccupied(i));
                     presetBar.setMidiNote(i, app.settings.presetMidiNoteMap[static_cast<size_t>(i)]);
@@ -1267,7 +1292,7 @@ private:
         if (processor.isMidiLearnEnabled())
         {
             const int prevPad = processor.getMidiLearnPadIndex();
-            if (prevPad >= 0 && prevPad < 8)
+            if (prevPad >= 0 && prevPad < SessionSettings::kNumPads)
                 padGrid.setMidiLearnForPad(prevPad, false);
         }
 
@@ -1298,13 +1323,13 @@ private:
 
     void startPresetMidiLearn(int slot)
     {
-        if (slot < 0 || slot >= 8) return;
+        if (slot < 0 || slot >= SessionSettings::kNumPresets) return;
 
         // Cancel any existing learn mode (pad, modifier toggle, or another preset)
         if (processor.isMidiLearnEnabled())
         {
             const int prevPad = processor.getMidiLearnPadIndex();
-            if (prevPad >= 0 && prevPad < 8)
+            if (prevPad >= 0 && prevPad < SessionSettings::kNumPads)
                 padGrid.setMidiLearnForPad(prevPad, false);
 #if JUCE_DEBUG
             if (modifierToggleLearnActive)
@@ -1313,7 +1338,8 @@ private:
                 repaint();
             }
 #endif
-            if (presetLearnSlot >= 0 && presetLearnSlot < 8)
+            if (presetLearnSlot >= 0
+                && presetLearnSlot < SessionSettings::kNumPresets)
                 presetBar.setMidiLearnActive(presetLearnSlot, false);
         }
 
@@ -1333,7 +1359,7 @@ private:
 
     void clearPresetMidiNote(int slot)
     {
-        if (slot < 0 || slot >= 8) return;
+        if (slot < 0 || slot >= SessionSettings::kNumPresets) return;
         app.settings.presetMidiNoteMap[static_cast<size_t>(slot)] = -1;
         presetBar.setMidiNote(slot, -1);
         if (presetLearnSlot == slot)
@@ -1499,11 +1525,12 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
 
     setLookAndFeel(&editorLnf);
 
+    helpPanel = std::make_unique<HelpPanelContent>();
+
+   #if ! JUCE_IOS
     tabComponent = std::make_unique<juce::TabbedComponent>(juce::TabbedButtonBar::TabsAtTop);
     tabComponent->setOutline (0);
     auto tabBg = juce::Colour (0x00000000);  // transparent — BackgroundAnimator shows through
-    helpPanel = std::make_unique<HelpPanelContent>();
-
     tabComponent->addTab("Session",     tabBg, content.get(), false);
     tabComponent->addTab("Probability", tabBg, probabilityPanel.get(), false);
     tabComponent->addTab("Settings",    tabBg, settingsPanel.get(), false);
@@ -1518,6 +1545,7 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
     tabBar.setMinimumTabScaleFactor (0.55);
     tabBar.setColour(juce::TabbedButtonBar::tabOutlineColourId, Theme::border());
     tabBar.setColour(juce::TabbedButtonBar::frontOutlineColourId, Theme::accent());
+   #endif
 
     // Background animator (sits behind everything)
     backgroundAnimator = std::make_unique<BackgroundAnimator>();
@@ -1526,10 +1554,33 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
     // Wire up reactive background pulse from modifier triggers
     static_cast<PluginEditorContent*>(content.get())->bgAnimator = backgroundAnimator.get();
 
+   #if JUCE_IOS
+    addAndMakeVisible (content.get());
+    addChildComponent (probabilityPanel.get());
+    addChildComponent (settingsPanel.get());
+   #if JUCE_DEBUG
+    addChildComponent (debugPanel.get());
+    addChildComponent (glyphLabPanel.get());
+   #endif
+    addChildComponent (helpPanel.get());
+
+    pageMenuButton.setButtonText ("SESSION  \xE2\x96\xBE");
+    pageMenuButton.setTooltip ("Choose page");
+    pageMenuButton.onClick = [this] { showIOSPageMenu(); };
+    addAndMakeVisible (pageMenuButton);
+   #else
     addAndMakeVisible(tabComponent.get());
+   #endif
 
     // Apply the saved theme on editor open
     ThemeEngine::getInstance().setTheme (audioProcessor.getAppState().settings.themeName);
+
+   #if JUCE_IOS
+    pageMenuButton.setColour (juce::TextButton::buttonColourId, Theme::panelAlt());
+    pageMenuButton.setColour (juce::TextButton::textColourOffId, Theme::text());
+    pageMenuButton.setColour (juce::ComboBox::outlineColourId, Theme::border());
+    setIOSPage (0);
+   #endif
 
     setSize (1200, 800);
     setResizable(true, false);
@@ -1541,7 +1592,9 @@ BufferTestAudioProcessorEditor::~BufferTestAudioProcessorEditor()
 {
     // Tear down child components before editorLnf is destroyed, so they
     // never reference a dangling LookAndFeel during their own destruction.
+   #if ! JUCE_IOS
     tabComponent.reset();
+   #endif
     content.reset();
     probabilityPanel.reset();
     settingsPanel.reset();
@@ -1559,6 +1612,74 @@ void BufferTestAudioProcessorEditor::paint (juce::Graphics&)
     // No opaque fill — BackgroundAnimator paints the background
 }
 
+#if JUCE_IOS
+juce::Component* BufferTestAudioProcessorEditor::getIOSPageComponent (int pageIndex) const
+{
+    switch (pageIndex)
+    {
+        case 0: return content.get();
+        case 1: return probabilityPanel.get();
+        case 2: return settingsPanel.get();
+       #if JUCE_DEBUG
+        case 3: return debugPanel.get();
+        case 4: return glyphLabPanel.get();
+        case 5: return helpPanel.get();
+       #else
+        case 3: return helpPanel.get();
+       #endif
+        default: return nullptr;
+    }
+}
+
+void BufferTestAudioProcessorEditor::setIOSPage (int pageIndex)
+{
+   #if JUCE_DEBUG
+    constexpr int pageCount = 6;
+    static constexpr const char* pageNames[] =
+        { "SESSION", "PROBABILITY", "SETTINGS", "DEBUG", "GLYPH LAB", "HELP" };
+   #else
+    constexpr int pageCount = 4;
+    static constexpr const char* pageNames[] =
+        { "SESSION", "PROBABILITY", "SETTINGS", "HELP" };
+   #endif
+
+    currentIOSPage = juce::jlimit (0, pageCount - 1, pageIndex);
+    for (int i = 0; i < pageCount; ++i)
+        if (auto* page = getIOSPageComponent (i))
+            page->setVisible (i == currentIOSPage);
+
+    pageMenuButton.setButtonText (
+        juce::String (pageNames[currentIOSPage]) + "  \xE2\x96\xBE");
+    pageMenuButton.toFront (false);
+    resized();
+}
+
+void BufferTestAudioProcessorEditor::showIOSPageMenu()
+{
+    juce::PopupMenu menu;
+    menu.addItem (1, "Session", true, currentIOSPage == 0);
+    menu.addItem (2, "Probability", true, currentIOSPage == 1);
+    menu.addItem (3, "Settings", true, currentIOSPage == 2);
+   #if JUCE_DEBUG
+    menu.addSeparator();
+    menu.addItem (4, "Debug", true, currentIOSPage == 3);
+    menu.addItem (5, "Glyph Lab", true, currentIOSPage == 4);
+    menu.addItem (6, "Help", true, currentIOSPage == 5);
+   #else
+    menu.addItem (4, "Help", true, currentIOSPage == 3);
+   #endif
+
+    auto safeThis = juce::Component::SafePointer<BufferTestAudioProcessorEditor> (this);
+    menu.showMenuAsync (
+        juce::PopupMenu::Options().withTargetComponent (&pageMenuButton),
+        [safeThis] (int result)
+        {
+            if (safeThis != nullptr && result > 0)
+                safeThis->setIOSPage (result - 1);
+        });
+}
+#endif
+
 void BufferTestAudioProcessorEditor::resized()
 {
     auto bounds = getLocalBounds();
@@ -1566,17 +1687,33 @@ void BufferTestAudioProcessorEditor::resized()
     if (backgroundAnimator)
         backgroundAnimator->setBounds(bounds);
 
+   #if JUCE_IOS
+    // The animated background may bleed under the sensor housing and home
+    // indicator, but every interactive/content component stays in the safe
+    // viewport.
+    if (const auto* display =
+            juce::Desktop::getInstance().getDisplays().getDisplayForRect (getScreenBounds()))
+        bounds = display->safeAreaInsets.subtractedFrom (bounds);
+
+    if (auto* page = getIOSPageComponent (currentIOSPage))
+    {
+        auto pageBounds = bounds;
+        if (currentIOSPage != 0)
+            pageBounds.removeFromTop (40);
+        page->setBounds (pageBounds);
+    }
+
+    auto menuBounds = bounds.reduced (10, 6).removeFromTop (34);
+    pageMenuButton.setBounds (menuBounds.removeFromRight (
+        juce::jmin (122, juce::jmax (108, bounds.getWidth() / 3))));
+    pageMenuButton.toFront (false);
+   #else
     if (tabComponent)
     {
-       #if JUCE_IOS
-        if (const auto* display =
-                juce::Desktop::getInstance().getDisplays().getDisplayForRect (getScreenBounds()))
-            bounds = display->safeAreaInsets.subtractedFrom (bounds);
-       #endif
-
         tabComponent->setBounds(bounds);
         tabComponent->resized();
     }
+   #endif
 }
 
 void BufferTestAudioProcessorEditor::parentSizeChanged()

@@ -27,6 +27,11 @@ private:
     void applyWindowLayout (WindowLayoutMode mode, bool restorePreviousSize);
     bool synchronisePortraitBoundsWithHost();
     void scheduleHostBoundsReconciliation();
+   #if JUCE_IOS
+    void showIOSPageMenu();
+    void setIOSPage (int pageIndex);
+    juce::Component* getIOSPageComponent (int pageIndex) const;
+   #endif
 
     BufferTestAudioProcessor& audioProcessor;
 
@@ -39,7 +44,12 @@ private:
     std::unique_ptr<GlyphLabComponent> glyphLabPanel;
    #endif
     std::unique_ptr<HelpPanelContent> helpPanel;
+   #if JUCE_IOS
+    juce::TextButton pageMenuButton;
+    int currentIOSPage = 0;
+   #else
     std::unique_ptr<juce::TabbedComponent> tabComponent;
+   #endif
 
     ThemeLookAndFeel editorLnf;
     juce::Rectangle<int> previousResizableBounds { 0, 0, 1200, 800 };

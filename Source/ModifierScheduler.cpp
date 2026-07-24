@@ -1029,7 +1029,7 @@ juce::Array<int> ModifierScheduler::selectTargetBuffers(const ModifierDescriptor
     {
         const juce::SpinLock::ScopedLockType targetLock (targetStateLock);
         for (int index : userSelectedBuffers)
-            if (juce::isPositiveAndBelow (index, 8)
+            if (juce::isPositiveAndBelow (index, SessionSettings::kNumPads)
                 && (availableMask & (1u << static_cast<uint32_t> (index))) != 0)
                 targets.addIfNotAlreadyThere (index);
     }
@@ -1053,7 +1053,7 @@ juce::Array<int> ModifierScheduler::selectTargetBuffers(const ModifierDescriptor
     juce::Array<float> weights;
     float totalWeight = 0.0f;
 
-    for (int i = 0; i < 8; ++i)
+    for (int i = 0; i < SessionSettings::kNumPads; ++i)
     {
         if ((availableMask & (1u << static_cast<uint32_t> (i))) == 0 || targets.contains (i))
             continue;

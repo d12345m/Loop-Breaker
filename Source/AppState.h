@@ -23,7 +23,7 @@ struct AppState : public ModifierSchedulerListener
     SessionSettings& settings = projectManager.getMutableSettings();
     ModifierScheduler scheduler { settings };
 
-    // Modifier state presets (A-D)
+    // Platform-sized modifier state preset bank.
     ModifierPresetBank presetBank;
 
     // When >= 0, the next modifier trigger will apply this preset slot instead of the
@@ -280,7 +280,7 @@ struct AppState : public ModifierSchedulerListener
         if (slotIndex < 0 || slotIndex >= ModifierPresetBank::kNumPresets) return;
         auto& slot = presetBank.slots[static_cast<size_t>(slotIndex)];
         slot.occupied = true;
-        for (int i = 0; i < 8; ++i)
+        for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
         {
             auto& snap = slot.buffers[static_cast<size_t>(i)];
             auto* buf = bufferManager.getBuffer(i);
@@ -366,7 +366,7 @@ struct AppState : public ModifierSchedulerListener
         if (slotIndex < 0 || slotIndex >= ModifierPresetBank::kNumPresets) return;
         const auto& slot = presetBank.slots[static_cast<size_t>(slotIndex)];
         if (! slot.occupied) return;
-        for (int i = 0; i < 8; ++i)
+        for (int i = 0; i < AudioBufferManager::MAX_BUFFERS; ++i)
         {
             const auto& snap = slot.buffers[static_cast<size_t>(i)];
             auto* buf = bufferManager.getBuffer(i);
@@ -1024,7 +1024,7 @@ private:
         if (targets.isEmpty()) return;
         // Scale the delay wet level down as more pads are targeted so the
         // summed delay output doesn't compound into excessive volume.
-        // 1 pad  → 1.0×, 2 pads → 0.707×, 4 pads → 0.5×, 8 pads → 0.354×
+        // Inverse-square-root scaling keeps multi-pad delay bursts controlled.
         const float padScaling = 1.0f / std::sqrt((float) targets.size());
         // Dub burst: ramp feedback up quickly, then down to zero, auto-disable after tail
         for (int idx : targets)

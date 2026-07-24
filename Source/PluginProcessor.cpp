@@ -29,7 +29,7 @@ BufferTestAudioProcessor::createParamLayout()
         ));
     }
     // Per-pad target probability: controls likelihood of each pad being auto-selected
-    for (int i = 0; i < 8; ++i)
+    for (int i = 0; i < SessionSettings::kNumPads; ++i)
     {
         const juce::String id   = "padProb_" + juce::String (i);
         const juce::String name = "Pad " + juce::String (i + 1) + " Target Probability";
@@ -90,6 +90,10 @@ BufferTestAudioProcessor::BufferTestAudioProcessor()
         , apvts (*this, nullptr, "BufferTestParams", createParamLayout())
 {
     formatManager.registerBasicFormats();
+    for (auto& request : midiPadToggleRequests)
+        request.store (false, std::memory_order_relaxed);
+    for (auto& request : midiPresetRecallRequests)
+        request.store (false, std::memory_order_relaxed);
 
     // Catch future mismatches between kNumModifierTypes and allModifierTypes()
     jassert (static_cast<int> (ModifierProbabilityManager::allModifierTypes().size())
@@ -335,13 +339,13 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                     midiModifierToggleRequest.store(true);
                 }
 
-                // Check preset recall MIDI notes (A-H)
-                for (int pi = 0; pi < 8; ++pi)
+                // Check preset recall MIDI notes.
+                for (int pi = 0; pi < SessionSettings::kNumPresets; ++pi)
                 {
                     if (app.settings.presetMidiNoteMap[static_cast<size_t>(pi)] >= 0
                         && app.settings.presetMidiNoteMap[static_cast<size_t>(pi)] == note)
                     {
-                        midiPresetRecallRequests[pi].store(true);
+                        midiPresetRecallRequests[static_cast<size_t> (pi)].store(true);
                     }
                 }
 
@@ -353,7 +357,7 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
 
                 // Normal mode: check if note matches any pad mapping
                 const auto& noteMap = app.settings.midiNoteMap;
-                for (int i = 0; i < 8; ++i)
+                for (int i = 0; i < SessionSettings::kNumPads; ++i)
                 {
                     if (noteMap[static_cast<size_t> (i)] == note)
                     {
@@ -394,7 +398,7 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                 else if (padLearnIdx >= 0)
                 {
                     // CC learn mode for pad target probabilities
-                    if (padLearnIdx < 8)
+                    if (padLearnIdx < SessionSettings::kNumPads)
                     {
                         app.settings.midiPadProbCCMap[static_cast<size_t>(padLearnIdx)] = cc;
                         learnedPadProbMidiCC.store (cc);
@@ -419,7 +423,7 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                     }
 
                     // Also check pad target probability CC map
-                    for (int i = 0; i < 8; ++i)
+                    for (int i = 0; i < SessionSettings::kNumPads; ++i)
                     {
                         if (app.settings.midiPadProbCCMap[static_cast<size_t>(i)] == cc)
                         {
@@ -453,7 +457,7 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     }
 
     // Sync APVTS pad target probability values → settings
-    for (int i = 0; i < 8; ++i)
+    for (int i = 0; i < SessionSettings::kNumPads; ++i)
     {
         const juce::String id = "padProb_" + juce::String (i);
         if (auto* rawVal = apvts.getRawParameterValue (id))
@@ -919,8 +923,8 @@ void BufferTestAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     // Per-pad target probability weights – read directly from APVTS
     {
         juce::Array<juce::var> padProbArr;
-        padProbArr.ensureStorageAllocated (8);
-        for (int i = 0; i < 8; ++i)
+        padProbArr.ensureStorageAllocated (SessionSettings::kNumPads);
+        for (int i = 0; i < SessionSettings::kNumPads; ++i)
         {
             const juce::String id = "padProb_" + juce::String (i);
             if (auto* rawVal = apvts.getRawParameterValue (id))
@@ -934,8 +938,8 @@ void BufferTestAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     // MIDI CC mappings for pad target probability sliders
     {
         juce::Array<juce::var> ccArr;
-        ccArr.ensureStorageAllocated (8);
-        for (int i = 0; i < 8; ++i)
+        ccArr.ensureStorageAllocated (SessionSettings::kNumPads);
+        for (int i = 0; i < SessionSettings::kNumPads; ++i)
             ccArr.add (app.settings.midiPadProbCCMap[static_cast<size_t>(i)]);
         obj->setProperty ("midiPadProbCC", juce::var (ccArr));
     }
@@ -960,8 +964,8 @@ void BufferTestAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 
     // MIDI note mappings
     juce::Array<juce::var> midiNotes;
-    midiNotes.ensureStorageAllocated(8);
-    for (int i = 0; i < 8; ++i)
+    midiNotes.ensureStorageAllocated(SessionSettings::kNumPads);
+    for (int i = 0; i < SessionSettings::kNumPads; ++i)
         midiNotes.add (app.settings.midiNoteMap[static_cast<size_t> (i)]);
     obj->setProperty("midiNotes", juce::var(midiNotes));
 
@@ -974,8 +978,8 @@ void BufferTestAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     // Preset MIDI note mappings
     {
         juce::Array<juce::var> presetNotes;
-        presetNotes.ensureStorageAllocated(4);
-        for (int i = 0; i < 4; ++i)
+        presetNotes.ensureStorageAllocated(SessionSettings::kNumPresets);
+        for (int i = 0; i < SessionSettings::kNumPresets; ++i)
             presetNotes.add(app.settings.presetMidiNoteMap[static_cast<size_t>(i)]);
         obj->setProperty("presetMidiNotes", juce::var(presetNotes));
     }
@@ -1075,7 +1079,8 @@ void BufferTestAudioProcessor::setStateInformation (const void* data, int sizeIn
         {
             if (auto* ppArr = ppVar.getArray())
             {
-                const int n = juce::jmin (static_cast<int> (ppArr->size()), 8);
+                const int n = juce::jmin (static_cast<int> (ppArr->size()),
+                                          SessionSettings::kNumPads);
                 for (int i = 0; i < n; ++i)
                 {
                     const float val = static_cast<float> (static_cast<double> (ppArr->getReference (i)));
@@ -1097,7 +1102,8 @@ void BufferTestAudioProcessor::setStateInformation (const void* data, int sizeIn
         {
             if (auto* ccArr = ccVar.getArray())
             {
-                const int n = juce::jmin (static_cast<int> (ccArr->size()), 8);
+                const int n = juce::jmin (static_cast<int> (ccArr->size()),
+                                          SessionSettings::kNumPads);
                 for (int i = 0; i < n; ++i)
                     app.settings.midiPadProbCCMap[static_cast<size_t>(i)] = static_cast<int> (ccArr->getReference (i));
             }
@@ -1142,7 +1148,9 @@ void BufferTestAudioProcessor::setStateInformation (const void* data, int sizeIn
         if (midiVar.isArray())
         {
             auto* midiArr = midiVar.getArray();
-            for (int i = 0; i < juce::jmin((int) midiArr->size(), 8); ++i)
+            for (int i = 0;
+                 i < juce::jmin((int) midiArr->size(), SessionSettings::kNumPads);
+                 ++i)
                 app.settings.midiNoteMap[static_cast<size_t> (i)]
                     = static_cast<int> (midiArr->getReference (i));
         }
@@ -1163,7 +1171,8 @@ void BufferTestAudioProcessor::setStateInformation (const void* data, int sizeIn
         if (pnVar.isArray())
         {
             auto* pnArr = pnVar.getArray();
-            const int n = juce::jmin((int) pnArr->size(), 4);
+            const int n = juce::jmin((int) pnArr->size(),
+                                     SessionSettings::kNumPresets);
             for (int i = 0; i < n; ++i)
                 app.settings.presetMidiNoteMap[static_cast<size_t>(i)] = (int) pnArr->getReference(i);
         }

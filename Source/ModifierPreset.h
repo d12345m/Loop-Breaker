@@ -2,7 +2,7 @@
  ==============================================================================
    ModifierPreset.h
    --------------------------------------------------------------------------
-   Snapshot structs for saving and recalling modifier state across all 8 buffers.
+   Snapshot structs for saving and recalling modifier state across all pads.
    Each preset captures per-buffer AudioBuffer transform state and ChannelStrip
    FX state.  Parts settings are explicitly excluded.
  ==============================================================================
@@ -11,6 +11,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "PlatformConfig.h"
 #include <array>
 
 /**
@@ -247,13 +248,13 @@ struct BufferModifierSnapshot
 };
 
 /**
-    A single preset slot.  May be empty (occupied == false) or hold a full snapshot
-    of all 8 buffers' modifier states.
+    A single preset slot. May be empty (occupied == false) or hold a full
+    snapshot of every platform pad's modifier state.
 */
 struct ModifierPresetSlot
 {
     bool occupied = false;
-    std::array<BufferModifierSnapshot, 8> buffers;
+    std::array<BufferModifierSnapshot, LoopBreakerConfig::numPads> buffers;
 
     juce::var toVar() const
     {
@@ -261,8 +262,8 @@ struct ModifierPresetSlot
         o->setProperty("occupied", occupied);
 
         juce::Array<juce::var> bufs;
-        bufs.ensureStorageAllocated(8);
-        for (int i = 0; i < 8; ++i)
+        bufs.ensureStorageAllocated(LoopBreakerConfig::numPads);
+        for (int i = 0; i < LoopBreakerConfig::numPads; ++i)
             bufs.add(buffers[static_cast<size_t>(i)].toVar());
         o->setProperty("buffers", juce::var(bufs));
 
@@ -285,7 +286,8 @@ struct ModifierPresetSlot
             if (bufsVar.isArray())
             {
                 auto* arr = bufsVar.getArray();
-                const int n = juce::jmin((int) arr->size(), 8);
+                const int n = juce::jmin((int) arr->size(),
+                                         LoopBreakerConfig::numPads);
                 for (int i = 0; i < n; ++i)
                     slot.buffers[static_cast<size_t>(i)] = BufferModifierSnapshot::fromVar(arr->getReference(i));
             }
@@ -296,12 +298,12 @@ struct ModifierPresetSlot
 };
 
 /**
-    Bank of 4 modifier state presets (A–D).
+    Platform-sized bank of modifier state presets.
     Provides capture/restore and full JSON serialization.
 */
 struct ModifierPresetBank
 {
-    static constexpr int kNumPresets = 8;
+    static constexpr int kNumPresets = LoopBreakerConfig::numModifierPresets;
 
     std::array<ModifierPresetSlot, kNumPresets> slots;
 

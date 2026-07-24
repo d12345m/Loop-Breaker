@@ -430,7 +430,7 @@ private:
             preset.modifierWeights[type] = w;
         }
 
-        for (int i = 0; i < 8; ++i)
+        for (int i = 0; i < SessionSettings::kNumPads; ++i)
         {
             const juce::String id = "padProb_" + juce::String (i);
             float w = 1.0f;
@@ -453,7 +453,7 @@ private:
                 param->setValueNotifyingHost (w);
         }
 
-        for (int i = 0; i < 8; ++i)
+        for (int i = 0; i < SessionSettings::kNumPads; ++i)
         {
             const juce::String id = "padProb_" + juce::String (i);
             if (auto* param = apvts.getParameter (id))
@@ -575,7 +575,7 @@ private:
         padSectionLabel.setColour (juce::Label::textColourId, Theme::text());
         content.addAndMakeVisible (padSectionLabel);
 
-        for (int i = 0; i < 8; ++i)
+        for (int i = 0; i < SessionSettings::kNumPads; ++i)
         {
             PadRow pr;
             pr.padIndex = i;
@@ -931,7 +931,7 @@ private:
             if (auto* param = apvts.getParameter (id))
                 param->setValueNotifyingHost (value);
         }
-        for (int i = 0; i < 8; ++i)
+        for (int i = 0; i < SessionSettings::kNumPads; ++i)
         {
             const juce::String id = "padProb_" + juce::String (i);
             if (auto* param = apvts.getParameter (id))
@@ -949,7 +949,7 @@ private:
                 param->setValueNotifyingHost (probabilityRandom.nextFloat());
         }
 
-        for (int i = 0; i < 8; ++i)
+        for (int i = 0; i < SessionSettings::kNumPads; ++i)
         {
             const juce::String id = "padProb_" + juce::String (i);
             if (auto* param = apvts.getParameter (id))

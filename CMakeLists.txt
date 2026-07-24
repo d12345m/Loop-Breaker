@@ -33,8 +33,10 @@ endif()
 add_subdirectory("${JUCE_DIR}" "${CMAKE_BINARY_DIR}/JUCE" EXCLUDE_FROM_ALL)
 
 # ─── Platform build shape ─────────────────────────────────────────────────────
-# iOS is a focused device-performance target: a standalone app with one stereo
-# output bus. Desktop builds keep the existing plug-in formats and CLAP support.
+# iOS is a focused device-performance target. JUCE generates its standalone app
+# around this target's PluginProcessor/PluginEditor; there is no parallel app
+# component. The app has one stereo output bus, while desktop builds keep the
+# existing plug-in formats and CLAP support.
 if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
     set(LOOP_BREAKER_IOS TRUE)
     set(LOOP_BREAKER_FORMATS Standalone)

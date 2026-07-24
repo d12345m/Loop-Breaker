@@ -537,7 +537,7 @@ int backgroundMode = 1; // 0=Static, 1=SlowCycle, 2=Reactive
 ### Phase 2: Dark Mode Conversion
 
 6. ~~Invert the entire UI from the current light palette to dark (using "Neon Rave" as the new default).~~ ✅ (Neon Rave is now default; all Theme:: calls route through dark palette)
-7. ~~Audit all hard-coded colors in `PadGridComponent`, `UpcomingModifierDisplay`, `ModifierHistoryPanel`, `FxStatusPanel`, `TearingDebugPanel`, `HelpPanelContent`, `ModifierProbabilityPanel`, and `ModifierSelectionPanel`.~~ ✅ (full audit complete; core plugin UI clean, standalone MainComponent.cpp / IOSAppComponent.h deferred)
+7. ~~Audit all hard-coded colors in `PadGridComponent`, `UpcomingModifierDisplay`, `ModifierHistoryPanel`, `FxStatusPanel`, `TearingDebugPanel`, `HelpPanelContent`, `ModifierProbabilityPanel`, and `ModifierSelectionPanel`.~~ ✅ (full audit complete; the deferred legacy standalone components were later removed)
 8. ~~Replace all `juce::Colours::black` / `juce::Colours::white` literals with theme roles.~~ ✅ (`ModifierSelectionPanel` migrated; `HelpPanelContent` badge border & body text contrast fixed)
 9. Test all 5 themes for readability and contrast. _(ongoing — visual testing during development)_
 

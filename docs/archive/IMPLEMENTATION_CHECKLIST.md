@@ -27,7 +27,7 @@ Legend:
 The project is pivoting from “iOS-first app” to “VST3 plugin-first”. Standalone and iOS targets are being retired; new work should prioritize plugin requirements:
 
 - [ ] Re-export/regenerate the macOS Xcode project from Projucer so old Standalone targets disappear (open LoopBreaker.jucer in Projucer and re-save/re-export)
-- [ ] Decide whether to delete standalone-only source files (e.g. Source/Main.cpp, Source/MainAppComponent.\*) or keep them in-repo but excluded from the build
+- [x] Delete the obsolete standalone prototype source tree; the supported iOS app is the JUCE standalone wrapper around `PluginProcessor`/`PluginEditor`
 - [ ] Enable VST3 target in Projucer (.jucer)
 - [ ] Define plugin bus layout for multi-output (8 buffers -> 8 distinct DAW outputs)
 - [ ] Decide default mode: master-only stereo vs multi-out enabled by default (document)

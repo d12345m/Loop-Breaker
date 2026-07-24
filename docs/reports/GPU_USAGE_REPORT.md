@@ -41,7 +41,7 @@ Five independent `Timer` instances all fire at 15 Hz with no synchronization:
 | PresetBarComponent      | [PresetBarComponent.h](Source/PresetBarComponent.h)           | 73   | 15       |
 
 Additionally:
-| MainAppComponent | [MainAppComponent.cpp](Source/MainAppComponent.cpp) | 136 | 20 |
+
 | ThemeLookAndFeel (knob glow) | [ThemeLookAndFeel.h](Source/ThemeLookAndFeel.h) | ~200 | 30 |
 | ThemeEngine (crossfade) | [ThemeEngine.cpp](Source/ThemeEngine.cpp) | 737 | 30 (transient) |
 | FxStatusPanel | [FxStatusPanel.h](Source/FxStatusPanel.h) | 15 | 5 |
@@ -50,15 +50,7 @@ Additionally:
 
 ---
 
-### 3. MainAppComponent Unconditional PadGrid Repaint at 20 Hz
-
-**File:** [Source/MainAppComponent.cpp](Source/MainAppComponent.cpp)
-
-The standalone app's `MainAppComponent` runs at **20 Hz** and calls `padGrid.repaint()` unconditionally every tick — even when no playhead has moved and no state has changed. This forces the most expensive component (PadGridComponent) to redraw its full waveform rendering pipeline every 50ms.
-
----
-
-### 4. PadGridComponent: Highest Paint Complexity
+### 3. PadGridComponent: Highest Paint Complexity
 
 **File:** [Source/PadGridComponent.h](Source/PadGridComponent.h)
 
@@ -75,11 +67,12 @@ Each call to `paintOverChildren()` renders **per pad** (up to 8 pads):
 
 **Multiplied by 8 pads, this is the single most expensive paint routine in the entire plugin.** The combination of gradients, alpha overlays, cross-hatching paths, and dashed strokes is extremely costly.
 
-The PadGridComponent **does** have a conditional repaint gate — it only repaints when flash counters are active, glow animators are running, or MIDI learn is active. However, this is bypassed when the standalone MainAppComponent forces 20 Hz repaints.
+The PadGridComponent has a conditional repaint gate: it only repaints when
+flash counters are active, glow animators are running, or MIDI learn is active.
 
 ---
 
-### 5. Dashed Stroke Generation Per Frame
+### 4. Dashed Stroke Generation Per Frame
 
 **Files:** [PresetBarComponent.h](Source/PresetBarComponent.h) (line 130), [PadGridComponent.h](Source/PadGridComponent.h), [PluginEditor.cpp](Source/PluginEditor.cpp)
 
@@ -95,7 +88,7 @@ This is a CPU-intensive path tessellation operation that generates dozens of sub
 
 ---
 
-### 6. ThemeLookAndFeel Knob Glow at 30 Hz
+### 5. ThemeLookAndFeel Knob Glow at 30 Hz
 
 **File:** [ThemeLookAndFeel.h](Source/ThemeLookAndFeel.h) (line ~200)
 
@@ -107,7 +100,7 @@ When any rotary slider value changes, the LookAndFeel starts a **30 Hz timer** f
 
 ---
 
-### 7. Alpha-Blended Overlays Prevent Compositor Optimization
+### 6. Alpha-Blended Overlays Prevent Compositor Optimization
 
 Semi-transparent rendering is pervasive throughout the plugin:
 
@@ -154,24 +147,7 @@ void timerCallback() override {
 
 **Estimated savings:** 3-5% GPU
 
-#### 1C. Make MainAppComponent PadGrid Repaint Conditional
-
-Add the same dirty-tracking that PluginEditorContent uses:
-
-```cpp
-bool padGridDirty = false;
-for (int i = 0; i < 8; ++i) {
-    if (std::abs(newPlayhead - lastPlayhead[i]) > 1.0) {
-        padGridDirty = true;
-        // ... update state
-    }
-}
-if (padGridDirty) padGrid.repaint();
-```
-
-**Estimated savings:** up to 5% when playback is idle
-
-#### 1D. Reduce BackgroundAnimator to 5 Hz or Lower
+#### 1C. Reduce BackgroundAnimator to 5 Hz or Lower
 
 A slowly cycling hue background does not need 15 FPS. At 5 Hz (200ms) with eased interpolation, the visual difference is imperceptible for a background gradient.
 
@@ -272,13 +248,13 @@ Replace manual timers with `VBlankAttachment` which synchronizes repaints to the
 
 | Optimization                    | Estimated GPU Savings |
 | ------------------------------- | --------------------- |
-| 1D. Background animator → 5 Hz  | 6-10%                 |
+| 1C. Background animator → 5 Hz  | 6-10%                 |
 | 1B. Consolidate timers          | 3-5%                  |
-| 1C. Conditional PadGrid repaint | 2-5%                  |
 | 2C. Hue threshold skip          | 3-5%                  |
 | 2A. Cache dashed strokes        | 2-3%                  |
 | 2B. Pre-composite noise         | 1-2%                  |
 | 2D. Throttle knob glow          | 1-2%                  |
-| **Combined estimate**           | **~18-25% reduction** |
+| **Combined estimate**           | **~15-20% reduction** |
 
-With all Tier 1 + Tier 2 optimizations applied, GPU usage should drop from ~30% to approximately **8-12%** on M3 Max.
+With all Tier 1 + Tier 2 optimizations applied, GPU usage should drop from
+~30% to approximately **10-15%** on M3 Max.

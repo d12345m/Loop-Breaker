@@ -62,7 +62,7 @@ public:
         addAndMakeVisible (exportButton);
 
         modifierList.selectRow (0);
-        startTimerHz (15);
+        startTimerHz (LoopBreakerConfig::uiRefreshRateHz);
     }
 
     ~GlyphLabComponent() override
@@ -176,7 +176,7 @@ private:
         const double nowMs = juce::Time::getMillisecondCounterHiRes();
         const double elapsedSeconds = lastAnimationTickMs > 0.0
             ? juce::jlimit (0.0, 0.25, (nowMs - lastAnimationTickMs) / 1000.0)
-            : (1.0 / 15.0);
+            : LoopBreakerConfig::uiRefreshIntervalSeconds;
         lastAnimationTickMs = nowMs;
 
         if (! animateToggle.getToggleState() || reducedMotionToggle.getToggleState())

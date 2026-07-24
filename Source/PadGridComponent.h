@@ -2,7 +2,7 @@
  ============================================================================== 
    PadGridComponent.h
    --------------------------------------------------------------------------
-   Simple 2x4 grid of pad toggle buttons representing the 8 audio buffers.
+   Platform-sized grid of pad toggle buttons representing the audio buffers.
    Provides selection state for scheduling modifiers (user targeted buffers).
  ==============================================================================
 */
@@ -14,6 +14,7 @@
 #include "ThemeFonts.h"
 #include "Animator.h"
 #include "ModifierStickerOverlay.h"
+#include "PlatformConfig.h"
 
 // Simple 2x4 pad grid showing selectable pads and (new) filename indicators.
 class PadGridComponent : public juce::Component,
@@ -34,6 +35,9 @@ public:
 
     PadGridComponent()
     {
+        for (int i = 0; i < numPads; ++i)
+            padFileNames.add({});
+
         // Ensure the local AudioFormatManager knows basic formats so thumbnails can read files
         if (formatManager.getNumKnownFormats() == 0)
             formatManager.registerBasicFormats();
@@ -95,7 +99,7 @@ public:
             loopEndSamples[(size_t)i] = 0.0;
         }
 
-        startTimerHz(15); // for transient flash highlight decay (reduced from 20 Hz)
+        startTimerHz (LoopBreakerConfig::uiRefreshRateHz);
     }
 
     // Returns indices of pads whose toggle state is on (selected by user for modifiers)
@@ -244,8 +248,8 @@ public:
     void resized() override
     {
         auto area = getLocalBounds().reduced(4);
-        const int rows = portraitLayout ? 4 : 2;
-        const int cols = portraitLayout ? 2 : 4;
+        const int cols = portraitLayout ? 2 : (numPads + 1) / 2;
+        const int rows = (numPads + cols - 1) / cols;
         const int padW = area.getWidth() / cols;
         const int padH = area.getHeight() / rows;
         const int labelHeight = 22;
@@ -273,7 +277,7 @@ public:
     }
 
 private:
-    static constexpr int numPads = 8;
+    static constexpr int numPads = LoopBreakerConfig::numPads;
     bool portraitLayout = false;
     // Look-and-feel that suppresses the default checkbox visuals of ToggleButton
     class InvisibleToggleLookAndFeel : public juce::LookAndFeel_V4 {
@@ -284,32 +288,36 @@ private:
     InvisibleToggleLookAndFeel invisibleToggleLF;  // must be declared before padButtons so it outlives them
     juce::OwnedArray<juce::ToggleButton> padButtons;
     juce::OwnedArray<juce::Label> padFileLabels;
-    juce::StringArray padFileNames { "", "", "", "", "", "", "", "" };
-    std::array<int, numPads> flashCounters { {0,0,0,0,0,0,0,0} };
-    std::array<float, numPads> glowAlpha { {0,0,0,0,0,0,0,0} };
+    juce::StringArray padFileNames;
+    std::array<int, numPads> flashCounters {};
+    std::array<float, numPads> glowAlpha {};
     std::array<Animator, numPads> glowAnimators;
     float midiLearnDashOffset = 0.0f;  // marching ants
-    std::array<bool, numPads> playingStates { {false,false,false,false,false,false,false,false} };
+    std::array<bool, numPads> playingStates {};
     std::array<ModifierStickerOverlay::Mask, numPads> activeStickerMasks {};
     std::array<ModifierStickerOverlay::Mask, numPads> transientStickerMasks {};
     float stickerGlyphPhase = 0.0f;
     std::array<std::array<double, static_cast<size_t>(ModifierType::Unknown)>,
                numPads> transientStickerExpiryMs {};
-    // Bottom row left->right = 36-39 (pads 1-4, idx 0-3), top row left->right = 40-43 (pads 5-8, idx 4-7)
-    std::array<int, numPads> midiNotes { {36, 37, 38, 39, 40, 41, 42, 43} };
-    std::array<bool, numPads> midiLearnActive { {false,false,false,false,false,false,false,false} };
+    std::array<int, numPads> midiNotes = [] {
+        std::array<int, numPads> notes {};
+        for (int i = 0; i < numPads; ++i)
+            notes[static_cast<size_t> (i)] = 36 + i;
+        return notes;
+    }();
+    std::array<bool, numPads> midiLearnActive {};
 
     // Waveform state
     juce::AudioFormatManager formatManager;
     juce::AudioFormatManager* formatManagerPtr { nullptr };
     juce::AudioThumbnailCache thumbnailCache { 64 };
     juce::OwnedArray<juce::AudioThumbnail> thumbnails;
-    std::array<double, numPads> playheadSamples { {0,0,0,0,0,0,0,0} };
-    std::array<bool,   numPads> loopEnabled     { {false,false,false,false,false,false,false,false} };
-    std::array<double, numPads> loopStartSamples{ {0,0,0,0,0,0,0,0} };
-    std::array<double, numPads> loopEndSamples  { {0,0,0,0,0,0,0,0} };
+    std::array<double, numPads> playheadSamples {};
+    std::array<bool,   numPads> loopEnabled {};
+    std::array<double, numPads> loopStartSamples {};
+    std::array<double, numPads> loopEndSamples {};
     // Total file length in samples for each pad (used to map loop/playhead across full waveform)
-    std::array<double, numPads> totalFileSamples { {0,0,0,0,0,0,0,0} };
+    std::array<double, numPads> totalFileSamples {};
 
 public:
     // Callback for external listeners when any pad selection toggles.
@@ -431,7 +439,7 @@ public:
     // Update which pads are currently playing; expects indices from engine each refresh.
     void setPlayingStates(const juce::Array<int>& playingIndices)
     {
-        std::array<bool, numPads> newStates { {false,false,false,false,false,false,false,false} };
+        std::array<bool, numPads> newStates {};
         for (auto idx : playingIndices)
             if (juce::isPositiveAndBelow(idx, numPads))
                 newStates[(size_t)idx] = true;
@@ -509,7 +517,8 @@ public:
     }
 
 private:
-    static constexpr int flashDurationTicks = 10; // ~667 ms at 15 Hz
+    static constexpr int flashDurationTicks =
+        (LoopBreakerConfig::uiRefreshRateHz * 2) / 3; // ~667 ms
 
     void clearModifierStickersForPad(int padIndex)
     {
@@ -862,7 +871,7 @@ private:
 
     void timerCallback() override
     {
-        const double dt = 1.0 / 15.0;  // matches 15 Hz timer
+        constexpr double dt = LoopBreakerConfig::uiRefreshIntervalSeconds;
         bool any = false;
         bool anyStickerVisible = false;
         const double nowMs = juce::Time::getMillisecondCounterHiRes();
@@ -915,7 +924,8 @@ private:
             const auto& anim = ThemeEngine::getInstance().getAnimationConfig();
             if (anim.enabled)
             {
-                midiLearnDashOffset += 0.6f * anim.animationSpeed;
+                midiLearnDashOffset += static_cast<float> (9.0 * dt)
+                                     * anim.animationSpeed;
                 if (midiLearnDashOffset > 10.0f) midiLearnDashOffset -= 10.0f;
                 any = true;
             }

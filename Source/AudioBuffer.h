@@ -22,6 +22,7 @@
 #include <functional>
 
 #include "TimeStretchSoundTouch.h"
+#include "StretchQueueController.h"
 
 //==============================================================================
 /**
@@ -76,6 +77,18 @@ struct AudioBufferParams
         arpCycleCount = 0;
         arpTotalCyclesPerRefresh = 0;
     }
+};
+
+struct TimeStretchQueueTelemetry
+{
+    int readyOutputFrames = 0;
+    int unprocessedInputFrames = 0;
+    int targetOutputReserve = 0;
+    int highOutputWatermark = 0;
+    double outputPerInputRatio = 1.0;
+    double estimatedOutputCreditFrames = 0.0;
+    std::uint64_t totalInputFramesFed = 0;
+    std::uint64_t totalOutputFramesReceived = 0;
 };
 
 //==============================================================================
@@ -261,6 +274,7 @@ public:
     void resetTearingStats() { tearingStats.reset(); }
     void setTearingDebugEnabled(bool enabled) { tearingDebugEnabled.store(enabled); }
     bool isTearingDebugEnabled() const { return tearingDebugEnabled.load(); }
+    TimeStretchQueueTelemetry getTimeStretchQueueTelemetry() const;
     
     //==============================================================================
     // Timing and position
@@ -399,8 +413,21 @@ private:
     juce::AudioBuffer<float> stretchInterleavedOut;
     std::atomic<int> timeStretchUnderfills { 0 };
     int stretchFadeInRemaining = 0; // samples of fade-in left to apply on first stretch block
+    int stretchFadeInTotal = 0;     // total samples, retained so gain is global across callbacks
     std::atomic<bool> stretcherNeedsReset { false }; // deferred reset flag for thread safety
     bool lastBlockUsedStretch = false; // track mode transitions between repitch/stretch
+    StretchQueueController stretchQueueController;
+    std::atomic<int> stretchQueueReadyOutput { 0 };
+    std::atomic<int> stretchQueueUnprocessedInput { 0 };
+    std::atomic<int> stretchQueueTargetReserve { 0 };
+    std::atomic<int> stretchQueueHighWatermark { 0 };
+    std::atomic<double> stretchQueueOutputPerInput { 1.0 };
+    std::atomic<double> stretchQueueOutputCredit { 0.0 };
+    std::atomic<std::uint64_t> stretchQueueInputFramesFed { 0 };
+    std::atomic<std::uint64_t> stretchQueueOutputFramesReceived { 0 };
+    void resetStretchQueueState();
+    void publishStretchQueueTelemetry (int targetOutputReserve,
+                                       int highOutputWatermark);
 
     // §10.3  Output-side crossfade for slice/boundary transitions in SoundTouch
     // mode.  Instead of applying crossfade on SoundTouch's INPUT (where the OLA

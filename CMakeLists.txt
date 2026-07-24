@@ -240,6 +240,7 @@ if(LOOP_BREAKER_BUILD_TESTS AND NOT LOOP_BREAKER_IOS)
         Source/ModifierStickerTests.cpp
         Source/ModifierStickerLifecycleTests.cpp
         Source/ThemeEngineTests.cpp
+        Source/AudioContinuityTests.cpp
     )
     target_include_directories(LoopBreakerTests PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/Source"

@@ -139,6 +139,50 @@ AudioBuffer::AudioBuffer (int bufferIndexToUse)
     pitchSemiSmoother.setCurrentAndTargetValue(0.0);
 }
 
+void AudioBuffer::resetStretchQueueState()
+{
+    stretchQueueController.reset();
+    stretchQueueReadyOutput.store (0, std::memory_order_relaxed);
+    stretchQueueUnprocessedInput.store (0, std::memory_order_relaxed);
+    stretchQueueTargetReserve.store (0, std::memory_order_relaxed);
+    stretchQueueHighWatermark.store (0, std::memory_order_relaxed);
+    stretchQueueOutputPerInput.store (1.0, std::memory_order_relaxed);
+    stretchQueueOutputCredit.store (0.0, std::memory_order_relaxed);
+    stretchQueueInputFramesFed.store (0, std::memory_order_relaxed);
+    stretchQueueOutputFramesReceived.store (0, std::memory_order_relaxed);
+}
+
+void AudioBuffer::publishStretchQueueTelemetry (int targetOutputReserve,
+                                                int highOutputWatermark)
+{
+    stretchQueueReadyOutput.store (stretcher.numSamplesAvailable(), std::memory_order_relaxed);
+    stretchQueueUnprocessedInput.store (stretcher.numUnprocessedSamples(), std::memory_order_relaxed);
+    stretchQueueTargetReserve.store (targetOutputReserve, std::memory_order_relaxed);
+    stretchQueueHighWatermark.store (highOutputWatermark, std::memory_order_relaxed);
+    stretchQueueOutputPerInput.store (stretchQueueController.getOutputPerInputRatio(),
+                                      std::memory_order_relaxed);
+    stretchQueueOutputCredit.store (stretchQueueController.getOutputCreditFrames(),
+                                    std::memory_order_relaxed);
+    stretchQueueInputFramesFed.store (stretchQueueController.getTotalInputFrames(),
+                                      std::memory_order_relaxed);
+    stretchQueueOutputFramesReceived.store (stretchQueueController.getTotalOutputFrames(),
+                                            std::memory_order_relaxed);
+}
+
+TimeStretchQueueTelemetry AudioBuffer::getTimeStretchQueueTelemetry() const
+{
+    TimeStretchQueueTelemetry telemetry;
+    telemetry.readyOutputFrames = stretchQueueReadyOutput.load (std::memory_order_relaxed);
+    telemetry.unprocessedInputFrames = stretchQueueUnprocessedInput.load (std::memory_order_relaxed);
+    telemetry.targetOutputReserve = stretchQueueTargetReserve.load (std::memory_order_relaxed);
+    telemetry.highOutputWatermark = stretchQueueHighWatermark.load (std::memory_order_relaxed);
+    telemetry.outputPerInputRatio = stretchQueueOutputPerInput.load (std::memory_order_relaxed);
+    telemetry.estimatedOutputCreditFrames = stretchQueueOutputCredit.load (std::memory_order_relaxed);
+    telemetry.totalInputFramesFed = stretchQueueInputFramesFed.load (std::memory_order_relaxed);
+    telemetry.totalOutputFramesReceived = stretchQueueOutputFramesReceived.load (std::memory_order_relaxed);
+    return telemetry;
+}
+
 void AudioBuffer::prepare(double sampleRate, int samplesPerBlockExpected)
 {
     juce::FloatVectorOperations::disableDenormalisedNumberSupport();
@@ -200,6 +244,9 @@ void AudioBuffer::prepare(double sampleRate, int samplesPerBlockExpected)
     for (auto& r : blockResamplers)
         r.reset();
     blockResamplersValid = false;
+    stretchFadeInRemaining = 0;
+    stretchFadeInTotal = 0;
+    resetStretchQueueState();
 }
 
 void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
@@ -1045,7 +1092,9 @@ void AudioBuffer::setLoadedAudioData(LoadedAudioData::Ptr newData)
     stretcherNeedsReset.store(false);
     lastBlockUsedStretch = false;
     stretchFadeInRemaining = 0;
+    stretchFadeInTotal = 0;
     stretcher.reset();
+    resetStretchQueueState();
     stretchSmoother.setCurrentAndTargetValue(1.0);
     speedMagSmoother.setCurrentAndTargetValue(1.0);
     lastStretchDirection = 1.0;
@@ -1193,6 +1242,9 @@ void AudioBuffer::resetToDefaults()
     stretcherNeedsReset.store(false);
     lastBlockUsedStretch = false;
     stretcher.reset();
+    stretchFadeInRemaining = 0;
+    stretchFadeInTotal = 0;
+    resetStretchQueueState();
     speedSmoother.setCurrentAndTargetValue(1.0);
     stretchSmoother.setCurrentAndTargetValue(1.0);
     speedMagSmoother.setCurrentAndTargetValue(1.0);
@@ -1286,9 +1338,11 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
     if (didReset)
     {
         stretcher.reset();
+        resetStretchQueueState();
         stretcherPrepared = false;
         stretcherPrimed = false;
         stretchFadeInRemaining = 0;
+        stretchFadeInTotal = 0;
         // §12: Reset lookahead state on pipeline reset.
         resetLookaheadState();
         // §2.2A  Invalidate block-resampler state on pipeline resets so the
@@ -1390,7 +1444,9 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         stretcherPreparedChannels = numChannels;
         stretcherPrimed = false;
         stretchFadeInRemaining = 0;
+        stretchFadeInTotal = 0;
         lastStretchDirection = direction;
+        resetStretchQueueState();
     }
     else
     {
@@ -1424,6 +1480,9 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         }
     }
 
+    const double outputPerInputRatio = stretcher.getInputOutputSampleRatio();
+    stretchQueueController.setOutputPerInputRatio (outputPerInputRatio);
+
     // Ensure scratch buffers are appropriately sized.
     // These are pre-allocated in prepare() at worst-case sizes.  The guard is
     // kept as a safety net but should never trigger in normal operation.
@@ -1453,43 +1512,26 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                                   && ! loopWindowEnabled.load()
                                   && ! slicingModeActive.load()
                                   && ! isInCrossfade
-                                  && std::abs (currentPos0 - std::floor (currentPos0)) < 1.0e-9);
+                                  && std::abs (currentPos0 - std::floor (currentPos0)) < 1.0e-9
+                                  && currentPos0 >= 0.0
+                                  && currentPos0 < static_cast<double> (fileLengthSamples)
+                                  // Boundary crossings must use the event-aware
+                                  // per-sample path so wrapping is crossfaded and
+                                  // the stored playhead remains in range.
+                                  && framesToGenerate
+                                         < fileLengthSamples - static_cast<int> (currentPos0));
 
         if (canBulkCopy)
         {
             const int startSample = (int) currentPos0;
-            if (startSample >= 0 && startSample < fileLengthSamples)
-            {
-                int framesCopied = 0;
-                int pos = startSample;
+            for (int ch = 0; ch < numChannels; ++ch)
+                stretchInScratch.copyFrom (ch, 0, sourceBuffer, ch,
+                                           startSample, framesToGenerate);
 
-                while (framesCopied < framesToGenerate)
-                {
-                    const int available = fileLengthSamples - pos;
-                    if (available <= 0)
-                    {
-                        if (params.isLooping)
-                            pos = 0;
-                        else
-                        {
-                            params.isPlaying = false;
-                            break;
-                        }
-                    }
-
-                    const int chunk = juce::jmin (framesToGenerate - framesCopied, available);
-                    for (int ch = 0; ch < numChannels; ++ch)
-                        stretchInScratch.copyFrom (ch, framesCopied, sourceBuffer, ch, pos, chunk);
-
-                    framesCopied += chunk;
-                    pos += chunk;
-                }
-
-                playheadPosition.store ((double) (startSample + framesCopied));
-                // Bulk-copy bypasses the interpolator, so invalidate its state.
-                blockResamplersValid = false;
-                return framesCopied;
-            }
+            playheadPosition.store (static_cast<double> (startSample + framesToGenerate));
+            // Bulk-copy bypasses the interpolator, so invalidate its state.
+            blockResamplersValid = false;
+            return framesToGenerate;
         }
 
         // §2.2A  Extended fast path: block-based resampling via LagrangeInterpolator.
@@ -2103,7 +2145,8 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         const double settleMs = juce::jlimit (20.0, 40.0,
                                               20.0 * juce::jmax (1.0, clampedRatio)
                                                    * juce::jmax (1.0, 1.0 / juce::jmax (0.25, clampedRate)));
-        stretchFadeInRemaining = juce::jmax (1, (int) (hostSampleRate * settleMs / 1000.0));
+        stretchFadeInTotal = juce::jmax (1, (int) (hostSampleRate * settleMs / 1000.0));
+        stretchFadeInRemaining = stretchFadeInTotal;
 
         // T2 + §10.2: Pre-prime SoundTouch with enough input to fill its internal
         // latency pipeline.  Without this, the first 1–2 output blocks after a
@@ -2158,6 +2201,7 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                 stretcher.processNonInterleaved (primePtrs.data(), primed,
                                                  nullptr, 0, false,
                                                  stretchInterleavedIn, stretchInterleavedOut);
+                stretchQueueController.recordInputFrames (primed);
 
                 primeSamplesRemaining -= primed;
                 if (primed < requested)
@@ -2185,21 +2229,44 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
             outPtrs[(size_t) ch] = outputBuffer.getWritePointer (ch) + framesWritten;
     };
 
-    // Keep SoundTouch's input pipeline supplied continuously. The previous
-    // drain-first loop only fed input after its batched output queue became
-    // empty, which caused repeated starvation on small iOS host blocks.
-    const int steadyInputFrames = juce::jlimit (
-        1, maxInputChunkFrames,
-        (int) std::ceil (numOutputSamples * totalTempoRatioForIO));
-    const int steadyFramesFilled = fillInputScratch (steadyInputFrames);
-    if (steadyFramesFilled > 0)
+    // Maintain an explicit output-equivalent reserve.  The controller accounts
+    // for the entire startup prime and carries integer rounding across callbacks,
+    // allowing an initial over-prime or recovery margin to be repaid instead of
+    // becoming permanent latency.
+    const int estimatedLatencyReserve = juce::jmax (
+        numOutputSamples,
+        (int) std::ceil (stretcher.getLatencySamples() * outputPerInputRatio));
+    const int targetOutputReserve = juce::jmax (
+        numOutputSamples * 2,
+        estimatedLatencyReserve + numOutputSamples);
+    const int highOutputWatermark = targetOutputReserve
+                                  + juce::jmax (numOutputSamples * 4,
+                                               (int) std::ceil (marginFrames * outputPerInputRatio));
+
+    const int steadyInputFrames = stretchQueueController.getInputFramesRequired (
+        numOutputSamples, targetOutputReserve, maxInputChunkFrames);
+    if (steadyInputFrames > 0)
     {
-        setInputPointers();
+        const int steadyFramesFilled = fillInputScratch (steadyInputFrames);
+        if (steadyFramesFilled > 0)
+        {
+            setInputPointers();
+            setOutputPointers();
+            framesWritten = stretcher.processNonInterleaved (
+                inPtrs.data(), steadyFramesFilled,
+                outPtrs.data(), numOutputSamples, false,
+                stretchInterleavedIn, stretchInterleavedOut);
+            stretchQueueController.recordInputFrames (steadyFramesFilled);
+            stretchQueueController.recordOutputFrames (framesWritten);
+        }
+    }
+    else if (stretcher.numSamplesAvailable() > 0)
+    {
         setOutputPointers();
         framesWritten = stretcher.processNonInterleaved (
-            inPtrs.data(), steadyFramesFilled,
-            outPtrs.data(), numOutputSamples, false,
+            nullptr, 0, outPtrs.data(), numOutputSamples, false,
             stretchInterleavedIn, stretchInterleavedOut);
+        stretchQueueController.recordOutputFrames (framesWritten);
     }
 
     // Recovery is normally unnecessary after priming. Keep it bounded for
@@ -2217,6 +2284,7 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
             if (drained > 0)
             {
                 framesWritten += drained;
+                stretchQueueController.recordOutputFrames (drained);
                 continue;
             }
         }
@@ -2236,8 +2304,12 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
 
         const int produced = stretcher.processNonInterleaved (inPtrs.data(), framesFilled, outPtrs.data(), remaining, false,
                                                              stretchInterleavedIn, stretchInterleavedOut);
+        stretchQueueController.recordInputFrames (framesFilled);
         if (produced > 0)
+        {
             framesWritten += produced;
+            stretchQueueController.recordOutputFrames (produced);
+        }
     }
 
     // §10.3  Output-side crossfade (legacy safety net).
@@ -2276,6 +2348,7 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
     {
         // Skip the fade-in entirely; the crossfade handles the transition.
         stretchFadeInRemaining = 0;
+        stretchFadeInTotal = 0;
     }
     // Apply fade-in (either the full settle-time fade or the shortened brief
     // fade set above). This ramps SoundTouch's first output from silence,
@@ -2283,16 +2356,20 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
     if (stretchFadeInRemaining > 0 && framesWritten > 0)
     {
         const int fadeLen = juce::jmin (stretchFadeInRemaining, framesWritten);
+        const int fadeProgress = juce::jmax (0, stretchFadeInTotal - stretchFadeInRemaining);
         for (int ch = 0; ch < numChannels; ++ch)
         {
             float* out = outputBuffer.getWritePointer (ch);
             for (int i = 0; i < fadeLen; ++i)
             {
-                const float g = (float) (i + 1) / (float) fadeLen;
+                const float g = static_cast<float> (fadeProgress + i + 1)
+                              / static_cast<float> (juce::jmax (1, stretchFadeInTotal));
                 out[i] *= g;
             }
         }
         stretchFadeInRemaining -= fadeLen;
+        if (stretchFadeInRemaining == 0)
+            stretchFadeInTotal = 0;
     }
 
     // T8 (revised for BUG 7): When a SoundTouch reset occurred this block
@@ -2355,6 +2432,8 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
             tearingStats.partialUnderfills.fetch_add(1, std::memory_order_relaxed);
 #endif
     }
+
+    publishStretchQueueTelemetry (targetOutputReserve, highOutputWatermark);
 }
 
 //==============================================================================
@@ -3238,6 +3317,12 @@ void AudioBuffer::releaseResources()
     previousBlockBuffer.setSize(0, 0);
     previousBlockValid = false;
     resetCrossfadePending = false;
+    stretcher.reset();
+    stretcherPrepared = false;
+    stretcherPrimed = false;
+    stretchFadeInRemaining = 0;
+    stretchFadeInTotal = 0;
+    resetStretchQueueState();
 }
 
 //==============================================================================

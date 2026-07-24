@@ -829,8 +829,14 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
         if (scratch.getNumChannels() < mixChannels || scratch.getNumSamples() < numSamples)
             scratch.setSize (mixChannels, numSamples, false, false, true);
 
-        scratch.clear();
-        app.bufferManager.processSingleBuffer (bufferIndex, scratch);
+        // Render through a non-owning view whose logical length is the current
+        // host callback. The backing allocation retains its advertised maximum
+        // capacity, but short AU/AUv3 callbacks no longer advance and discard
+        // the unused tail.
+        juce::AudioBuffer<float> activeScratch (
+            scratch.getArrayOfWritePointers(), mixChannels, numSamples);
+        activeScratch.clear();
+        app.bufferManager.processSingleBuffer (bufferIndex, activeScratch);
     });
 
     // Sequential merge: add each buffer's result into the output buses.

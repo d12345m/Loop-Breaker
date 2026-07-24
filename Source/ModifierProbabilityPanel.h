@@ -841,7 +841,7 @@ private:
         {
             juce::String suffix;
             if (learningTarget == BufferTestAudioProcessor::kProbabilityActionLearnIndexBase + actionIndex)
-                suffix = " Waiting for MIDI note…";
+                suffix = " Waiting for MIDI note...";
             else if (mappings[static_cast<size_t> (actionIndex)] >= 0)
                 suffix = " MIDI note " + juce::String (mappings[static_cast<size_t> (actionIndex)]) + ".";
             button.setTooltip (description + suffix + " Right-click for MIDI mapping.");

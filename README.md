@@ -29,6 +29,39 @@ The CMake project creates platform-appropriate plug-in targets. To validate the 
 cmake --build build --config Release --target validate
 ```
 
+### iOS device build
+
+The iOS configuration builds a standalone iPhone app using the production
+processor and portrait session UI. It has no audio input or microphone
+permission and exposes only the stereo mix output. Tapping an empty pad (or
+using a pad's **Load sample** menu action) opens the native iOS Files picker;
+the selected audio file is copied into the app container before it is decoded.
+
+Generate the Xcode project with an iPhoneOS toolchain:
+
+```sh
+cmake -S . -B build-ios -G Xcode \
+  -DJUCE_DIR=/path/to/JUCE \
+  -DCMAKE_SYSTEM_NAME=iOS \
+  -DCMAKE_OSX_SYSROOT=iphoneos \
+  -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
+  -DLOOP_BREAKER_BUILD_TESTS=OFF
+open build-ios/LoopBreaker.xcodeproj
+```
+
+In VS Code, the same workflow is available through **Tasks: Run Task**:
+run `Configure iOS (Xcode)`, then `Build iOS (Debug, unsigned)` or
+`Build iOS (Release, unsigned)`. These tasks verify the device build without
+requiring signing and expect the JUCE checkout at `~/JUCE`. Run
+`Open iOS Project in Xcode` when you are ready to install and profile on an
+iPhone.
+
+In Xcode, select the `LoopBreaker_Standalone` scheme, choose an Apple
+Development team for signing, connect the iPhone, and press Run. The generated
+iOS scheme launches the optimized Release configuration by default; switch its
+Run action to Debug only when diagnosing an assertion. Project save/load and
+recording are intentionally outside this device-performance prototype.
+
 ### macOS: signing and installation
 
 Built plugins are not copied to system directories automatically. On macOS, unsigned bundles are blocked by Gatekeeper and will not appear in DAWs. After building, ad-hoc sign each format and copy it to the appropriate location:

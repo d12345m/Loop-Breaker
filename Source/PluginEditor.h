@@ -28,7 +28,7 @@ private:
     bool synchronisePortraitBoundsWithHost();
     void scheduleHostBoundsReconciliation();
 
-    BufferTestAudioProcessor& processor;
+    BufferTestAudioProcessor& audioProcessor;
 
     std::unique_ptr<BackgroundAnimator> backgroundAnimator;
     std::unique_ptr<juce::Component> content;

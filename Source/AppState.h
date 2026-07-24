@@ -651,8 +651,10 @@ struct AppState : public ModifierSchedulerListener
             case ModifierType::SwapModifierStack:
                 applySwapModifierStack(targets);
                 break;
-            default:
-                break; // Unimplemented modifiers ignored for now
+            case ModifierType::BufferDuckingOn:
+            case ModifierType::QuarterNoteBurst:
+            case ModifierType::Unknown:
+                break;
         }
 
         refreshAllModifierStickerMasks();
@@ -685,7 +687,8 @@ private:
                 // Reverse now coexists with SoundTouch stretch/pitch; the source-level
                 // crossfade and SoundTouch's overlap-add handle transitions smoothly.
                 double s = b->getSpeed();
-                if (s == 0.0) s = 1.0;
+                if (juce::approximatelyEqual (s, 0.0))
+                    s = 1.0;
                 b->setSpeed(-s);  // flip sign: forward→reverse, reverse→forward
                 if (!b->isPlaying()) b->play();
             }
@@ -697,14 +700,15 @@ private:
         if (targets.isEmpty()) return;
         // Use structured planned speed if provided; else default to 1.0 (no change)
         double speedVal = desc.plannedSpeed.has_value() ? desc.plannedSpeed.value() : 1.0;
-        speedVal = (speedVal == 0.0 ? 1.0 : std::abs(speedVal));
+        speedVal = juce::approximatelyEqual (speedVal, 0.0) ? 1.0 : std::abs (speedVal);
         for (int idx : targets)
         {
             if (auto* b = bufferManager.getBuffer(idx); b && b->hasAudioLoaded())
             {
                 // Preserve current direction: negative speed means reverse.
                 double current = b->getSpeed();
-                if (current == 0.0) current = 1.0;
+                if (juce::approximatelyEqual (current, 0.0))
+                    current = 1.0;
                 const double signedSpeed = (current < 0.0 ? -speedVal : speedVal);
                 b->setSpeed(signedSpeed);
                 // Speed and stretch now coexist; SoundTouch routes speed magnitude

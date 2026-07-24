@@ -203,7 +203,7 @@ private:
                                           "Shift+Click to learn, Cmd/Alt+Click to clear)." },
                 { "Master Volume knob",   "Boost or cut overall output level (-12 dB to +12 dB); "
                                           "applies equally to all pads and output buses" },
-                { "Preset buttons (A\u2013D)","Click to recall a saved modifier snapshot. "
+                { "Preset buttons (A-D)",     "Click to recall a saved modifier snapshot. "
                                           "If the slot is empty, clicking saves the current state. "
                                           "Double-click to overwrite an existing preset. "
                                           "Right-click for save/recall/clear/MIDI options." },
@@ -219,7 +219,7 @@ private:
                 "Modifier Presets let you snapshot the current state of all buffer transforms "
                 "(speed, stretch, pitch, slicing, ping-pong) and effects (reverb, delay, filter, "
                 "tremolo, chorus, auto-pan, Shhhhhh) across all 8 pads.\n\n"
-                "Four preset slots (A\u2013D) are available in the Session tab.  "
+                "Four preset slots (A-D) are available in the Session tab.  "
                 "Click an empty slot to save, click a filled slot to recall.  "
                 "Double-click any slot to force-overwrite it with the current state.\n\n"
                 "Presets do NOT save or restore Parts settings, pad file assignments, "

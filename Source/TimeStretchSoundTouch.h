@@ -99,7 +99,8 @@ public:
                               juce::AudioBuffer<float>& interleavedOut)
     {
         jassert (channels > 0);
-        jassert (output != nullptr);
+        jassert (maxOutputSamples >= 0);
+        jassert (maxOutputSamples == 0 || output != nullptr);
 
         if (numInputSamples > 0)
             jassert (input != nullptr);

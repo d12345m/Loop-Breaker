@@ -431,7 +431,7 @@ void MainAppComponent::refreshStatus()
         startBars = spanBars.first;
         endBars = spanBars.second;
     }
-    juce::String spanStr = juce::String(startBars, 2) + " bars–" + juce::String(endBars, 2) + " bars";
+    juce::String spanStr = juce::String(startBars, 2) + " bars-" + juce::String(endBars, 2) + " bars";
     juce::String partsStr = juce::String(numParts);
     if (pendingPartsCount >= 1 && pendingPartsCount <= 4)
         partsStr << " (pending: " << pendingPartsCount << ")";

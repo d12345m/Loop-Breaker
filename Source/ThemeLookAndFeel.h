@@ -185,7 +185,7 @@ public:
             auto* sliderPtr = &slider;
             auto& state = knobGlowStates[sliderPtr];
 
-            if (state.lastValue != sliderPosProportional)
+            if (! juce::approximatelyEqual (state.lastValue, sliderPosProportional))
             {
                 state.lastValue = sliderPosProportional;
                 state.glowAlpha = 1.0f;
@@ -446,7 +446,7 @@ public:
         juce::ignoreUnused (bar, g, w, h);
     }
 
-    int getTabButtonBestWidth (juce::TabBarButton& button, int tabDepth) override
+    int getTabButtonBestWidth (juce::TabBarButton& button, int) override
     {
         auto f = ThemeFonts::getInstance().tabFont (15.0f);
         juce::GlyphArrangement glyphs;
@@ -455,7 +455,7 @@ public:
         return textWidth + 36; // padding
     }
 
-    int getTabButtonOverlap (int tabDepth) override
+    int getTabButtonOverlap (int) override
     {
         return 0;
     }

@@ -63,7 +63,7 @@ inline const char* nodeIdToString(NodeId id)
         case NodeId::PadReduction:     return "-12dB Pad";
         case NodeId::MasterVolume:     return "Master Vol";
         case NodeId::FinalMix:         return "Final Mix";
-        default:                       return "Unknown";
+        case NodeId::NumNodes:         return "Unknown";
     }
 }
 
@@ -85,7 +85,7 @@ inline const char* nodeIdToShortString(NodeId id)
         case NodeId::PadReduction:     return "Pad";
         case NodeId::MasterVolume:     return "Mst";
         case NodeId::FinalMix:         return "Mix";
-        default:                       return "???";
+        case NodeId::NumNodes:         return "???";
     }
 }
 

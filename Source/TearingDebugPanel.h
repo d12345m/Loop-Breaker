@@ -22,7 +22,7 @@ public:
 
     juce::Rectangle<int> getTooltipBounds(const juce::String& text, juce::Point<int> screenPos, juce::Rectangle<int> parentArea) override
     {
-        auto font = juce::Font(12.0f);
+        auto font = juce::Font (juce::FontOptions (12.0f));
         auto w = juce::jmin(400, juce::GlyphArrangement::getStringWidthInt(font, text) + 16);
         auto h = 22;
         return { screenPos.x > parentArea.getCentreX() ? screenPos.x - w - 4 : screenPos.x + 8,
@@ -264,15 +264,15 @@ private:
         if (!isShowing()) return;
 
         // Snapshot all atomic stats into plain structs
-        const auto numStrips = app.channelStrips.size();
+        const auto numStrips = static_cast<size_t> (app.channelStrips.size());
         cachedStats.resize(numStrips);
         cachedTotalAll = cachedTotalCritical = cachedTotalMedium = cachedTotalMinor = 0;
 
-        for (int i = 0; i < (int)numStrips; ++i)
+        for (size_t i = 0; i < numStrips; ++i)
         {
-            const auto& strip = *app.channelStrips[(size_t)i];
+            const auto& strip = *app.channelStrips[static_cast<int> (i)];
             const auto* buffer = strip.getAudioBuffer();
-            auto& s = cachedStats[(size_t)i];
+            auto& s = cachedStats[i];
             if (!buffer)
             {
                 s = {};

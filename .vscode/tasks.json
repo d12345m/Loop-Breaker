@@ -81,6 +81,66 @@
       "group": "test",
       "problemMatcher": [],
       "isBackground": false
+    },
+    {
+      "label": "Configure iOS (Xcode)",
+      "type": "shell",
+      "command": "cmake",
+      "args": [
+        "-S", "${workspaceFolder}",
+        "-B", "${workspaceFolder}/build-ios",
+        "-G", "Xcode",
+        "-DJUCE_DIR=${env:HOME}/JUCE",
+        "-DCMAKE_SYSTEM_NAME=iOS",
+        "-DCMAKE_OSX_SYSROOT=iphoneos",
+        "-DCMAKE_OSX_DEPLOYMENT_TARGET=15.0",
+        "-DLOOP_BREAKER_BUILD_TESTS=OFF"
+      ],
+      "problemMatcher": [],
+      "isBackground": false
+    },
+    {
+      "label": "Build iOS (Debug, unsigned)",
+      "type": "shell",
+      "command": "xcodebuild",
+      "args": [
+        "-project", "${workspaceFolder}/build-ios/LoopBreaker.xcodeproj",
+        "-scheme", "LoopBreaker_Standalone",
+        "-configuration", "Debug",
+        "-destination", "generic/platform=iOS",
+        "CODE_SIGNING_ALLOWED=NO",
+        "build"
+      ],
+      "dependsOn": "Configure iOS (Xcode)",
+      "group": "build",
+      "problemMatcher": ["$gcc"],
+      "isBackground": false
+    },
+    {
+      "label": "Build iOS (Release, unsigned)",
+      "type": "shell",
+      "command": "xcodebuild",
+      "args": [
+        "-project", "${workspaceFolder}/build-ios/LoopBreaker.xcodeproj",
+        "-scheme", "LoopBreaker_Standalone",
+        "-configuration", "Release",
+        "-destination", "generic/platform=iOS",
+        "CODE_SIGNING_ALLOWED=NO",
+        "build"
+      ],
+      "dependsOn": "Configure iOS (Xcode)",
+      "group": "build",
+      "problemMatcher": ["$gcc"],
+      "isBackground": false
+    },
+    {
+      "label": "Open iOS Project in Xcode",
+      "type": "shell",
+      "command": "open",
+      "args": ["${workspaceFolder}/build-ios/LoopBreaker.xcodeproj"],
+      "dependsOn": "Configure iOS (Xcode)",
+      "problemMatcher": [],
+      "isBackground": false
     }
   ]
 }

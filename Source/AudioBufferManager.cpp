@@ -22,8 +22,9 @@ AudioBufferManager::AudioBufferManager()
     // Initialize all buffers
     for (int i = 0; i < MAX_BUFFERS; ++i)
     {
-        buffers[i] = std::make_unique<AudioBuffer>(i);
-        buffers[i]->addListener(this);
+        auto& buffer = buffers[static_cast<size_t> (i)];
+        buffer = std::make_unique<AudioBuffer> (i);
+        buffer->addListener (this);
     }
 }
 
@@ -55,7 +56,7 @@ void AudioBufferManager::processBlock(juce::AudioBuffer<float>& outputBuffer)
     // Process and mix all loaded buffers
     for (int i = 0; i < (int)buffers.size(); ++i)
     {
-        auto& buffer = buffers[i];
+        auto& buffer = buffers[static_cast<size_t> (i)];
         if (buffer->hasAudioLoaded())
         {
             // Process the buffer into temp buffer without per-block allocation
@@ -146,14 +147,14 @@ void AudioBufferManager::releaseResources()
 AudioBuffer* AudioBufferManager::getBuffer(int bufferIndex)
 {
     if (isValidBufferIndex(bufferIndex))
-        return buffers[bufferIndex].get();
+        return buffers[static_cast<size_t> (bufferIndex)].get();
     return nullptr;
 }
 
 const AudioBuffer* AudioBufferManager::getBuffer(int bufferIndex) const
 {
     if (isValidBufferIndex(bufferIndex))
-        return buffers[bufferIndex].get();
+        return buffers[static_cast<size_t> (bufferIndex)].get();
     return nullptr;
 }
 
@@ -521,7 +522,7 @@ juce::Array<int> AudioBufferManager::getLoadedBufferIndices() const
     juce::Array<int> indices;
     for (int i = 0; i < MAX_BUFFERS; ++i)
     {
-        if (buffers[i]->hasAudioLoaded())
+        if (buffers[static_cast<size_t> (i)]->hasAudioLoaded())
             indices.add(i);
     }
     return indices;
@@ -532,7 +533,8 @@ juce::Array<int> AudioBufferManager::getPlayingBufferIndices() const
     juce::Array<int> indices;
     for (int i = 0; i < MAX_BUFFERS; ++i)
     {
-        if (buffers[i]->hasAudioLoaded() && buffers[i]->isPlaying())
+        const auto& buffer = buffers[static_cast<size_t> (i)];
+        if (buffer->hasAudioLoaded() && buffer->isPlaying())
             indices.add(i);
     }
     return indices;

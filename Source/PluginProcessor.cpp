@@ -71,8 +71,11 @@ BufferTestAudioProcessor::BufferTestAudioProcessor()
                                                          .withInput  ("Input", juce::AudioChannelSet::stereo(), true)
                                                         #endif
                                                          // Main bus is a stereo mix (what the track hosting the plugin hears in Ableton).
-                                                         // Pads 1..8 are exposed as additional stereo output buses.
                                                          .withOutput ("Mix",  juce::AudioChannelSet::stereo(), true)
+                                                        #if ! JUCE_IOS
+                                                         // Desktop plug-ins also expose pads 1..8 as
+                                                         // additional stereo output buses. The iOS
+                                                         // performance app deliberately has only Mix.
                                                          .withOutput ("Ch1",  juce::AudioChannelSet::stereo(), true)
                                                          .withOutput ("Ch2",  juce::AudioChannelSet::stereo(), true)
                                                          .withOutput ("Ch3",  juce::AudioChannelSet::stereo(), true)
@@ -81,6 +84,7 @@ BufferTestAudioProcessor::BufferTestAudioProcessor()
                                                          .withOutput ("Ch6",  juce::AudioChannelSet::stereo(), true)
                                                          .withOutput ("Ch7",  juce::AudioChannelSet::stereo(), true)
                                                          .withOutput ("Ch8",  juce::AudioChannelSet::stereo(), true)
+                                                        #endif
                                                      #endif
                                                          )
         , apvts (*this, nullptr, "BufferTestParams", createParamLayout())
@@ -263,7 +267,7 @@ bool BufferTestAudioProcessor::isBusesLayoutSupported (const BusesLayout& layout
     // Check all additional output buses (Ch1..Ch8)
     for (int busIndex = 1; busIndex < numOutputBuses; ++busIndex)
     {
-        const auto& busSet = layouts.outputBuses[(size_t) busIndex];
+        const auto& busSet = layouts.outputBuses[busIndex];
         if (! busSet.isDisabled() && busSet != juce::AudioChannelSet::stereo())
             return false;
     }
@@ -351,9 +355,9 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                 const auto& noteMap = app.settings.midiNoteMap;
                 for (int i = 0; i < 8; ++i)
                 {
-                    if (noteMap[i] == note)
+                    if (noteMap[static_cast<size_t> (i)] == note)
                     {
-                        midiPadToggleRequests[i].store(true);
+                        midiPadToggleRequests[static_cast<size_t> (i)].store (true);
                     }
                 }
             }
@@ -382,7 +386,7 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                     if (learnIdx < static_cast<int> (types.size())
                         && learnIdx < SessionSettings::kNumModifierTypes)
                     {
-                        app.settings.midiProbCCMap[learnIdx] = cc;
+                        app.settings.midiProbCCMap[static_cast<size_t> (learnIdx)] = cc;
                         learnedMidiCC.store (cc);             // signals the UI
                         midiCCLearnParamIndex.store (-1);     // exit learn mode
                     }
@@ -405,9 +409,10 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                                                       SessionSettings::kNumModifierTypes);
                     for (int idx = 0; idx < numMapped; ++idx)
                     {
-                        if (app.settings.midiProbCCMap[idx] == cc)
+                        if (app.settings.midiProbCCMap[static_cast<size_t> (idx)] == cc)
                         {
-                            const juce::String paramId = "prob_" + juce::String (static_cast<int> (types[idx]));
+                            const auto type = types[static_cast<size_t> (idx)];
+                            const juce::String paramId = "prob_" + juce::String (static_cast<int> (type));
                             if (auto* param = apvts.getParameter (paramId))
                                 param->setValueNotifyingHost (normValue);
                         }
@@ -448,7 +453,9 @@ void BufferTestAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             {
                 const float newWeight = rawVal->load();
                 probabilitiesChanged = probabilitiesChanged
-                                    || app.settings.modifierProbabilities.getWeight (type) != newWeight;
+                                    || ! juce::approximatelyEqual (
+                                           app.settings.modifierProbabilities.getWeight (type),
+                                           newWeight);
                 app.settings.modifierProbabilities.setWeight (type, newWeight);
             }
         }
@@ -917,7 +924,7 @@ void BufferTestAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
         juce::Array<juce::var> ccArr;
         ccArr.ensureStorageAllocated (SessionSettings::kNumModifierTypes);
         for (int i = 0; i < SessionSettings::kNumModifierTypes; ++i)
-            ccArr.add (app.settings.midiProbCCMap[i]);
+            ccArr.add (app.settings.midiProbCCMap[static_cast<size_t> (i)]);
         obj->setProperty ("midiProbCC", juce::var (ccArr));
     }
 
@@ -967,7 +974,7 @@ void BufferTestAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     juce::Array<juce::var> midiNotes;
     midiNotes.ensureStorageAllocated(8);
     for (int i = 0; i < 8; ++i)
-        midiNotes.add(app.settings.midiNoteMap[i]);
+        midiNotes.add (app.settings.midiNoteMap[static_cast<size_t> (i)]);
     obj->setProperty("midiNotes", juce::var(midiNotes));
 
     // Modifier toggle MIDI note
@@ -1001,7 +1008,7 @@ void BufferTestAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     obj->setProperty("backgroundMode", app.settings.backgroundMode);
 
     const juce::String json = juce::JSON::toString(juce::var(obj.get()), false);
-    destData.replaceWith(json.toRawUTF8(), (size_t) json.getNumBytesAsUTF8());
+    destData.replaceAll (json.toRawUTF8(), static_cast<size_t> (json.getNumBytesAsUTF8()));
 }
 
 void BufferTestAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
@@ -1066,7 +1073,8 @@ void BufferTestAudioProcessor::setStateInformation (const void* data, int sizeIn
                 const int n = juce::jmin (static_cast<int> (ccArr->size()),
                                           SessionSettings::kNumModifierTypes);
                 for (int i = 0; i < n; ++i)
-                    app.settings.midiProbCCMap[i] = static_cast<int> (ccArr->getReference (i));
+                    app.settings.midiProbCCMap[static_cast<size_t> (i)]
+                        = static_cast<int> (ccArr->getReference (i));
             }
         }
     }
@@ -1147,7 +1155,8 @@ void BufferTestAudioProcessor::setStateInformation (const void* data, int sizeIn
         {
             auto* midiArr = midiVar.getArray();
             for (int i = 0; i < juce::jmin((int) midiArr->size(), 8); ++i)
-                app.settings.midiNoteMap[i] = (int) midiArr->getReference(i);
+                app.settings.midiNoteMap[static_cast<size_t> (i)]
+                    = static_cast<int> (midiArr->getReference (i));
         }
     }
 
@@ -1314,21 +1323,11 @@ juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 }
 
 //==============================================================================
-// SoundTouch integration
-//
-// We don't have Projucer available in this environment to regenerate the Xcode project
-// with additional compilation units. To keep things simple and unblock development,
-// we compile SoundTouch by unity-including its .cpp files here.
-//
-// If/when you regenerate project files with Projucer, replace this with proper
-// compilation units in the Xcode project instead.
-#ifndef BUFFERTEST_ENABLE_SOUNDTOUCH
- #define BUFFERTEST_ENABLE_SOUNDTOUCH 1
-#endif
-
-#if BUFFERTEST_ENABLE_SOUNDTOUCH
- // SoundTouch sources use helper macros like `max(...)` in a few .cpp files.
- // In a unity build these can collide/redefine, so we aggressively undef around each include.
+// The CMake build compiles SoundTouch as a separate library so its vendored
+// sources do not inherit Loop Breaker's warning policy. The legacy Projucer
+// projects have no equivalent library target, so keep their shared-code archive
+// self-contained by compiling SoundTouch here.
+#if ! defined (LOOP_BREAKER_EXTERNAL_SOUNDTOUCH)
  #undef max
  #undef min
  #undef PI

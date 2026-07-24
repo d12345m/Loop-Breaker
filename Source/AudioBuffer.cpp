@@ -25,17 +25,19 @@ namespace TearingDebug
     constexpr float kMediumDiscontinuityThreshold = 0.15f; // 15% of full scale - medium pops
     constexpr float kMinorDiscontinuityThreshold = 0.10f;  // 10% of full scale - minor clicks (increased from 0.05)
     
+   #if JUCE_DEBUG
     // Threshold for consecutive zeros to be considered a "zero run"
     constexpr int kZeroRunThreshold = 64;  // ~1.5ms at 44.1kHz
-    
+
     // RMS jump detection threshold (ratio between consecutive blocks)
     constexpr float kRmsJumpThreshold = 3.0f;  // 3x RMS change is suspicious
-    
+
     // DC offset drift threshold — SoundTouch's overlap-add and RateTransposer
     // interpolation routinely shift block-level DC, especially with extreme rate
     // values (e.g. 0.25) where heavy interpolation is involved.  Keep this high
     // enough to avoid flooding the counter with false positives.
     constexpr float kDcOffsetThreshold = 0.40f;  // 40% DC drift (increased from 0.25)
+   #endif
     
     // Check if a sample value is valid (not NaN or Inf)
     inline bool isValidSample(float s)
@@ -124,8 +126,8 @@ namespace TearingDebug
 // AudioBuffer Implementation
 //==============================================================================
 
-AudioBuffer::AudioBuffer(int bufferIndex)
-    : bufferIndex(bufferIndex)
+AudioBuffer::AudioBuffer (int bufferIndexToUse)
+    : bufferIndex (bufferIndexToUse)
 {
     speedSmoother.reset(128); // Smooth parameter changes over ~3ms at 44.1kHz
     speedSmoother.setCurrentAndTargetValue(1.0);
@@ -434,6 +436,8 @@ void AudioBuffer::processBlock(juce::AudioBuffer<float>& outputBuffer)
                         
                         switch (level)
                         {
+                            case TearingDebug::DiscontinuityLevel::None:
+                                break;
                             case TearingDebug::DiscontinuityLevel::Major:
                                 tearingStats.discontinuities.fetch_add(1, std::memory_order_relaxed);
                                 DBG("[AudioBuffer " + juce::String(bufferIndex) + "] TEARING [MAJOR]: Discontinuity ch="
@@ -1347,29 +1351,33 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
 #if JUCE_DEBUG
     if (didReset)
     {
-        juce::String modifiers;
-        if (std::abs(snap.pitchSemis) > 0.01)
-            modifiers += " [PITCH]";
-        if (std::abs(snap.stretchRatio - 1.0) > 0.01)
-            modifiers += " [STRETCH]";
-        if (std::abs(snap.speed - 1.0) > 0.01)
-            modifiers += " [SPEED]";
-        if (direction < 0.0)
-            modifiers += " [REVERSE]";
-        if (slicingModeActive.load())
-            modifiers += " [SLICING]";
-        
-        DBG ("[AudioBuffer " + juce::String(bufferIndex) + "] SoundTouch RESET  speed=" + juce::String(snap.speed)
-             + " stretch=" + juce::String(snap.stretchRatio) + " pitch=" + juce::String(snap.pitchSemis)
-             + " dir=" + juce::String(direction) + " pos=" + juce::String(playheadPosition.load())
-             + " modifiers:" + modifiers);
         if (tearingDebugEnabled.load())
+        {
+            juce::String modifiers;
+            if (std::abs(snap.pitchSemis) > 0.01)
+                modifiers += " [PITCH]";
+            if (std::abs(snap.stretchRatio - 1.0) > 0.01)
+                modifiers += " [STRETCH]";
+            if (std::abs(snap.speed - 1.0) > 0.01)
+                modifiers += " [SPEED]";
+            if (direction < 0.0)
+                modifiers += " [REVERSE]";
+            if (slicingModeActive.load())
+                modifiers += " [SLICING]";
+
+            DBG ("[AudioBuffer " + juce::String(bufferIndex) + "] SoundTouch RESET  speed=" + juce::String(snap.speed)
+                 + " stretch=" + juce::String(snap.stretchRatio) + " pitch=" + juce::String(snap.pitchSemis)
+                 + " dir=" + juce::String(direction) + " pos=" + juce::String(playheadPosition.load())
+                 + " modifiers:" + modifiers);
             tearingStats.soundTouchResets.fetch_add(1, std::memory_order_relaxed);
+        }
     }
 #endif
 
     // Prepare SoundTouch when needed.
-    if (!stretcherPrepared || stretcherPreparedSampleRate != hostSampleRate || stretcherPreparedChannels != numChannels)
+    if (! stretcherPrepared
+        || ! juce::approximatelyEqual (stretcherPreparedSampleRate, hostSampleRate)
+        || stretcherPreparedChannels != numChannels)
     {
         stretcher.prepare(hostSampleRate, numChannels);
         // T9: Tune windows for reversed audio on initial prepare.
@@ -1392,7 +1400,7 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
         stretcher.setPitchSemiTones ((float) smoothedPitchSemis);
 
         // T9: When the direction changes, re-tune SoundTouch's overlap windows.
-        if (direction != lastStretchDirection)
+        if (std::signbit (direction) != std::signbit (lastStretchDirection))
         {
             stretcher.setWindowsForReverse (direction < 0.0);
             // §12: Direction flip invalidates the lookahead — boundary is now on the opposite side.
@@ -1419,8 +1427,7 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
     // Ensure scratch buffers are appropriately sized.
     // These are pre-allocated in prepare() at worst-case sizes.  The guard is
     // kept as a safety net but should never trigger in normal operation.
-    const int stretcherLatency = juce::jmax (0, stretcher.getLatencySamples());
-    if (stretchInScratch.getNumChannels() != numChannels || stretchInScratch.getNumSamples() < maxInputChunkFrames)
+    if (stretchInScratch.getNumChannels() < numChannels || stretchInScratch.getNumSamples() < maxInputChunkFrames)
     {
         jassertfalse; // scratch buffer should have been pre-allocated in prepare()
         stretchInScratch.setSize (numChannels, maxInputChunkFrames, false, false, true);
@@ -1864,7 +1871,7 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                 lookaheadNextSliceReadPos = getSliceEndPosition(nextSlice, fileLengthSamples) - 1.0;
 
 #if JUCE_DEBUG
-            DBG("[AudioBuffer " + juce::String(bufferIndex) + "] §12 LOOKAHEAD START: "
+            DBG("[AudioBuffer " + juce::String(bufferIndex) + "] SECTION 12 LOOKAHEAD START: "
                 "nextSlice=" + juce::String(nextSlice) +
                 " dist=" + juce::String(distToBoundary, 0) +
                 " xfadeLen=" + juce::String(lookaheadCrossfadeSamples));
@@ -2123,29 +2130,38 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
                                              (int) std::ceil (rawLatency * primeScale));
         if (primeSamples > 0)
         {
-            // Ensure scratch is large enough for the priming chunk.
-            // Pre-allocated in prepare(); guard kept as safety net.
-            if (stretchInScratch.getNumChannels() != numChannels
-                || stretchInScratch.getNumSamples() < primeSamples)
-            {
-                jassertfalse; // scratch buffer should have been pre-allocated in prepare()
-                stretchInScratch.setSize (numChannels, primeSamples, false, false, true);
-            }
+            // SoundTouch's initial latency is independent of the host block
+            // size and can exceed our pre-allocated scratch capacity on iOS.
+            // Feed the prime in bounded chunks instead of allocating a larger
+            // buffer from the real-time audio thread.
+            const int primeChunkCapacity = stretchInScratch.getNumSamples();
+            jassert (stretchInScratch.getNumChannels() >= numChannels);
+            jassert (primeChunkCapacity > 0);
 
-            const int primed = fillInputScratch (primeSamples);
-            if (primed > 0)
+            int primeSamplesRemaining = primeSamples;
+            while (primeSamplesRemaining > 0 && primeChunkCapacity > 0)
             {
-                // §6.2  Use stack-allocated array instead of std::vector to avoid
-                // heap allocation on the audio thread (stereo is the max channel count).
+                const int requested = juce::jmin (primeSamplesRemaining,
+                                                  primeChunkCapacity);
+                const int primed = fillInputScratch (requested);
+                if (primed <= 0)
+                    break;
+
+                // §6.2  Use a stack-allocated array instead of std::vector
+                // (stereo is the maximum supported channel count).
                 std::array<const float*, 2> primePtrs {};
                 for (int ch = 0; ch < numChannels; ++ch)
                     primePtrs[(size_t) ch] = stretchInScratch.getReadPointer (ch);
 
-                // Feed to SoundTouch but don't try to drain output yet — this just
-                // fills the internal pipeline so the drain loop below won't starve.
+                // Feed SoundTouch without draining. The regular processing loop
+                // below consumes the primed output.
                 stretcher.processNonInterleaved (primePtrs.data(), primed,
                                                  nullptr, 0, false,
                                                  stretchInterleavedIn, stretchInterleavedOut);
+
+                primeSamplesRemaining -= primed;
+                if (primed < requested)
+                    break;
             }
         }
     }
@@ -2157,17 +2173,43 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
     std::array<float*, 2> outPtrs {};
     std::array<const float*, 2> inPtrs {};
 
-    // Cap iterations: with proportional feed sizes we should fill the block in 2-4 iterations
-    // in steady state.  During initial warmup or at high effective ratios (e.g. speed=2 + oct+)
-    // more iterations may be needed to fill SoundTouch's internal pipeline.
+    auto setInputPointers = [&]
+    {
+        for (int ch = 0; ch < numChannels; ++ch)
+            inPtrs[(size_t) ch] = stretchInScratch.getReadPointer (ch);
+    };
+
+    auto setOutputPointers = [&]
+    {
+        for (int ch = 0; ch < numChannels; ++ch)
+            outPtrs[(size_t) ch] = outputBuffer.getWritePointer (ch) + framesWritten;
+    };
+
+    // Keep SoundTouch's input pipeline supplied continuously. The previous
+    // drain-first loop only fed input after its batched output queue became
+    // empty, which caused repeated starvation on small iOS host blocks.
+    const int steadyInputFrames = juce::jlimit (
+        1, maxInputChunkFrames,
+        (int) std::ceil (numOutputSamples * totalTempoRatioForIO));
+    const int steadyFramesFilled = fillInputScratch (steadyInputFrames);
+    if (steadyFramesFilled > 0)
+    {
+        setInputPointers();
+        setOutputPointers();
+        framesWritten = stretcher.processNonInterleaved (
+            inPtrs.data(), steadyFramesFilled,
+            outPtrs.data(), numOutputSamples, false,
+            stretchInterleavedIn, stretchInterleavedOut);
+    }
+
+    // Recovery is normally unnecessary after priming. Keep it bounded for
+    // ratio changes and SoundTouch's batch boundaries.
     while (framesWritten < numOutputSamples && safetyIters++ < 24)
     {
         const int remaining = numOutputSamples - framesWritten;
-        for (int ch = 0; ch < numChannels; ++ch)
-            outPtrs[ch] = outputBuffer.getWritePointer (ch) + framesWritten;
+        setOutputPointers();
 
-        // 1) Drain any already-buffered output without consuming input.
-        //    Skip the drain call entirely if SoundTouch has nothing ready (avoids interleave overhead).
+        // Drain any already-buffered output before recovery-feeding.
         if (stretcher.numSamplesAvailable() > 0)
         {
             const int drained = stretcher.processNonInterleaved (nullptr, 0, outPtrs.data(), remaining, false,
@@ -2179,8 +2221,7 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
             }
         }
 
-        // 2) Feed more input and try again.
-        //    Feed just enough to produce `remaining` output frames, plus a small margin.
+        // Feed enough extra input to cross a SoundTouch batch boundary.
         //    Use totalTempoRatioForIO (not just the stretch ratio) because when pitch
         //    shifting is active, the speed magnitude is routed through SoundTouch's
         //    tempo control, so it consumes more input per output frame.
@@ -2189,26 +2230,12 @@ void AudioBuffer::processWithTimeStretch(juce::AudioBuffer<float>& outputBuffer,
 
         const int framesFilled = fillInputScratch (inputChunkFrames);
         if (framesFilled <= 0)
-        {
-#if JUCE_DEBUG
-            DBG ("[AudioBuffer " + juce::String(bufferIndex) + "] fillInputScratch returned 0, breaking. remaining=" 
-                 + juce::String(remaining) + " inputChunkFrames=" + juce::String(inputChunkFrames));
-#endif
             break;
-        }
 
-        for (int ch = 0; ch < numChannels; ++ch)
-            inPtrs[ch] = stretchInScratch.getReadPointer (ch);
+        setInputPointers();
 
         const int produced = stretcher.processNonInterleaved (inPtrs.data(), framesFilled, outPtrs.data(), remaining, false,
                                                              stretchInterleavedIn, stretchInterleavedOut);
-#if JUCE_DEBUG
-        if (produced == 0 && framesFilled > 0)
-        {
-            DBG ("[AudioBuffer " + juce::String(bufferIndex) + "] SoundTouch produced 0 from " + juce::String(framesFilled) 
-                 + " input frames. avail=" + juce::String(stretcher.numSamplesAvailable()));
-        }
-#endif
         if (produced > 0)
             framesWritten += produced;
     }
@@ -2621,10 +2648,8 @@ double AudioBuffer::getSliceEndPosition(int sliceIndex, int fileLengthSamples) c
 // §12 Lookahead pre-priming helpers
 //==============================================================================
 
-int AudioBuffer::getNextSliceIndex(int currentSlice, int fileLengthSamples) const
+int AudioBuffer::getNextSliceIndex (int, int) const
 {
-    (void) fileLengthSamples; // may be used in future for validation
-
     // Arp / slice repeater mode — sequence is pre-built and deterministic
     if (params.arpSliceActive && !params.arpSequence.empty())
     {

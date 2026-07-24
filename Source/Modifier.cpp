@@ -79,14 +79,16 @@ std::unique_ptr<IModifier> ModifierFactory::createInstance(ModifierType type)
     {
         if (m->getDescriptor().type == type)
         {
-            switch (type)
-            {
-                case ModifierType::Reverse:   return std::make_unique<ReverseModifier>();
-                case ModifierType::Speed:     return std::make_unique<SpeedModifier>();
-                case ModifierType::ResetAll:  return std::make_unique<ResetAllModifier>();
-                case ModifierType::PingPong:  return std::make_unique<PingPongModifier>();
-                default: return std::unique_ptr<IModifier>(new SimpleModifierBase(m->getDescriptor()));
-            }
+            if (type == ModifierType::Reverse)
+                return std::make_unique<ReverseModifier>();
+            if (type == ModifierType::Speed)
+                return std::make_unique<SpeedModifier>();
+            if (type == ModifierType::ResetAll)
+                return std::make_unique<ResetAllModifier>();
+            if (type == ModifierType::PingPong)
+                return std::make_unique<PingPongModifier>();
+
+            return std::make_unique<SimpleModifierBase> (m->getDescriptor());
         }
     }
     return {};

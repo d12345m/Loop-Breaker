@@ -39,7 +39,9 @@ public:
     void prepareDSP(double sampleRate, int blockSize)
     {
         // Prepare once or when configuration changes; do NOT reset every audio block
-        if (!reverbPrepared || lastSampleRate != sampleRate || lastBlockSize != blockSize)
+        if (! reverbPrepared
+            || ! juce::approximatelyEqual (lastSampleRate, sampleRate)
+            || lastBlockSize != blockSize)
         {
             juce::dsp::ProcessSpec spec { sampleRate, (juce::uint32) blockSize, 2 };
             reverb.reset();

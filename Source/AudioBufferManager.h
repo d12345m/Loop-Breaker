@@ -43,7 +43,7 @@ public:
     static constexpr int MAX_BUFFERS = 8; // Match the MPC-style interface from DesignDoc
     
     AudioBufferManager();
-    ~AudioBufferManager() = default;
+    ~AudioBufferManager() override = default;
     
     //==============================================================================
     // Setup and lifecycle

@@ -32,11 +32,50 @@ if(NOT DEFINED JUCE_DIR)
 endif()
 add_subdirectory("${JUCE_DIR}" "${CMAKE_BINARY_DIR}/JUCE" EXCLUDE_FROM_ALL)
 
-# ─── CLAP extensions ──────────────────────────────────────────────────────────
-add_subdirectory(Submodules/clap-juce-extensions EXCLUDE_FROM_ALL)
+# ─── Platform build shape ─────────────────────────────────────────────────────
+# iOS is a focused device-performance target: a standalone app with one stereo
+# output bus. Desktop builds keep the existing plug-in formats and CLAP support.
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    set(LOOP_BREAKER_IOS TRUE)
+    set(LOOP_BREAKER_FORMATS Standalone)
+    set(LOOP_BREAKER_BUNDLE_ID com.glowmachineaudio.LoopBreaker.iOS)
+else()
+    set(LOOP_BREAKER_IOS FALSE)
+    set(LOOP_BREAKER_FORMATS VST3 AU AUv3)
+    set(LOOP_BREAKER_BUNDLE_ID com.glowmachineaudio.LoopBreaker)
 
-# ─── SoundTouch (header-only for us — sources are unity-included) ────────────
+    # CLAP is a desktop-only format.
+    add_subdirectory(Submodules/clap-juce-extensions EXCLUDE_FROM_ALL)
+endif()
+
+# ─── SoundTouch ──────────────────────────────────────────────────────────────
 set(SOUNDTOUCH_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/soundtouch/include")
+set(SOUNDSTRETCH OFF CACHE BOOL "Build the SoundTouch command-line utility")
+# SoundTouch still declares compatibility with CMake 3.5. Tell modern CMake to
+# apply at least 3.10 policy behavior without modifying the vendored submodule.
+set(CMAKE_POLICY_VERSION_MINIMUM 3.10)
+
+# SoundTouch probes OpenMP even when its OPENMP option is OFF. Avoid a
+# misleading "Could NOT find OpenMP" message while preserving explicit opt-in.
+if(NOT OPENMP)
+    set(_LOOP_BREAKER_SUPPRESS_OPENMP_PROBE TRUE)
+    if(DEFINED CMAKE_DISABLE_FIND_PACKAGE_OpenMP)
+        set(_LOOP_BREAKER_OPENMP_DISABLE_WAS_DEFINED TRUE)
+        set(_LOOP_BREAKER_OPENMP_DISABLE_VALUE "${CMAKE_DISABLE_FIND_PACKAGE_OpenMP}")
+    endif()
+    set(CMAKE_DISABLE_FIND_PACKAGE_OpenMP TRUE)
+endif()
+add_subdirectory(ThirdParty/soundtouch EXCLUDE_FROM_ALL)
+if(_LOOP_BREAKER_SUPPRESS_OPENMP_PROBE)
+    if(_LOOP_BREAKER_OPENMP_DISABLE_WAS_DEFINED)
+        set(CMAKE_DISABLE_FIND_PACKAGE_OpenMP "${_LOOP_BREAKER_OPENMP_DISABLE_VALUE}")
+    else()
+        unset(CMAKE_DISABLE_FIND_PACKAGE_OpenMP)
+    endif()
+endif()
+unset(_LOOP_BREAKER_SUPPRESS_OPENMP_PROBE)
+unset(_LOOP_BREAKER_OPENMP_DISABLE_WAS_DEFINED)
+unset(_LOOP_BREAKER_OPENMP_DISABLE_VALUE)
 
 # ─── Binary Resources ────────────────────────────────────────────────────────
 juce_add_binary_data(LoopBreakerBinaryData
@@ -61,14 +100,32 @@ juce_add_plugin(LoopBreaker
     PRODUCES_MIDI_OUTPUT     FALSE
     IS_MIDI_EFFECT           FALSE
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
-    FORMATS                  VST3 AU AUv3
+    FORMATS                  ${LOOP_BREAKER_FORMATS}
     VST3_CATEGORIES          Instrument
     AU_MAIN_TYPE             kAudioUnitType_MusicDevice
     HARDENED_RUNTIME_ENABLED TRUE
-    BUNDLE_ID                com.glowmachineaudio.LoopBreaker
+    BUNDLE_ID                ${LOOP_BREAKER_BUNDLE_ID}
     PRODUCT_NAME             "Loop Breaker"
     COPY_PLUGIN_AFTER_BUILD  FALSE
+    MICROPHONE_PERMISSION_ENABLED FALSE
+    FILE_SHARING_ENABLED     TRUE
+    DOCUMENT_BROWSER_ENABLED TRUE
+    STATUS_BAR_HIDDEN        TRUE
+    BACKGROUND_AUDIO_ENABLED FALSE
+    TARGETED_DEVICE_FAMILY   1
+    REQUIRES_FULL_SCREEN     TRUE
+    IPHONE_SCREEN_ORIENTATIONS UIInterfaceOrientationPortrait
+    IPAD_SCREEN_ORIENTATIONS   UIInterfaceOrientationPortrait
 )
+
+if(LOOP_BREAKER_IOS AND CMAKE_GENERATOR STREQUAL "Xcode")
+    # Device testing is primarily a performance exercise. Make Xcode's Run
+    # action use the optimized build; Debug remains selectable for assertions.
+    set_target_properties(LoopBreaker_Standalone PROPERTIES
+        XCODE_GENERATE_SCHEME TRUE
+        XCODE_SCHEME_LAUNCH_CONFIGURATION Release
+    )
+endif()
 
 juce_generate_juce_header(LoopBreaker)
 
@@ -83,10 +140,15 @@ target_sources(LoopBreaker PRIVATE
     Source/ModifierStickerOverlay.cpp
     Source/ModifierScheduler.cpp
     Source/ProjectManager.cpp
-    Source/ModifierSchedulerTests.cpp
-    Source/ModifierStickerTests.cpp
     Source/ThemeEngine.cpp
 )
+
+if(NOT LOOP_BREAKER_IOS)
+    target_sources(LoopBreaker PRIVATE
+        Source/ModifierSchedulerTests.cpp
+        Source/ModifierStickerTests.cpp
+    )
+endif()
 
 # Refresh the version and build timestamp before compiling the plug-in.  Making
 # this a dependency (rather than using PRE_BUILD, which is generator-specific)
@@ -101,9 +163,9 @@ add_dependencies(LoopBreaker LoopBreakerBuildInfo)
 
 target_include_directories(LoopBreaker PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/Source"
-    "${SOUNDTOUCH_INCLUDE_DIR}"
     "${CMAKE_CURRENT_SOURCE_DIR}/Submodules"
 )
+target_include_directories(LoopBreaker SYSTEM PRIVATE "${SOUNDTOUCH_INCLUDE_DIR}")
 
 # Match Projucer's addUsingNamespaceToJuceHeader="0" —
 # prevents juce::AudioBuffer from colliding with project's AudioBuffer class.
@@ -114,28 +176,34 @@ target_compile_definitions(LoopBreaker PUBLIC
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
 )
+target_compile_definitions(LoopBreaker PRIVATE
+    LOOP_BREAKER_EXTERNAL_SOUNDTOUCH=1
+)
 
-# ─── CLAP target ──────────────────────────────────────────────────────────────
-clap_juce_extensions_plugin(TARGET LoopBreaker
-    CLAP_ID "com.glowmachineaudio.LoopBreaker"
-    CLAP_FEATURES instrument synthesizer)
+if(NOT LOOP_BREAKER_IOS)
+    # ─── CLAP target ──────────────────────────────────────────────────────────
+    clap_juce_extensions_plugin(TARGET LoopBreaker
+        CLAP_ID "com.glowmachineaudio.LoopBreaker"
+        CLAP_FEATURES instrument synthesizer)
 
-# ─── pluginval (plugin validation) ────────────────────────────────────────────
-add_subdirectory("Submodules/pluginval")
+    # ─── pluginval (plugin validation) ────────────────────────────────────────
+    add_subdirectory("Submodules/pluginval")
 
-# Custom validation target using VST3 (AU requires system-level installation on macOS)
-set(PLUGINVAL_STRICTNESS 5 CACHE STRING "pluginval strictness level (1-10)")
-get_target_property(vst3_artefact LoopBreaker_VST3 JUCE_PLUGIN_ARTEFACT_FILE)
-add_custom_target(validate
-    COMMAND $<TARGET_FILE:pluginval>
-        --validate "${vst3_artefact}"
-        --strictness-level ${PLUGINVAL_STRICTNESS}
-    DEPENDS pluginval LoopBreaker_VST3
-    COMMENT "Running pluginval on VST3 (strictness ${PLUGINVAL_STRICTNESS})")
+    # Custom validation target using VST3 (AU requires system-level installation on macOS)
+    set(PLUGINVAL_STRICTNESS 5 CACHE STRING "pluginval strictness level (1-10)")
+    get_target_property(vst3_artefact LoopBreaker_VST3 JUCE_PLUGIN_ARTEFACT_FILE)
+    add_custom_target(validate
+        COMMAND $<TARGET_FILE:pluginval>
+            --validate "${vst3_artefact}"
+            --strictness-level ${PLUGINVAL_STRICTNESS}
+        DEPENDS pluginval LoopBreaker_VST3
+        COMMENT "Running pluginval on VST3 (strictness ${PLUGINVAL_STRICTNESS})")
+endif()
 
 target_link_libraries(LoopBreaker
     PRIVATE
         LoopBreakerBinaryData
+        SoundTouch
         juce::juce_audio_basics
         juce::juce_audio_devices
         juce::juce_audio_formats
@@ -160,7 +228,7 @@ target_link_libraries(LoopBreaker
 # This console target makes the same suite runnable from CMake/CTest without a
 # DAW or an Xcode test-host scheme.
 option(LOOP_BREAKER_BUILD_TESTS "Build the Loop Breaker unit-test runner" ON)
-if(LOOP_BREAKER_BUILD_TESTS)
+if(LOOP_BREAKER_BUILD_TESTS AND NOT LOOP_BREAKER_IOS)
     enable_testing()
     juce_add_console_app(LoopBreakerTests PRODUCT_NAME "Loop Breaker Tests")
     juce_generate_juce_header(LoopBreakerTests)
@@ -173,9 +241,9 @@ if(LOOP_BREAKER_BUILD_TESTS)
     )
     target_include_directories(LoopBreakerTests PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/Source"
-        "${SOUNDTOUCH_INCLUDE_DIR}"
         "${CMAKE_CURRENT_SOURCE_DIR}/Submodules"
     )
+    target_include_directories(LoopBreakerTests SYSTEM PRIVATE "${SOUNDTOUCH_INCLUDE_DIR}")
     target_compile_definitions(LoopBreakerTests PRIVATE
         JUCE_UNIT_TESTS=1
         DONT_SET_USING_JUCE_NAMESPACE=1
@@ -183,15 +251,25 @@ if(LOOP_BREAKER_BUILD_TESTS)
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
     )
+    add_dependencies(LoopBreakerTests LoopBreaker)
     target_link_libraries(LoopBreakerTests PRIVATE
-        LoopBreaker
+        "$<TARGET_FILE:LoopBreaker>"
         LoopBreakerBinaryData
+        SoundTouch
+        clap_juce_extensions
+        juce::juce_audio_basics
+        juce::juce_audio_devices
         juce::juce_audio_formats
+        juce::juce_audio_processors
         juce::juce_audio_utils
         juce::juce_core
+        juce::juce_cryptography
+        juce::juce_data_structures
+        juce::juce_dsp
         juce::juce_events
         juce::juce_graphics
         juce::juce_gui_basics
+        juce::juce_gui_extra
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags
     )

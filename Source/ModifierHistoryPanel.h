@@ -58,7 +58,7 @@ public:
     {
         auto area = getLocalBounds().reduced(2);
         auto header = area.removeFromTop(22);
-        auto leftHeader = header.removeFromLeft(header.getWidth() * 0.5f);
+        auto leftHeader = header.removeFromLeft (header.getWidth() / 2);
         titleLabel.setBounds(leftHeader);
         countLabel.setBounds(header.removeFromLeft(header.getWidth() - 60));
         clearButton.setBounds(header);
@@ -100,19 +100,18 @@ public:
         const auto& e = entries.getReference(rowNumber);
 
         juce::Colour typeColour = Theme::textSubtle();
-        switch (e.type)
-        {
-            case ModifierType::Reverse:         typeColour = Theme::accent2(); break;
-            case ModifierType::Speed:           typeColour = Theme::accent(); break;
-            case ModifierType::ResetAll:        typeColour = Theme::warn(); break;
-            case ModifierType::BeatSliceRandom: typeColour = Theme::good(); break;
-            case ModifierType::ArpSlice:        typeColour = Theme::good(); break;
-            case ModifierType::SliceRepeater:   typeColour = Theme::good(); break;
-            case ModifierType::SwapModifierStack: typeColour = Theme::accent2(); break;
-            case ModifierType::BufferGranularOn:
-            case ModifierType::BufferGranularMomentary: typeColour = Theme::accent(); break;
-            default:                            typeColour = Theme::textSubtle(); break;
-        }
+        if (e.type == ModifierType::Reverse || e.type == ModifierType::SwapModifierStack)
+            typeColour = Theme::accent2();
+        else if (e.type == ModifierType::Speed
+                 || e.type == ModifierType::BufferGranularOn
+                 || e.type == ModifierType::BufferGranularMomentary)
+            typeColour = Theme::accent();
+        else if (e.type == ModifierType::ResetAll)
+            typeColour = Theme::warn();
+        else if (e.type == ModifierType::BeatSliceRandom
+                 || e.type == ModifierType::ArpSlice
+                 || e.type == ModifierType::SliceRepeater)
+            typeColour = Theme::good();
 
     juce::String extra = e.details.isNotEmpty() ? ("  |  " + e.details) : juce::String();
     auto text = e.timeString + "  |  " + e.modifier + "  ->  " + e.targets + extra;

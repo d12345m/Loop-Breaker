@@ -808,7 +808,7 @@ void ThemeEngine::setTheme (const juce::String& themeName)
     }
 
     // Removed/unknown saved themes migrate to the product default.
-    DBG ("ThemeEngine::setTheme — unknown theme name: " + themeName);
+    DBG ("ThemeEngine::setTheme - unknown theme name: " + themeName);
     if (const auto* fallback = getBuiltInPalette ("Control Surface"))
         setTheme (*fallback);
 }

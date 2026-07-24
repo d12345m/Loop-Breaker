@@ -42,8 +42,23 @@ public:
             auto* btn = padButtons.add(new juce::ToggleButton(""));
             btn->setLookAndFeel(&invisibleToggleLF);
             btn->setClickingTogglesState(true);
-            btn->onClick = [this, btn]
-            { 
+            btn->onClick = [this, btn, i]
+            {
+                juce::ignoreUnused (i);
+               #if JUCE_IOS
+                const bool padIsEmpty = i >= padFileNames.size()
+                                     || padFileNames[i].isEmpty();
+                if (padIsEmpty && onLoadSampleRequest)
+                {
+                    // An empty pad is drawn with a large "+" affordance. On a
+                    // touch-only device, make that primary tap open Files
+                    // instead of requiring an inaccessible right-click menu.
+                    btn->setToggleState (false, juce::dontSendNotification);
+                    onLoadSampleRequest (i);
+                    return;
+                }
+               #endif
+
                 // Skip selection change if Shift (MIDI learn), Cmd (clear MIDI), or right-click was held
                 auto mods = juce::ModifierKeys::currentModifiers;
                 if (mods.isShiftDown() || mods.isCommandDown() || mods.isAltDown()
@@ -533,7 +548,7 @@ private:
         // Truncate long names for compact display
         const int maxChars = 10;
         if (name.length() > maxChars)
-            name = name.substring(0, maxChars - 1) + "…";
+            name = name.substring(0, maxChars - 3) + "...";
         // Colour-code missing pads to draw attention
         padFileLabels[padIndex]->setColour(juce::Label::textColourId, isMissing ? Theme::bad() : Theme::textSubtle());
         padFileLabels[padIndex]->setText(name, juce::dontSendNotification);

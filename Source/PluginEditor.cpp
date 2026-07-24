@@ -166,7 +166,7 @@ public:
 
         padGrid.onClearMidiNote = [this](int padIndex)
         {
-            app.settings.midiNoteMap[padIndex] = -1;
+            app.settings.midiNoteMap[static_cast<size_t> (padIndex)] = -1;
             padGrid.setMidiNoteForPad(padIndex, -1);
         };
 
@@ -188,19 +188,30 @@ public:
                 juce::File::getSpecialLocation(juce::File::userHomeDirectory),
                 "*.wav;*.aif;*.aiff;*.flac;*.mp3");
 
+            auto safeThis = juce::Component::SafePointer<PluginEditorContent> (this);
             fileChooser->launchAsync(
                 juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
-                [this, padIndex](const juce::FileChooser& fc)
+                [safeThis, padIndex](const juce::FileChooser& fc)
                 {
+                    auto* self = safeThis.getComponent();
+                    if (self == nullptr)
+                        return;
+
+                   #if JUCE_IOS
+                    const auto result = fc.getURLResult();
+                    if (! result.isEmpty())
+                        self->importIOSFileIntoPad (padIndex, result);
+                   #else
                     auto result = fc.getResult();
                     if (result.existsAsFile())
-                        loadFileIntoPad(padIndex, result);
+                        self->loadFileIntoPad(padIndex, result);
+                   #endif
                 });
         };
 
         // Initialize pad MIDI notes from settings
         for (int i = 0; i < 8; ++i)
-            padGrid.setMidiNoteForPad(i, app.settings.midiNoteMap[i]);
+            padGrid.setMidiNoteForPad (i, app.settings.midiNoteMap[static_cast<size_t> (i)]);
 
         // ── Preset bar (A–H) ──
         addAndMakeVisible(presetBar);
@@ -264,6 +275,10 @@ public:
     ~PluginEditorContent() override
     {
         stopTimer();
+       #if JUCE_IOS
+        fileChooser.reset();
+        iosFileImportPool.removeAllJobs (true, 5000);
+       #endif
         ThemeEngine::getInstance().removeListener(this);
         app.scheduler.removeListener(this);
         masterVolumeSlider.removeMouseListener (this);
@@ -620,31 +635,25 @@ public:
             // update every sticker together.
             self->syncModifierStickers();
 
-            switch (desc.type)
+            if (desc.type == ModifierType::ResetAll)
             {
-                case ModifierType::ResetAll:
-                    self->padGrid.clearModifierStickers(targets);
-                    self->syncModifierStickers();
-                    break;
-                case ModifierType::SwitchPart:
-                    self->padGrid.showTransientModifierSticker(
-                        desc.type, {}, 900.0);
-                    break;
-                case ModifierType::QuarterNoteBurst:
-                {
-                    const double durationMs = 1000.0
-                        * desc.plannedBurstBars.value_or(1)
-                        * self->app.settings.getSecondsPerBar();
-                    self->padGrid.showTransientModifierSticker(
-                        desc.type, {}, durationMs);
-                    break;
-                }
-                case ModifierType::SwapModifierStack:
-                    self->padGrid.showTransientModifierSticker(
-                        desc.type, targets, 1100.0);
-                    break;
-                default:
-                    break;
+                self->padGrid.clearModifierStickers (targets);
+                self->syncModifierStickers();
+            }
+            else if (desc.type == ModifierType::SwitchPart)
+            {
+                self->padGrid.showTransientModifierSticker (desc.type, {}, 900.0);
+            }
+            else if (desc.type == ModifierType::QuarterNoteBurst)
+            {
+                const double durationMs = 1000.0
+                    * desc.plannedBurstBars.value_or (1)
+                    * self->app.settings.getSecondsPerBar();
+                self->padGrid.showTransientModifierSticker (desc.type, {}, durationMs);
+            }
+            else if (desc.type == ModifierType::SwapModifierStack)
+            {
+                self->padGrid.showTransientModifierSticker (desc.type, targets, 1100.0);
             }
 
             if (! targets.isEmpty())
@@ -714,6 +723,29 @@ private:
 
     std::unique_ptr<juce::FileChooser> fileChooser;
 
+   #if JUCE_IOS
+    class FunctionThreadPoolJob final : public juce::ThreadPoolJob
+    {
+    public:
+        explicit FunctionThreadPoolJob (std::function<void()> taskToRun)
+            : juce::ThreadPoolJob ("Import iOS audio file"),
+              task (std::move (taskToRun))
+        {
+        }
+
+        JobStatus runJob() override
+        {
+            task();
+            return jobHasFinished;
+        }
+
+    private:
+        std::function<void()> task;
+    };
+
+    juce::ThreadPool iosFileImportPool { 1 };
+   #endif
+
     bool padPathsSynced = false; // true once pad file paths have been synced to the UI after state restore
     bool portraitLayout = false;
     std::array<double, 8> lastPlayheadSamples {{ 0, 0, 0, 0, 0, 0, 0, 0 }};
@@ -777,6 +809,104 @@ private:
         app.settings.padFilePaths.set(padIndex, file.getFullPathName());
         padGrid.setPadFilePath(padIndex, file.getFullPathName());
     }
+
+   #if JUCE_IOS
+    static juce::File copyPickedURLToIOSContainer (const juce::URL& source,
+                                                   juce::String& error)
+    {
+        auto importDirectory =
+            juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+                .getChildFile ("Imported Audio");
+
+        if (auto result = importDirectory.createDirectory(); result.failed())
+        {
+            error = result.getErrorMessage();
+            return {};
+        }
+
+        auto originalName = juce::File::createLegalFileName (source.getFileName());
+        if (originalName.isEmpty())
+            originalName = "Imported Audio.wav";
+
+        // A bare filename is not a valid juce::File on iOS (or any POSIX
+        // platform in a debug build). Resolve it against the absolute sandbox
+        // directory before asking JUCE to split the stem and extension.
+        const auto sourceName = importDirectory.getChildFile (originalName);
+        const auto destination = importDirectory.getNonexistentChildFile (
+            sourceName.getFileNameWithoutExtension(),
+            sourceName.getFileExtension(),
+            false);
+
+        auto input = source.createInputStream (
+            juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inAddress));
+        if (input == nullptr)
+        {
+            error = "The selected file could not be opened.";
+            return {};
+        }
+
+        juce::TemporaryFile temporary (destination);
+        auto output = temporary.getFile().createOutputStream();
+        if (output == nullptr || ! output->openedOk())
+        {
+            error = "The selected file could not be copied into the app.";
+            return {};
+        }
+
+        output->writeFromInputStream (*input, -1);
+        output->flush();
+        const auto writeStatus = output->getStatus();
+        output.reset();
+        input.reset();
+
+        if (writeStatus.failed())
+        {
+            error = writeStatus.getErrorMessage();
+            return {};
+        }
+
+        if (! temporary.overwriteTargetFileWithTemporary())
+        {
+            error = "The imported audio file could not be finalised.";
+            return {};
+        }
+
+        return destination;
+    }
+
+    void importIOSFileIntoPad (int padIndex, const juce::URL& source)
+    {
+        auto safeThis = juce::Component::SafePointer<PluginEditorContent> (this);
+
+        iosFileImportPool.addJob (
+            new FunctionThreadPoolJob ([safeThis, padIndex, source]
+            {
+                juce::String error;
+                const auto importedFile = copyPickedURLToIOSContainer (source, error);
+
+                juce::MessageManager::callAsync (
+                    [safeThis, padIndex, importedFile, error]
+                    {
+                        auto* self = safeThis.getComponent();
+                        if (self == nullptr)
+                            return;
+
+                        if (importedFile.existsAsFile())
+                        {
+                            self->loadFileIntoPad (padIndex, importedFile);
+                            return;
+                        }
+
+                        juce::AlertWindow::showMessageBoxAsync (
+                            juce::AlertWindow::WarningIcon,
+                            "Import Failed",
+                            error.isNotEmpty() ? error
+                                               : "The selected audio file could not be imported.");
+                    });
+            }),
+            true);
+    }
+   #endif
 
     void loadDroppedFiles(int startPadIndex, const juce::StringArray& files)
     {
@@ -909,7 +1039,7 @@ private:
             else if (padIndex >= 0 && padIndex < 8)
             {
                 DBG("Assigning note " + juce::String(learnedNote) + " to pad " + juce::String(padIndex));
-                app.settings.midiNoteMap[padIndex] = learnedNote;
+                app.settings.midiNoteMap[static_cast<size_t> (padIndex)] = learnedNote;
                 padGrid.setMidiNoteForPad(padIndex, learnedNote);
                 padGrid.setMidiLearnForPad(padIndex, false);
                 processor.setMidiLearnMode(false, -1);
@@ -946,7 +1076,8 @@ private:
             {
                 padGrid.setPadFilePaths(app.settings.padFilePaths);
                 for (int i = 0; i < 8; ++i)
-                    padGrid.setMidiNoteForPad(i, app.settings.midiNoteMap[i]);
+                    padGrid.setMidiNoteForPad (
+                        i, app.settings.midiNoteMap[static_cast<size_t> (i)]);
                 // Sync UI controls to restored settings
 #if JUCE_DEBUG
                 modifiersToggle.setToggleState(app.settings.modifiersEnabled, juce::dontSendNotification);
@@ -989,7 +1120,8 @@ private:
         // Update branding progress for logo fill effect
         float newProgress = app.scheduler.isRunning() ? (float)app.scheduler.getProgressToNextTrigger() : 0.0f;
         bool newSuppressed = isSuppressed;
-        if (newProgress != brandingProgress || newSuppressed != brandingSuppressed)
+        if (! juce::approximatelyEqual (newProgress, brandingProgress)
+            || newSuppressed != brandingSuppressed)
         {
             brandingProgress = newProgress;
             brandingSuppressed = newSuppressed;
@@ -1286,9 +1418,9 @@ private:
         juce::String tooltip = "Master output volume. Right-click for MIDI mapping.";
         if (processor.getMidiControlCCLearnTarget()
             == BufferTestAudioProcessor::kMasterVolumeCCLearnTarget)
-            tooltip = "Waiting for MIDI CC…";
+            tooltip = "Waiting for MIDI CC...";
         else if (app.settings.masterVolumeMidiCC >= 0)
-            tooltip = "Master output volume — MIDI CC "
+            tooltip = "Master output volume - MIDI CC "
                     + juce::String (app.settings.masterVolumeMidiCC)
                     + ". Right-click for MIDI mapping.";
         masterVolumeSlider.setTooltip (tooltip);
@@ -1313,14 +1445,21 @@ private:
 } // namespace
 
 BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioProcessor& p)
-    : juce::AudioProcessorEditor (&p), processor (p)
+    : juce::AudioProcessorEditor (&p), audioProcessor (p)
 {
-   #if JUCE_DEBUG
-    debugPanel = std::make_unique<DebugPanelContent>(processor.getAppState());
-    glyphLabPanel = std::make_unique<GlyphLabComponent>(processor.getAppState().settings);
+   #if JUCE_IOS
+    // The standalone iPhone app always uses the production portrait session
+    // layout. Device screens are taller than exactly 9:16, so the layout is
+    // allowed to fill the available portrait bounds below.
+    audioProcessor.getAppState().settings.windowLayoutMode = WindowLayoutMode::Portrait9x16;
    #endif
 
-    content = std::make_unique<PluginEditorContent>(processor,
+   #if JUCE_DEBUG
+    debugPanel = std::make_unique<DebugPanelContent> (audioProcessor.getAppState());
+    glyphLabPanel = std::make_unique<GlyphLabComponent> (audioProcessor.getAppState().settings);
+   #endif
+
+    content = std::make_unique<PluginEditorContent>(audioProcessor,
                                                    #if JUCE_DEBUG
                                                     &debugPanel->getModifierHistory()
                                                    #else
@@ -1329,11 +1468,12 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
                                                     );
 
     probabilityPanel = std::make_unique<ModifierProbabilityPanel>(
-        processor.getAppState().settings.modifierProbabilities,
-        processor.getAPVTS(),
-        processor);
+        audioProcessor.getAppState().settings.modifierProbabilities,
+        audioProcessor.getAPVTS(),
+        audioProcessor);
 
-    settingsPanel = std::make_unique<SettingsPanelContent>(processor.getAppState().settings);
+    settingsPanel = std::make_unique<SettingsPanelContent>(
+        audioProcessor.getAppState().settings);
 
     // Wire up parts-changed callback — delegates to PluginEditorContent which
     // handles the transport-aware deferred logic (pendingPartsCount).
@@ -1343,13 +1483,18 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
     };
 
     // Wire up bars-per-modifier callback (keeps PluginEditorContent in sync)
-    settingsPanel->onBarsChanged = [this](int /*bars*/)
+    settingsPanel->onBarsChanged = [] (int)
     {
         // Setting is already stored by SettingsPanelContent; nothing extra needed.
     };
     settingsPanel->onLayoutChanged = [this](WindowLayoutMode mode)
     {
+       #if JUCE_IOS
+        juce::ignoreUnused (mode);
+        applyWindowLayout (WindowLayoutMode::Portrait9x16, false);
+       #else
         applyWindowLayout (mode, true);
+       #endif
     };
 
     setLookAndFeel(&editorLnf);
@@ -1384,12 +1529,12 @@ BufferTestAudioProcessorEditor::BufferTestAudioProcessorEditor (BufferTestAudioP
     addAndMakeVisible(tabComponent.get());
 
     // Apply the saved theme on editor open
-    ThemeEngine::getInstance().setTheme(processor.getAppState().settings.themeName);
+    ThemeEngine::getInstance().setTheme (audioProcessor.getAppState().settings.themeName);
 
     setSize (1200, 800);
     setResizable(true, false);
     setResizeLimits(920, 600, 2400, 1600);
-    applyWindowLayout (processor.getAppState().settings.windowLayoutMode, false);
+    applyWindowLayout (audioProcessor.getAppState().settings.windowLayoutMode, false);
 }
 
 BufferTestAudioProcessorEditor::~BufferTestAudioProcessorEditor()
@@ -1423,6 +1568,12 @@ void BufferTestAudioProcessorEditor::resized()
 
     if (tabComponent)
     {
+       #if JUCE_IOS
+        if (const auto* display =
+                juce::Desktop::getInstance().getDisplays().getDisplayForRect (getScreenBounds()))
+            bounds = display->safeAreaInsets.subtractedFrom (bounds);
+       #endif
+
         tabComponent->setBounds(bounds);
         tabComponent->resized();
     }
@@ -1448,6 +1599,13 @@ void BufferTestAudioProcessorEditor::applyWindowLayout (WindowLayoutMode mode,
 
         if (auto* constrainer = getConstrainer())
         {
+           #if JUCE_IOS
+            // The standalone wrapper sizes the editor to the device's full
+            // portrait viewport. Do not force an exact 9:16 window because
+            // modern iPhones are taller and may also apply safe-area insets.
+            constrainer->setFixedAspectRatio (0.0);
+            constrainer->setSizeLimits (280, 480, 2048, 4096);
+           #else
             // AudioProcessorEditor::setResizeLimits() immediately constrains
             // the current bounds. Applying it while the editor is still
             // landscape therefore produces an unwanted intermediate 450x800
@@ -1456,11 +1614,16 @@ void BufferTestAudioProcessorEditor::applyWindowLayout (WindowLayoutMode mode,
             // existing constrainer in place so there is only one size change.
             constrainer->setSizeLimits (450, 800, 1080, 1920);
             constrainer->setFixedAspectRatio (9.0 / 16.0);
+           #endif
         }
 
         sessionContent->setPortraitLayout (true);
+       #if JUCE_IOS
+        setSize (390, 844);
+       #else
         setSize (540, 960);
         scheduleHostBoundsReconciliation();
+       #endif
     }
     else
     {

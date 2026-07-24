@@ -38,7 +38,7 @@ public:
     static constexpr int kPlannedQueueDepth = 3;
 
     explicit ModifierScheduler(const SessionSettings& settingsRef);
-    ~ModifierScheduler();
+    ~ModifierScheduler() override;
 
     void start();
     void stop();

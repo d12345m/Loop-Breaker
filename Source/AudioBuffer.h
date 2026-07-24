@@ -32,10 +32,10 @@ class AudioBufferListener
 public:
     virtual ~AudioBufferListener() = default;
     
-    virtual void audioBufferPlaybackStarted(int bufferIndex) {}
-    virtual void audioBufferPlaybackStopped(int bufferIndex) {}
-    virtual void audioBufferSliceChanged(int bufferIndex, int newSliceIndex) {}
-    virtual void audioBufferPositionChanged(int bufferIndex, double positionInSeconds) {}
+    virtual void audioBufferPlaybackStarted (int) {}
+    virtual void audioBufferPlaybackStopped (int) {}
+    virtual void audioBufferSliceChanged (int, int) {}
+    virtual void audioBufferPositionChanged (int, double) {}
 };
 
 //==============================================================================
@@ -343,11 +343,19 @@ private:
     
     // Tearing debug
     TearingDebugStats tearingStats;
-    std::atomic<bool> tearingDebugEnabled { true }; // Enable by default in debug builds
+   #if JUCE_IOS
+    // Real-time DBG output from several pad workers can itself cause dropouts
+    // on a device. The debug panel can still enable these probes explicitly.
+    std::atomic<bool> tearingDebugEnabled { false };
+   #else
+    std::atomic<bool> tearingDebugEnabled { true };
+   #endif
+   #if JUCE_DEBUG
     float lastOutputSample[2] = { 0.0f, 0.0f };     // Track last sample for discontinuity detection
     int consecutiveZeroSamples = 0;                  // Counter for zero sample runs
     float lastBlockRms[2] = { 0.0f, 0.0f };         // Track RMS from previous block
     float lastBlockDcOffset[2] = { 0.0f, 0.0f };    // Track DC offset from previous block
+   #endif
     int rmsBlankingBlocksLeft = 0;                    // Suppress RMS jump checks after slice transitions
 
 

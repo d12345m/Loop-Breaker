@@ -926,7 +926,9 @@ public:
         juce::HeapBlock<float> in(2048);
         juce::HeapBlock<float> out(8192);
         for (int i = 0; i < 2048; ++i)
-            in[i] = std::sin(2.0 * juce::MathConstants<double>::pi * 440.0 * (double)i / 48000.0);
+            in[i] = static_cast<float> (
+                std::sin (2.0 * juce::MathConstants<double>::pi * 440.0
+                          * static_cast<double> (i) / 48000.0));
 
         const int received = ts.processMono(in.getData(), 2048, out.getData(), 8192, true);
         expect(received > 0, "Expected SoundTouch to produce some output after flush");

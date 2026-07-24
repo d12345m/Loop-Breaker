@@ -75,6 +75,19 @@ enum class ModifierType
 // Simple description metadata for UI / logging
 struct ModifierDescriptor
 {
+    ModifierDescriptor() = default;
+
+    ModifierDescriptor (ModifierType typeToUse,
+                        ModifierCategory categoryToUse,
+                        juce::String shortNameToUse,
+                        juce::String descriptionToUse)
+        : type (typeToUse),
+          category (categoryToUse),
+          shortName (std::move (shortNameToUse)),
+          description (std::move (descriptionToUse))
+    {
+    }
+
     ModifierType type { ModifierType::Unknown };
     ModifierCategory category { ModifierCategory::BufferTransform };
     juce::String shortName;

@@ -18,6 +18,7 @@
 
 struct PlannedModifier
 {
+    // Unknown represents a committed empty/no-op queue position.
     ModifierDescriptor descriptor;
     juce::Array<int> targets;
 };
@@ -48,10 +49,6 @@ public:
 
     // Force immediate selection of next upcoming modifier (does not trigger it)
     void selectNextModifier();
-
-    // Rebuild every frozen queue position after modifier probability weights change.
-    // If no schedulable modifier has a non-zero weight, the queue remains empty.
-    void refreshPlannedQueueForProbabilityChange();
 
     // Getter for UI
     std::optional<ModifierDescriptor> getUpcomingModifier() const;
@@ -170,10 +167,9 @@ private:
     void handleAsyncUpdate() override;
     std::optional<PlannedModifier> planNextModifier() const;
     std::optional<PlannedModifier> getFrontPlannedModifier() const;
-    void fillPlannedQueue();
     void advancePlannedQueue();
     void replaceFrontPlannedModifier(PlannedModifier replacement);
-    void clearPlannedQueue();
+    void resetPlannedQueueToEmptySlots();
     void refreshPlannedTargets();
     void updatePlannedPartDestinations();
     ModifierDescriptor pickRandomDescriptor() const;

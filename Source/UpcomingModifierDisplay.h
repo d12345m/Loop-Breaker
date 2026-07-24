@@ -85,7 +85,8 @@ public:
             resetNameMarquee();
 
         plannedQueue = queue;
-        if (! plannedQueue.empty())
+        if (! plannedQueue.empty()
+            && plannedQueue.front().descriptor.type != ModifierType::Unknown)
             setUpcoming (plannedQueue.front().descriptor);
         else
             setUpcoming (std::nullopt);
@@ -380,7 +381,7 @@ private:
         g.drawText ("QUEUE " + juce::String (position), labelRow,
                     juce::Justification::centredLeft);
 
-        if (planned == nullptr)
+        if (planned == nullptr || planned->descriptor.type == ModifierType::Unknown)
         {
             g.drawText ("--", content, juce::Justification::centred);
             return;

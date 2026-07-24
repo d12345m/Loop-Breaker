@@ -233,6 +233,11 @@ public:
         SessionSettings settings;
         ModifierScheduler scheduler (settings);
         scheduler.setRandomSeed (1234);
+        const auto stoppedSlots = scheduler.getPlannedQueueSnapshot();
+        expectEquals (static_cast<int> (stoppedSlots.size()),
+                      ModifierScheduler::kPlannedQueueDepth);
+        for (const auto& planned : stoppedSlots)
+            expect (planned.descriptor.type == ModifierType::Unknown);
         scheduler.start();
 
         auto initial = scheduler.getPlannedQueueSnapshot();
@@ -372,16 +377,16 @@ public:
         for (size_t i = 0; i < juce::jmin (queueA.size(), queueB.size()); ++i)
             expect (samePlan (queueA[i], queueB[i]));
 
-        beginTest ("Explicit probability refresh rebuilds every queue position");
+        beginTest ("Probability changes affect only newly appended entries");
+        const auto beforeProbabilityChange = schedulerA.getPlannedQueueSnapshot();
         for (auto type : ModifierProbabilityManager::allModifierTypes())
             settingsA.modifierProbabilities.setWeight (type, 0.0f);
         settingsA.modifierProbabilities.setWeight (ModifierType::Reverse, 1.0f);
-        schedulerA.refreshPlannedQueueForProbabilityChange();
+        schedulerA.skipUpcoming();
         const auto afterProbabilityChange = schedulerA.getPlannedQueueSnapshot();
-        expectEquals (static_cast<int> (afterProbabilityChange.size()),
-                      ModifierScheduler::kPlannedQueueDepth);
-        for (const auto& planned : afterProbabilityChange)
-            expect (planned.descriptor.type == ModifierType::Reverse);
+        expect (samePlan (afterProbabilityChange[0], beforeProbabilityChange[1]));
+        expect (samePlan (afterProbabilityChange[1], beforeProbabilityChange[2]));
+        expect (afterProbabilityChange[2].descriptor.type == ModifierType::Reverse);
 
         beginTest ("Suppression advances the queue without firing a modifier");
         const auto suppressedFront = schedulerB.getPlannedQueueSnapshot().front();
@@ -396,7 +401,7 @@ public:
         expect (samePlan (afterSuppressedTrigger.front(), queueB[1]));
         schedulerB.removeListener (&suppressedCapture);
 
-        beginTest ("Zero probability produces an empty queue, never Unknown");
+        beginTest ("Zero probability produces three explicit empty slots");
         SessionSettings mutedSettings;
         for (auto type : ModifierProbabilityManager::allModifierTypes())
             mutedSettings.modifierProbabilities.setWeight (type, 0.0f);
@@ -405,34 +410,67 @@ public:
         CaptureListener mutedCapture;
         mutedScheduler.addListener (&mutedCapture);
         mutedScheduler.start();
-        expect (mutedScheduler.getPlannedQueueSnapshot().empty());
+        auto mutedQueue = mutedScheduler.getPlannedQueueSnapshot();
+        expectEquals (static_cast<int> (mutedQueue.size()),
+                      ModifierScheduler::kPlannedQueueDepth);
+        for (const auto& planned : mutedQueue)
+            expect (planned.descriptor.type == ModifierType::Unknown);
+        expect (! mutedScheduler.getUpcomingModifier().has_value());
         mutedScheduler.updateTime (mutedSettings.getSecondsPerBar());
         expectEquals (mutedCapture.triggerCount, 0);
         expectEquals (mutedCapture.cueCount, 1);
-        expect (mutedScheduler.getPlannedQueueSnapshot().empty());
+        mutedQueue = mutedScheduler.getPlannedQueueSnapshot();
+        expectEquals (static_cast<int> (mutedQueue.size()),
+                      ModifierScheduler::kPlannedQueueDepth);
+        for (const auto& planned : mutedQueue)
+            expect (planned.descriptor.type == ModifierType::Unknown);
         mutedScheduler.removeListener (&mutedCapture);
 
-        beginTest ("Explicit probability refresh clears and fully repopulates the queue");
+        beginTest ("All-zero probabilities drain committed entries without replacing them");
         SessionSettings liveProbabilitySettings;
         ModifierScheduler liveProbabilityScheduler (liveProbabilitySettings);
         liveProbabilityScheduler.setRandomSeed (9753);
         liveProbabilityScheduler.start();
-        expectEquals (static_cast<int> (liveProbabilityScheduler.getPlannedQueueSnapshot().size()),
+        const auto committedQueue = liveProbabilityScheduler.getPlannedQueueSnapshot();
+        expectEquals (static_cast<int> (committedQueue.size()),
                       ModifierScheduler::kPlannedQueueDepth);
 
         for (auto type : ModifierProbabilityManager::allModifierTypes())
             liveProbabilitySettings.modifierProbabilities.setWeight (type, 0.0f);
-        liveProbabilityScheduler.refreshPlannedQueueForProbabilityChange();
-        expect (liveProbabilityScheduler.getPlannedQueueSnapshot().empty());
-        expect (! liveProbabilityScheduler.getUpcomingModifier().has_value());
 
+        liveProbabilityScheduler.triggerNow();
+        auto drainingQueue = liveProbabilityScheduler.getPlannedQueueSnapshot();
+        expectEquals (static_cast<int> (drainingQueue.size()),
+                      ModifierScheduler::kPlannedQueueDepth);
+        expect (samePlan (drainingQueue[0], committedQueue[1]));
+        expect (samePlan (drainingQueue[1], committedQueue[2]));
+        expect (drainingQueue[2].descriptor.type == ModifierType::Unknown);
+
+        liveProbabilityScheduler.triggerNow();
+        drainingQueue = liveProbabilityScheduler.getPlannedQueueSnapshot();
+        expectEquals (static_cast<int> (drainingQueue.size()),
+                      ModifierScheduler::kPlannedQueueDepth);
+        expect (samePlan (drainingQueue[0], committedQueue[2]));
+        expect (drainingQueue[1].descriptor.type == ModifierType::Unknown);
+        expect (drainingQueue[2].descriptor.type == ModifierType::Unknown);
+
+        liveProbabilityScheduler.triggerNow();
+        drainingQueue = liveProbabilityScheduler.getPlannedQueueSnapshot();
+        expectEquals (static_cast<int> (drainingQueue.size()),
+                      ModifierScheduler::kPlannedQueueDepth);
+        for (const auto& planned : drainingQueue)
+            expect (planned.descriptor.type == ModifierType::Unknown);
+
+        beginTest ("An empty slot samples current probabilities at the next cadence");
         liveProbabilitySettings.modifierProbabilities.setWeight (ModifierType::Reverse, 1.0f);
-        liveProbabilityScheduler.refreshPlannedQueueForProbabilityChange();
+        liveProbabilityScheduler.updateTime (
+            liveProbabilityScheduler.getSecondsUntilNextTrigger());
         const auto repopulatedQueue = liveProbabilityScheduler.getPlannedQueueSnapshot();
         expectEquals (static_cast<int> (repopulatedQueue.size()),
                       ModifierScheduler::kPlannedQueueDepth);
-        for (const auto& planned : repopulatedQueue)
-            expect (planned.descriptor.type == ModifierType::Reverse);
+        expect (repopulatedQueue[0].descriptor.type == ModifierType::Unknown);
+        expect (repopulatedQueue[1].descriptor.type == ModifierType::Unknown);
+        expect (repopulatedQueue[2].descriptor.type == ModifierType::Reverse);
 
         beginTest ("Retired master filters cannot fill the scheduler queue");
         SessionSettings retiredSettings;
@@ -442,7 +480,11 @@ public:
         retiredSettings.modifierProbabilities.setWeight (ModifierType::MasterLowPassOn, 1.0f);
         ModifierScheduler retiredScheduler (retiredSettings);
         retiredScheduler.start();
-        expect (retiredScheduler.getPlannedQueueSnapshot().empty());
+        const auto retiredQueue = retiredScheduler.getPlannedQueueSnapshot();
+        expectEquals (static_cast<int> (retiredQueue.size()),
+                      ModifierScheduler::kPlannedQueueDepth);
+        for (const auto& planned : retiredQueue)
+            expect (planned.descriptor.type == ModifierType::Unknown);
     }
 };
 
@@ -544,67 +586,33 @@ public:
         if (firstProbability != nullptr)
             expectWithinAbsoluteError (firstProbability->getValue(), 0.0f, 0.001f);
 
-        beginTest ("Continuous probability changes preserve the frozen queue");
+        beginTest ("All probability inputs preserve the committed queue");
         BufferTestAudioProcessor probabilityProcessor;
         probabilityProcessor.prepareToPlay (48000.0, 64);
         processEmptyBlock (probabilityProcessor);
-        const auto frozenQueue =
+        const auto committedProcessorQueue =
             probabilityProcessor.getAppState().scheduler.getPlannedQueueSnapshot();
-        expectEquals (static_cast<int> (frozenQueue.size()),
+        expectEquals (static_cast<int> (committedProcessorQueue.size()),
                       ModifierScheduler::kPlannedQueueDepth);
 
-        const auto firstContinuousType =
-            ModifierProbabilityManager::allModifierTypes().front();
-        if (auto* parameter = probabilityProcessor.getAPVTS().getParameter (
-                "prob_" + juce::String (static_cast<int> (firstContinuousType))))
-            parameter->setValueNotifyingHost (0.0f);
+        for (auto type : ModifierProbabilityManager::allModifierTypes())
+        {
+            const auto id = "prob_" + juce::String (static_cast<int> (type));
+            if (auto* parameter = probabilityProcessor.getAPVTS().getParameter (id))
+                parameter->setValueNotifyingHost (0.0f);
+        }
         processEmptyBlock (probabilityProcessor);
         expect (queuesMatch (
-            frozenQueue,
+            committedProcessorQueue,
             probabilityProcessor.getAppState().scheduler.getPlannedQueueSnapshot()));
-
-        beginTest ("All-zero probabilities clear the queue once");
-        for (auto type : ModifierProbabilityManager::allModifierTypes())
-        {
-            const auto id = "prob_" + juce::String (static_cast<int> (type));
-            if (auto* parameter = probabilityProcessor.getAPVTS().getParameter (id))
-                parameter->setValueNotifyingHost (0.0f);
-        }
-        processEmptyBlock (probabilityProcessor);
-        expect (probabilityProcessor.getAppState().scheduler
-                    .getPlannedQueueSnapshot().empty());
-
-        beginTest ("Re-enabling probabilities repopulates an empty queue");
-        if (auto* parameter = probabilityProcessor.getAPVTS().getParameter (
-                "prob_" + juce::String (static_cast<int> (ModifierType::Reverse))))
-            parameter->setValueNotifyingHost (1.0f);
-        processEmptyBlock (probabilityProcessor);
-        const auto reenabledQueue =
-            probabilityProcessor.getAppState().scheduler.getPlannedQueueSnapshot();
-        expectEquals (static_cast<int> (reenabledQueue.size()),
-                      ModifierScheduler::kPlannedQueueDepth);
-        for (const auto& planned : reenabledQueue)
-            expect (planned.descriptor.type == ModifierType::Reverse);
-
-        beginTest ("MIDI Randomize explicitly refreshes the queue");
-        for (auto type : ModifierProbabilityManager::allModifierTypes())
-        {
-            const auto id = "prob_" + juce::String (static_cast<int> (type));
-            if (auto* parameter = probabilityProcessor.getAPVTS().getParameter (id))
-                parameter->setValueNotifyingHost (0.0f);
-        }
-        processEmptyBlock (probabilityProcessor);
-        expect (probabilityProcessor.getAppState().scheduler
-                    .getPlannedQueueSnapshot().empty());
 
         probabilityProcessor.getAppState().settings
             .midiProbabilityActionNoteMap[
                 BufferTestAudioProcessor::kProbabilityActionRandomize] = 72;
         processNoteOn (probabilityProcessor, 72);
-        expectEquals (
-            static_cast<int> (probabilityProcessor.getAppState().scheduler
-                                  .getPlannedQueueSnapshot().size()),
-            ModifierScheduler::kPlannedQueueDepth);
+        expect (queuesMatch (
+            committedProcessorQueue,
+            probabilityProcessor.getAppState().scheduler.getPlannedQueueSnapshot()));
         probabilityProcessor.releaseResources();
 
         beginTest ("Master volume learns a CC and follows its continuous value");

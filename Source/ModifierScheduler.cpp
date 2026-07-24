@@ -14,6 +14,7 @@ ModifierScheduler::ModifierScheduler(const SessionSettings& settingsRef)
     : settings(settingsRef)
 {
     prototypeCache = ModifierFactory::createAllPrototypes();
+    plannedQueue.resize (kPlannedQueueDepth);
 }
 
 ModifierScheduler::~ModifierScheduler()
@@ -33,15 +34,28 @@ void ModifierScheduler::start()
     nextTriggerPpq = 0.0;
     nextMainTriggerPpq = 0.0;
     quarterNoteBurstRemaining.store(0);
-    clearPlannedQueue();
     scheduleNextTrigger();
-    fillPlannedQueue();
+
+    std::deque<PlannedModifier> initialQueue;
+    for (int i = 0; i < kPlannedQueueDepth; ++i)
+    {
+        if (auto planned = planNextModifier())
+            initialQueue.push_back (std::move (*planned));
+        else
+            initialQueue.emplace_back();
+    }
+    {
+        const juce::SpinLock::ScopedLockType lock (plannedQueueLock);
+        plannedQueue = std::move (initialQueue);
+    }
+    updatePlannedPartDestinations();
+    broadcastUpcoming();
 }
 
 void ModifierScheduler::stop()
 {
     running = false;
-    clearPlannedQueue();
+    resetPlannedQueueToEmptySlots();
     hostTimelineActive.store(false);
 }
 
@@ -69,20 +83,14 @@ void ModifierScheduler::selectNextModifier()
     if (auto replacement = planNextModifier())
         replaceFrontPlannedModifier (std::move (*replacement));
     else
-        clearPlannedQueue();
-}
-
-void ModifierScheduler::refreshPlannedQueueForProbabilityChange()
-{
-    clearPlannedQueue();
-    if (running)
-        fillPlannedQueue();
+        replaceFrontPlannedModifier ({});
 }
 
 std::optional<ModifierDescriptor> ModifierScheduler::getUpcomingModifier() const
 {
     if (auto planned = getFrontPlannedModifier())
-        return planned->descriptor;
+        if (planned->descriptor.type != ModifierType::Unknown)
+            return planned->descriptor;
     return std::nullopt;
 }
 
@@ -129,8 +137,6 @@ void ModifierScheduler::updateHostTimeline(double ppqPosition, double bpm)
     {
         lastTriggerAbsoluteSeconds = absoluteSeconds;
         scheduleNextTriggerHost(ppqPosition, bpm);
-        if (!getUpcomingModifier().has_value())
-            fillPlannedQueue();
         return;
     }
 
@@ -273,7 +279,8 @@ void ModifierScheduler::triggerIfDue()
         const auto descriptor = planned.has_value() ? planned->descriptor : ModifierDescriptor {};
         bool consumedExplicitTargets = false;
 
-        const bool isNoop = ! planned.has_value();
+        const bool isNoop = ! planned.has_value()
+                         || descriptor.type == ModifierType::Unknown;
 
         if (!isNoop && !suppressed.load())
         {
@@ -329,7 +336,8 @@ void ModifierScheduler::triggerIfDueHost(double currentPpq, double bpm)
         const auto descriptor = planned.has_value() ? planned->descriptor : ModifierDescriptor {};
         bool consumedExplicitTargets = false;
 
-        const bool isNoop = ! planned.has_value();
+        const bool isNoop = ! planned.has_value()
+                         || descriptor.type == ModifierType::Unknown;
 
         if (!isNoop && !suppressed.load())
         {
@@ -434,36 +442,18 @@ std::optional<PlannedModifier> ModifierScheduler::getFrontPlannedModifier() cons
     return plannedQueue.front();
 }
 
-void ModifierScheduler::fillPlannedQueue()
-{
-    while (true)
-    {
-        {
-            const juce::SpinLock::ScopedLockType lock (plannedQueueLock);
-            if (plannedQueue.size() >= static_cast<size_t> (kPlannedQueueDepth))
-                break;
-        }
-
-        auto planned = planNextModifier();
-        if (! planned.has_value())
-            break;
-
-        const juce::SpinLock::ScopedLockType lock (plannedQueueLock);
-        plannedQueue.push_back (std::move (*planned));
-    }
-
-    updatePlannedPartDestinations();
-    broadcastUpcoming();
-}
-
 void ModifierScheduler::advancePlannedQueue()
 {
+    auto replacement = planNextModifier().value_or (PlannedModifier {});
     {
         const juce::SpinLock::ScopedLockType lock (plannedQueueLock);
-        if (! plannedQueue.empty())
-            plannedQueue.pop_front();
+        if (plannedQueue.empty())
+            plannedQueue.resize (kPlannedQueueDepth);
+        plannedQueue.pop_front();
+        plannedQueue.push_back (std::move (replacement));
     }
-    fillPlannedQueue();
+    updatePlannedPartDestinations();
+    broadcastUpcoming();
 }
 
 void ModifierScheduler::replaceFrontPlannedModifier (PlannedModifier replacement)
@@ -471,18 +461,19 @@ void ModifierScheduler::replaceFrontPlannedModifier (PlannedModifier replacement
     {
         const juce::SpinLock::ScopedLockType lock (plannedQueueLock);
         if (plannedQueue.empty())
-            plannedQueue.push_front (std::move (replacement));
-        else
-            plannedQueue.front() = std::move (replacement);
+            plannedQueue.resize (kPlannedQueueDepth);
+        plannedQueue.front() = std::move (replacement);
     }
-    fillPlannedQueue();
+    updatePlannedPartDestinations();
+    broadcastUpcoming();
 }
 
-void ModifierScheduler::clearPlannedQueue()
+void ModifierScheduler::resetPlannedQueueToEmptySlots()
 {
     {
         const juce::SpinLock::ScopedLockType lock (plannedQueueLock);
         plannedQueue.clear();
+        plannedQueue.resize (kPlannedQueueDepth);
     }
     triggerAsyncUpdate();
 }
@@ -503,7 +494,9 @@ void ModifierScheduler::refreshPlannedTargets()
     std::vector<juce::Array<int>> targets;
     targets.reserve (descriptors.size());
     for (const auto& descriptor : descriptors)
-        targets.push_back (selectTargetBuffers (descriptor));
+        targets.push_back (descriptor.type == ModifierType::Unknown
+                               ? juce::Array<int> {}
+                               : selectTargetBuffers (descriptor));
 
     {
         const juce::SpinLock::ScopedLockType lock (plannedQueueLock);
@@ -542,7 +535,7 @@ void ModifierScheduler::updatePlannedPartDestinations()
 
 void ModifierScheduler::triggerNow()
 {
-    if (!running || !getUpcomingModifier().has_value()) return;
+    if (!running) return;
     // Set next trigger to now and attempt immediate trigger
     nextTriggerAbsoluteSeconds = accumulatedSecondsTotal;
     triggerIfDue();
@@ -550,7 +543,7 @@ void ModifierScheduler::triggerNow()
 
 void ModifierScheduler::skipUpcoming()
 {
-    if (!running || !getUpcomingModifier().has_value()) return;
+    if (!running) return;
     // Simulate that we reached the trigger without firing, then select next and reschedule
     lastTriggerAbsoluteSeconds = accumulatedSecondsTotal;
     scheduleNextTrigger();

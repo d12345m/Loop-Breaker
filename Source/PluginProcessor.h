@@ -143,15 +143,6 @@ public:
     static constexpr int kProbabilityActionReset = 2;
     static constexpr int kMasterVolumeCCLearnTarget = 3;
 
-    // Randomize is a discrete action: after its parameter batch has been
-    // applied, replace the frozen modifier queue once on the audio thread.
-    // Continuous slider, MIDI CC, and host-automation changes intentionally
-    // do not request a refresh; they affect newly planned entries instead.
-    void requestProbabilityQueueRefresh()
-    {
-        probabilityQueueRefreshRequested.store (true, std::memory_order_release);
-    }
-
     void setMidiControlCCLearnTarget (int target)
     {
         midiControlCCLearnTarget.store (target);
@@ -237,9 +228,6 @@ private:
 
     // State restore: defer disk I/O until we are on the audio thread.
     std::atomic<bool> pendingSessionStateRestore { false };
-
-    std::atomic<bool> probabilityQueueRefreshRequested { false };
-    bool hadEligibleModifierProbability = true;
 
     void restoreBuffersFromSessionState();
     void recoverMissingBuffersFromPadPaths();
